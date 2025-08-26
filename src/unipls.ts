@@ -4,7 +4,11 @@ import {
   UniplsDuplicatedConnectionError,
   UniplsTimeoutError,
 } from './errors.ts';
-import type { SessionId, WebSocketData } from './types.ts';
+import type {
+  SessionId,
+  WebSocketConstructor,
+  WebSocketData,
+} from './types.ts';
 import {
   type ReconnectionContext,
   UniplsReconnector,
@@ -16,6 +20,14 @@ import {
   type UniplsSubscriber,
   UniplsSubscription,
 } from './unipls-subscription.ts';
+
+export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
+  url: string;
+  serializer?: (data: TInput) => WebSocketData;
+  deserializer?: (data: WebSocketData) => TOutput;
+  reconnector?: UniplsReconnector;
+  WebSocket?: WebSocketConstructor;
+}
 
 /**
  * {@link Unipls.connect|unipls.connect()} の任意の引数で、{@link UniplsReconnector} による再接続を含む WebSocket 接続の成功直後に実行されます。
@@ -87,6 +99,32 @@ export interface UniplsInitializationContext<
 
   /** 再接続時にのみ、再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
   reconnection?: ReconnectionContext;
+}
+
+export interface UniplsNextParams<TOutput = WebSocketData> {
+  /** どのメッセージをレスポンスとみなすかを決定する述語関数です。この条件を最初に満たしたメッセージがレスポンスになります。 */
+  selector: (data: TOutput) => boolean;
+
+  /** 購読を中断するための {@link AbortSignal} を指定します。 */
+  signal?: AbortSignal;
+
+  /** レスポンス待機中に再接続が発生した場合、再接続後もレスポンスを待機するかを指定します。 */
+  stopListeningOnReconnect?: boolean;
+}
+
+/** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
+export interface UniplsListenParams<TOutput = WebSocketData> {
+  /** どのメッセージを購読の対象とみなすかを決定する述語関数です。この条件を満たしたすべてのメッセージが購読の対象になります。 */
+  selector: (data: TOutput) => boolean;
+
+  /** どのメッセージを購読の終端とみなすかを決定する述語関数です。この条件を最初に満たしたメッセージが購読の終端になります。 */
+  terminator?: (data: TOutput) => boolean;
+
+  /** 購読を中断するための {@link AbortSignal} を指定します。 */
+  signal?: AbortSignal;
+
+  /** 購読中に再接続が発生した場合、再接続後も購読を継続するかを指定します。 */
+  stopListeningOnReconnect?: boolean;
 }
 
 /**
@@ -213,21 +251,6 @@ export interface RetryContext<TInput = WebSocketData, TOutput = WebSocketData> {
   abort(error?: unknown): void;
 }
 
-/** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
-export interface UniplsListenParams<TOutput = WebSocketData> {
-  /** どのメッセージを購読の対象とみなすかを決定する述語関数です。この条件を満たしたすべてのメッセージが購読の対象になります。 */
-  selector: (data: TOutput) => boolean;
-
-  /** どのメッセージを購読の終端とみなすかを決定する述語関数です。この条件を最初に満たしたメッセージが購読の終端になります。 */
-  terminator?: (data: TOutput) => boolean;
-
-  /** 購読を中断するための {@link AbortSignal} を指定します。 */
-  signal?: AbortSignal;
-
-  /** 購読中に再接続が発生した場合、再接続後も購読を継続するかを指定します。 */
-  stopListeningOnReconnect?: boolean;
-}
-
 /** {@link Unipls.subscribe|unipls.subscribe()} の必須の第2引数で、`subscribe()` の挙動を制御します。 */
 export interface UniplsSubscribeParams<
   TInput = WebSocketData,
@@ -246,27 +269,22 @@ export interface UniplsSubscribeParams<
   retry?: RetryStrategy<TInput, TOutput>;
 }
 
-export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
-  url: string;
-  serializer?: (data: TInput) => WebSocketData;
-  deserializer?: (data: WebSocketData) => TOutput;
-  reconnector?: UniplsReconnector;
-  WebSocket?: WebSocket;
-}
-
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #url: string;
   #serialize: (data: TInput) => WebSocketData;
   #deserialize: (data: WebSocketData) => TOutput;
+  #WebSocket: WebSocketConstructor;
 
   constructor({
     url,
     serializer,
     deserializer,
+    WebSocket,
   }: UniplsParams<TInput, TOutput>) {
     this.#url = url;
     this.#serialize = serializer ?? ((data) => data as WebSocketData);
     this.#deserialize = deserializer ?? ((data) => data as TOutput);
+    this.#WebSocket = WebSocket ?? globalThis.WebSocket;
   }
 
   /**
@@ -294,7 +312,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsAbortedError}
    * @throws {UniplsTimeoutError}
    */
-  next(): Promise<T> {}
+  next(params: UniplsNextParams<TOutput>): Promise<T> {}
 
   /**
    * 0-input N-output の通信を行います。
