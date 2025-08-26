@@ -1,5 +1,21 @@
-/** WebSocket によって送受信することができるデータを表します。 */
-export type WebSocketData = string | ArrayBufferLike | Blob | ArrayBufferView;
+import {
+  UniplsAbortedError,
+  UniplsDisconnectedError,
+  UniplsDuplicatedConnectionError,
+  UniplsTimeoutError,
+} from './errors.ts';
+import type { SessionId, WebSocketData } from './types.ts';
+import {
+  type ReconnectionContext,
+  UniplsReconnector,
+} from './unipls-reconnector.ts';
+import {
+  type SubscriberOperator,
+  type SubscriptionFinalizationContext,
+  type SubscyriptionEndReason,
+  type UniplsSubscriber,
+  UniplsSubscription,
+} from './unipls-subscription.ts';
 
 /**
  * {@link Unipls.connect|unipls.connect()} の任意の引数で、{@link UniplsReconnector} による再接続を含む WebSocket 接続の成功直後に実行されます。
@@ -72,11 +88,6 @@ export interface UniplsInitializationContext<
   /** 再接続時にのみ、再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
   reconnection?: ReconnectionContext;
 }
-
-/**
- * セッションに与えられる一意な識別子です。セッションとは {@link Unipls.connect|unipls.connect()} が呼び出されてから {@link Unipls.close|unipls.close()} が呼び出されるまでの間を指します。
- */
-export type SessionId = number;
 
 /**
  * {@link Unipls.cast|unipls.cast()} の任意の第2引数で、`cast()` の挙動を制御します。
@@ -243,53 +254,6 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   WebSocket?: WebSocket;
 }
 
-/** {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の必須の引数で、購読者を定義します。 */
-export interface UniplsSubscriber<
-  TInput = WebSocketData,
-  TOutput = WebSocketData,
-> {
-  /** 購読の対象となるメッセージを観測したときに実行されるコールバックを指定します。 */
-  onMessage?: (data: TOutput, operations: SubscriberOperator<TInput>) => void;
-
-  /** 購読の終端となるメッセージを観測したときに実行されるコールバックを指定します。 */
-  onTerminated?: (data: TOutput, operator: SubscriberOperator<TInput>) => void;
-
-  /** 購読の対象となるメッセージがエラーを引き起こしたときに実行されるコールバックを指定します。このエラーは、典型的には `deserializer` によって発生し得ます。 */
-  onError?: (error: unknown, operator: SubscriberOperator<TInput>) => void;
-
-  /** 購読が終了したときに実行されるコールバックを指定します。 */
-  finally?: (ctx: SubscriptionFinalizationContext<TInput>) => void;
-}
-
-export interface SubscriptionFinalizationContext<TInput = WebSocketData> {
-  /** 購読が終了した理由を表します。 */
-  reason: SubscriptionEndReason;
-
-  /** `reason === 'fatal-error'` の場合のみ、購読が終了した原因となったエラーを表します。 */
-  error?: unknown;
-
-  /** WebSocket 接続がまだ維持されている場合のみ、{@link Unipls.cast|unipls.cast()} を呼び出す関数を与えます。 */
-  cast?: (data: TInput) => void;
-}
-
-export type SubscriptionEndReason =
-  | 'closed'
-  | 'aborted'
-  | 'unsubscribed'
-  | 'terminated'
-  | 'fatal-error';
-
-export interface SubscriberOperator<TInput = WebSocketData> {
-  unsubscribe(): void;
-  cast(data: TInput): void;
-}
-
-export class UniplsError extends Error {}
-export class UniplsClosedError extends UniplsError {}
-export class UniplsTimeoutError extends UniplsError {}
-export class UniplsAbortedError extends UniplsError {}
-export class UniplsDuplicatedConnectionError extends UniplsError {}
-
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #url: string;
   #serialize: (data: TInput) => WebSocketData;
@@ -326,7 +290,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * 0-input 1-output の通信を行います。
    *
-   * @throws {UniplsClosedError}
+   * @throws {UniplsDisconnectedError}
    * @throws {UniplsAbortedError}
    * @throws {UniplsTimeoutError}
    */
@@ -337,7 +301,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @returns {UniplsSubscription} 購読を表すオブジェクトを返します。
    *
-   * @throws {UniplsClosedError}
+   * @throws {UniplsDisconnectedError}
    */
   listen(
     subscriber: UniplsSubscriber<TInput, TOutput>,
@@ -349,7 +313,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @returns {Promise<void>} WebSocket 接続が確立している間にデータを送信した場合に resolve される Promise を返します。
    *
-   * @throws {UniplsClosedError}
+   * @throws {UniplsDisconnectedError}
    * @throws {UniplsAbortedError}
    */
   cast(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {}
@@ -364,7 +328,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @returns {Promise<T>} レスポンスを観測したときに resolve される Promise を返します。
    *
-   * @throws {UniplsClosedError}
+   * @throws {UniplsDisconnectedError}
    * @throws {UniplsAbortedError}
    * @throws {UniplsTimeoutError}
    */
@@ -386,7 +350,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @returns {UniplsSubscription} 購読を表すオブジェクトを返します。
    *
-   * @throws {UniplsClosedError}
+   * @throws {UniplsDisconnectedError}
    * @throws {UniplsAbortedError}
    */
   subscribe(
@@ -403,47 +367,4 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     subscriber: UniplsSubscriber<TInput, TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
   ): UniplsSubscription {}
-}
-
-interface ReconnectionContext {
-  /** 現在のセッションを表します。 */
-  session: SessionId;
-
-  /** open イベントを挟まずに何回連続で再接続を試行しているかを表します。 */
-  streak: number;
-
-  /** この再接続よりも前に試行した再接続の中で最も新しい試行を行った時刻を表します。 */
-  lastAttemptedAt?: number;
-
-  /** この再接続を引き起こしたエラーがある場合、それを表します。 */
-  error?: unknown;
-
-  /** 現在のセッションで行われた再接続のリストを表します。この値は変更可能です。 */
-  sessionAttempts: ReconnectionAttempt[];
-
-  /** すべてのセッションで行われた再接続のリストを表します。この値は変更可能です。 */
-  allAttempts: ReconnectionAttempt[];
-
-  /** 再接続を試行します。 */
-  reconnect(): void;
-
-  /** 再接続を中断します。 */
-  abort(): void;
-}
-
-interface ReconnectionAttempt {
-  session: SessionId;
-  streak: number;
-  attemptedAt: number;
-  error?: unknown;
-}
-
-export abstract class UniplsReconnector {
-  constructor() {}
-
-  abstract reconnect(ctx: ReconnectionContext): Promise<void>;
-}
-
-class UniplsSubscription {
-  unsubscribe(): void {}
 }
