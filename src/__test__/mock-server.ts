@@ -10,7 +10,6 @@ interface SocketMock {
 }
 
 export function createMockServer(url: string) {
-  console.log('Create mock server for', url);
   const sockets = new AwaitableQueue<SocketMock>();
 
   const handler = ws.link(url).addEventListener('connection', ({ client }) => {
