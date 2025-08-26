@@ -7,15 +7,20 @@ export default defineConfig([
   js.configs.recommended,
   ts.configs.recommended,
   {
-    files: ["**/*.{js,mjs,cjs,ts}"],
+    files: ['**/*.{js,mjs,cjs,ts}'],
     languageOptions: { globals: globals.browser },
   },
   {
+    rules: {
+      '@typescript-eslint/no-namespace': 'off',
+    },
+  },
+  {
     ignores: [
-      "eslint.config.mjs",
-      "prettier.config.mjs",
-      "dist/**",
-      "node_modules/**",
+      'eslint.config.mjs',
+      'prettier.config.mjs',
+      'dist/**',
+      'node_modules/**',
     ],
   },
 ]);

@@ -1,36 +1,37 @@
-// socketClient.test.ts
-import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
+import { createMockServer } from './__test__/mock-server';
 import { createSocketClient } from './client-example';
-import { handlers } from './server-example';
-
-const server = setupServer(...handlers);
-
-beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+import { AwaitableQueue } from './libs/awaitable-queue';
 
 test('WebSocket client receives server greeting', async () => {
+  using mock = createMockServer('ws://localhost:8080');
   const client = createSocketClient('ws://localhost:8080');
+  const socket = await mock.sockets.dequeue();
+  await client.opened;
 
-  const messages: string[] = [];
-  client.onMessage((msg) => messages.push(msg));
+  const messages = new AwaitableQueue<string>();
+  client.onMessage((msg) => messages.enqueue(msg));
 
-  await new Promise((r) => setTimeout(r, 50));
+  const MESSAGE = 'hello from server';
+  socket.send(MESSAGE);
+  await expect(messages.dequeue()).resolves.toBe(MESSAGE);
 
-  expect(messages).toContain('hello from server');
+  client.close();
 });
 
 test('WebSocket client sends ping and receives pong', async () => {
+  using mock = createMockServer('ws://localhost:8080');
   const client = createSocketClient('ws://localhost:8080');
+  const socket = await mock.sockets.dequeue();
+  await client.opened;
 
-  const messages: string[] = [];
-  client.onMessage((msg) => messages.push(msg));
+  const messages = new AwaitableQueue<string>();
+  client.onMessage((msg) => messages.enqueue(msg));
 
-  await new Promise((r) => setTimeout(r, 50));
   client.send('ping');
+  await expect(socket.messages.dequeue()).resolves.toBe('ping');
+  socket.send('pong');
+  await expect(messages.dequeue()).resolves.toBe('pong');
 
-  await new Promise((r) => setTimeout(r, 50));
-
-  expect(messages).toContain('pong');
+  client.close();
 });

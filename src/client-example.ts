@@ -1,6 +1,10 @@
-// socketClient.ts
 export function createSocketClient(url: string) {
   const socket = new WebSocket(url);
+  const { promise, resolve } = Promise.withResolvers<void>();
+
+  socket.onopen = () => {
+    resolve();
+  };
 
   function send(message: string) {
     socket.send(message);
@@ -12,5 +16,9 @@ export function createSocketClient(url: string) {
     });
   }
 
-  return { socket, send, onMessage };
+  function close() {
+    socket.close();
+  }
+
+  return { socket, send, onMessage, close, opened: promise };
 }
