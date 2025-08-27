@@ -4,7 +4,7 @@ import {
   UniplsDuplicatedConnectionError,
   UniplsTimeoutError,
 } from './errors.ts';
-import { EventEmitter } from './event-emitter';
+import { EventBus } from './event-bus.ts';
 import type {
   UniplsConnectionState,
   WebSocketConstructor,
@@ -42,7 +42,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected deserialize: (data: WebSocketData) => TOutput;
   #WebSocket: WebSocketConstructor;
 
-  protected events = new EventEmitter<{
+  protected events = new EventBus<{
     message: TOutput;
   }>();
 
@@ -116,12 +116,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw new UniplsClosedError();
     }
 
-    const unsubscribers: Set<() => void> = new Set();
-
+    const events = this.events.createScope();
     params.signal?.addEventListener('abort', () => {});
 
-    // TODO: this.events.createSession(); session.dispose() を定義してまとめて unsub する
-    const unsubscribeMessage = this.events.on('message', (message) => {
+    events.on('message', (message) => {
       let terminated = false;
       try {
         terminated = params.terminator?.(message) ?? false;
@@ -152,21 +150,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         // ignore
       }
     });
-    unsubscribers.add(unsubscribeMessage);
 
-    this.events.on('dropeed', () => {
+    events.on('dropeed', () => {
       if (params.stopListeningOnDropped) {
         subscriber.finally?.({ reason: 'dropeed' });
       }
     });
 
-    const unsubscribeClosed = this.events.once('closed', () => {
+    events.once('closed', () => {
       // TODO: finally の呼び出しが1回だけであることを保証する
       subscriber.finally?.({
         reason: 'closed',
       });
     });
-    unsubscribers.add(unsubscribeClosed);
   }
 
   /**
@@ -219,12 +215,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw new UniplsClosedError();
     }
 
-    const unsubscribers: Set<() => void> = new Set();
+    const events = this.events.createScope();
     const result = new AsyncResult<TOutput>({
       finally: () => {
-        for (const unsubscribe of unsubscribers) {
-          unsubscribe();
-        }
+        events.cleanup();
       },
       signal: params.signal,
       timeout: params.timeout,
@@ -254,7 +248,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       request(data, params.selector);
     }
 
-    const unsubscribeMessage = this.events.on('message', (message) => {
+    events.on('message', (message) => {
       try {
         if (activeSelector(message)) {
           result.resolve(message);
@@ -263,17 +257,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         result.reject(err);
       }
     });
-    unsubscribers.add(unsubscribeMessage);
 
     const onReconnected: UniplsRetrySetupContext<
       TInput,
       TOutput
     >['onReconnected'] = (callback) => {
-      const unsubscribe = this.events.once('reconnected', (reconnection) => {
+      events.once('reconnected', (reconnection) => {
         if (result.resulted) {
           return;
         }
-        unsubscribers.delete(unsubscribe);
 
         callback({
           request: (data, { selector }) => {
@@ -288,10 +280,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           reconnection,
         });
       });
-      unsubscribers.add(unsubscribe);
     };
 
-    const unsubscribeDropped = this.events.on('dropeed', () => {
+    events.on('dropeed', () => {
       if (result.resulted) {
         return;
       }
@@ -305,7 +296,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         abort: result.reject,
       });
     });
-    unsubscribers.add(unsubscribeDropped);
 
     return result.promise;
   }

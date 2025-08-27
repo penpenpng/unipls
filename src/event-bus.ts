@@ -5,7 +5,7 @@ type EventListener<
 > = (args: TEvents[K]) => void;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export class EventEmitter<TEvents extends Record<string, any>> {
+export class EventBus<TEvents extends Record<string, any>> {
   #listeners: {
     [K in keyof TEvents]?: Set<EventListener<TEvents, K>>;
   } = {};
@@ -52,5 +52,52 @@ export class EventEmitter<TEvents extends Record<string, any>> {
     for (const listener of this.getListeners(event)) {
       listener(args);
     }
+  }
+
+  createScope(): ScopedEventBus<TEvents> {
+    return new ScopedEventBus(this);
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+class ScopedEventBus<TEvents extends Record<string, any>> {
+  #events: EventBus<TEvents>;
+  #cleanups: Set<() => void> = new Set();
+
+  constructor(events: EventBus<TEvents>) {
+    this.#events = events;
+  }
+
+  on<K extends keyof TEvents>(
+    event: K,
+    listener: EventListener<TEvents, K>,
+  ): () => void {
+    const cleanup = this.#events.on(event, listener);
+    this.#cleanups.add(cleanup);
+
+    return () => {
+      this.#cleanups.delete(cleanup);
+      cleanup();
+    };
+  }
+
+  once<K extends keyof TEvents>(
+    event: K,
+    listener: EventListener<TEvents, K>,
+  ): () => void {
+    const cleanup = this.#events.once(event, listener);
+    this.#cleanups.add(cleanup);
+
+    return () => {
+      this.#cleanups.delete(cleanup);
+      cleanup();
+    };
+  }
+
+  cleanup(): void {
+    for (const cleanup of this.#cleanups) {
+      cleanup();
+    }
+    this.#cleanups.clear();
   }
 }
