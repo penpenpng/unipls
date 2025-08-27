@@ -12,12 +12,6 @@ export class UniplsTimeoutError extends UniplsError {
   }
 }
 
-export class UniplsAbortedError extends UniplsError {
-  constructor() {
-    super('UniplsAbortedError: The operation was aborted.');
-  }
-}
-
 export class UniplsDuplicatedConnectionError extends UniplsError {
   constructor() {
     super(

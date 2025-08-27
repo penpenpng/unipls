@@ -45,11 +45,17 @@ export class AsyncResult<T> {
       if (timer !== null) {
         clearTimeout(timer);
       }
+
       if (!this.#resulted) {
         this.#reject(this.#signal.reason);
       }
       this.#resulted = true;
-      params.finally();
+
+      try {
+        params.finally();
+      } catch {
+        // ignore
+      }
     };
 
     this.#signal.addEventListener('abort', cleanup);

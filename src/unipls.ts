@@ -4,6 +4,7 @@ import {
   UniplsDuplicatedConnectionError,
   UniplsTimeoutError,
 } from './errors.ts';
+import { EventEmitter } from './event-emitter';
 import type {
   UniplsConnectionState,
   WebSocketConstructor,
@@ -38,6 +39,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected serialize: (data: TInput) => WebSocketData;
   protected deserialize: (data: WebSocketData) => TOutput;
   #WebSocket: WebSocketConstructor;
+
+  protected events = new EventEmitter<{
+    message: TOutput;
+  }>();
 
   constructor({
     url,
@@ -131,15 +136,32 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsDisconnectedError}
    * @throws {UniplsTimeoutError}
    */
-  async request<T = TOutput>(
+  request(
     data: TInput,
     params: UniplsRequestParams<TInput, TOutput>,
-  ): Promise<T> {
+  ): Promise<TOutput> {
+    return this.#request(data, { ...params, force: false });
+  }
+
+  /**
+   * {@link Unipls.request|unipls.request()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
+   */
+  requestForce(
+    data: TInput,
+    params: UniplsRequestParams<TInput, TOutput>,
+  ): Promise<TOutput> {
+    return this.#request(data, { ...params, force: true });
+  }
+
+  #request(
+    data: TInput,
+    params: UniplsRequestParams<TInput, TOutput> & { force: boolean },
+  ): Promise<TOutput> {
     if (this.state === 'closed') {
       throw new UniplsDisconnectedError();
     }
 
-    const result = new AsyncResult<T>({
+    const result = new AsyncResult<TOutput>({
       finally: () => {
         stopReconnectionListener();
         stopMessageListener();
@@ -148,11 +170,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       timeout: params.timeout,
     });
 
-    let activeRequest = data;
-    let activeSelector = params.selector;
-
-    if (this.state === 'connecting' || this.state === 'open') {
-      this.enqueue(data)
+    const enqueue = async (data: TInput) => {
+      this.enqueue(data, { force: params.force })
         .then(() => {
           // listening が true のときだけ resolve するオプションがあってもいい
           listening = true;
@@ -162,7 +181,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             result.reject(err); // do nothing
           }
         });
+    };
+
+    if (this.state === 'connecting' || this.state === 'open') {
+      enqueue(data);
     }
+
+    let activeRequest = data;
+    let activeSelector = params.selector;
 
     const stopReconnectionListener = this.events.on(
       'reconnected',
@@ -183,11 +209,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             }
             activeRequest = data;
             activeSelector = params.selector;
-            this.enqueue(data)
-              .then(() => {
-                listening = true;
-              })
-              .catch(result.reject);
+            enqueue(data);
           },
           done: () => {
             // いらないかもしれない
@@ -209,14 +231,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     return result.promise;
   }
-
-  /**
-   * {@link Unipls.request|unipls.request()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
-   */
-  requestForce<T = TOutput>(
-    data: TInput,
-    params: UniplsRequestParams<TInput, TOutput>,
-  ): Promise<T> {}
 
   /**
    * 1-input N-output の通信を行います。{@link UniplsInitializer} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。

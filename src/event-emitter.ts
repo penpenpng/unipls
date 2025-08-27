@@ -1,11 +1,11 @@
 type EventListener<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  TEvents extends Record<string, any[]>,
+  TEvents extends Record<string, any>,
   K extends keyof TEvents,
 > = (args: TEvents[K]) => void;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export class EventEmitter<TEvents extends Record<string, any[]>> {
+export class EventEmitter<TEvents extends Record<string, any>> {
   #listeners: {
     [K in keyof TEvents]?: Set<EventListener<TEvents, K>>;
   } = {};
