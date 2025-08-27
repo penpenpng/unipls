@@ -1,4 +1,6 @@
 import type { WebSocketData } from './types.ts';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
+import type { Unipls } from './unipls.ts';
 
 export class UniplsSubscription {
   unsubscribe(): void {}

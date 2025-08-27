@@ -98,8 +98,8 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 
-  /** レスポンス待機中に再接続が発生した場合、再接続後もレスポンスを待機するかを指定します。 */
-  stopListeningOnReconnect?: boolean;
+  /** レスポンス待機中に予期しない切断が発生した場合、再接続後もレスポンスを待機するかを指定します。 */
+  stopListeningOnDisconnected?: boolean;
 }
 
 /** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
@@ -113,8 +113,8 @@ export interface UniplsListenParams<TOutput = WebSocketData> {
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 
-  /** 購読中に再接続が発生した場合、再接続後も購読を継続するかを指定します。 */
-  stopListeningOnReconnect?: boolean;
+  /** 購読中に予期しない切断が発生した場合、再接続後も購読を継続するかを指定します。 */
+  stopListeningOnDisconnected?: boolean;
 }
 
 /**
@@ -199,7 +199,7 @@ export interface UniplsRequestParams<
  * - `never`: リクエストを再送せず、例外終了します。`({ abort }) => { abort(); }` と同等です。
  * - `re-request`: 再度同じリクエストを送信します。`({ data, selector, request, done }) => { request(data, { selector }); done(); }` と同等です。
  * - `keep-listening`: 再接続後にリクエストは再送しませんが、レスポンスを待機し続けます。`({ done }) => { done(); }` と同等です。
- * - `RetryFunction`: 再送の方法を {@link UniplsRetryFunction} によって細かく制御します。
+ * - `RetryFunction`: 再送の方法を {@link UniplsRetrySetupFunction} によって細かく制御します。
  */
 export type UniplsRetryStrategy<
   TInput = WebSocketData,
@@ -208,7 +208,7 @@ export type UniplsRetryStrategy<
   | 'never'
   | 're-request'
   | 'keep-listening'
-  | UniplsRetryFunction<TInput, TOutput>;
+  | UniplsRetrySetupFunction<TInput, TOutput>;
 
 /**
  * {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の再送戦略を定義する関数を表します。
@@ -216,24 +216,36 @@ export type UniplsRetryStrategy<
  * @remarks
  * 再送処理が完了、または中断されたことを示すために {@link UniplsRecastContext.done|done()} または {@link UniplsRecastContext.abort|abort()} のいずれかを必ず呼び出さなければなりません。
  */
-export type UniplsRetryFunction<
+export type UniplsRetrySetupFunction<
   TInput = WebSocketData,
   TOutput = WebSocketData,
-> = (ctx: UniplsRetryContext<TInput, TOutput>) => void;
+> = (ctx: UniplsRetrySetupContext<TInput, TOutput>) => void;
 
-/** {@link UniplsRetryFunction} の引数で、再送の方法を制御するためのコンテキストを表します。 */
-export interface UniplsRetryContext<
+/** {@link UniplsRetrySetupFunction} の引数で、再送の方法を制御するためのコンテキストを表します。 */
+export interface UniplsRetrySetupContext<
   TInput = WebSocketData,
   TOutput = WebSocketData,
 > {
-  /** 再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
-  reconnection: ReconnectionContext;
+  onReconnected: (
+    callback: (ctx: UniplsRetryContext<TInput, TOutput>) => void,
+  ) => void;
 
   /** 直前に送信したデータを表します。すなわち、初回の再送では {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の引数に等しく、それ以降の再送では直前の再送で送信したデータに等しいです。 */
   data: TInput;
 
   /** 直前に指定したセレクタを表します。すなわち、初回の再送では {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の引数に等しく、それ以降の再送では直前の再送で指定したセレクタに等しいです。 */
   selector: (data: TOutput) => boolean;
+
+  /** 再送処理を中断したことを {@link Unipls} に通知します。 */
+  abort(error?: unknown): void;
+}
+
+export interface UniplsRetryContext<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> {
+  /** 再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
+  reconnection: ReconnectionContext;
 
   /** 再送を試行します。 */
   request(
@@ -243,9 +255,6 @@ export interface UniplsRetryContext<
 
   /** 再送処理を完了したことを {@link Unipls} に通知します。 */
   done(): void;
-
-  /** 再送処理を中断したことを {@link Unipls} に通知します。 */
-  abort(error?: unknown): void;
 }
 
 /** {@link Unipls.subscribe|unipls.subscribe()} の必須の第2引数で、`subscribe()` の挙動を制御します。 */

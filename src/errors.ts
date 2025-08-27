@@ -1,6 +1,6 @@
 export abstract class UniplsError extends Error {}
 
-export class UniplsDisconnectedError extends UniplsError {
+export class UniplsClosedError extends UniplsError {
   constructor() {
     super('UniplsClosedError: The WebSocket was disconnected.');
   }

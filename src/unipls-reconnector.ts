@@ -18,12 +18,6 @@ export interface ReconnectionContext {
 
   /** すべてのセッションで行われた再接続のリストを表します。この値は変更可能です。 */
   allAttempts: ReconnectionAttempt[];
-
-  /** 再接続を試行します。 */
-  reconnect(): void;
-
-  /** 再接続を中断します。 */
-  abort(): void;
 }
 
 export interface ReconnectionAttempt {
@@ -36,5 +30,5 @@ export interface ReconnectionAttempt {
 export abstract class UniplsReconnector {
   constructor() {}
 
-  abstract reconnect(ctx: ReconnectionContext): Promise<void>;
+  abstract reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
 }
