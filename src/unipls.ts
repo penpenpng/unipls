@@ -226,7 +226,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let activeRequest = data;
     let activeSelector = params.selector;
 
-    const request = (data: TInput, selector: (data: TOutput) => boolean) => {
+    const request = (
+      data: TInput,
+      params: { selector: (data: TOutput) => boolean },
+    ) => {
+      if (result.resulted) {
+        return;
+      }
+
       this.enqueue(data, {
         force: params.force,
         signal: result.signal,
@@ -245,7 +252,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     };
 
     if (this.state === 'connecting' || this.state === 'open') {
-      request(data, params.selector);
+      request(data, params);
     }
 
     events.on('message', (message) => {
@@ -268,12 +275,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         }
 
         callback({
-          request: (data, { selector }) => {
-            if (result.resulted) {
-              return;
-            }
-            request(data, selector);
-          },
+          request,
           done: () => {
             // いらないかもしれない
           },
