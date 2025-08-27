@@ -7,3 +7,10 @@ export type WebSocketData = string | ArrayBufferLike | Blob | ArrayBufferView;
 export type SessionId = number;
 
 export type WebSocketConstructor = new (url: string) => WebSocket;
+
+export type UniplsConnectionState =
+  | 'connecting'
+  | 'open'
+  | 'closing'
+  | 'closed'
+  | 'backoff';
