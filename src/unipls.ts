@@ -172,7 +172,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     const unsubscribers: Set<() => void> = new Set();
-
     const result = new AsyncResult<TOutput>({
       finally: () => {
         for (const unsubscribe of unsubscribers) {
@@ -182,13 +181,17 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal: params.signal,
       timeout: params.timeout,
     });
+    let activeRequest = data;
+    let activeSelector = params.selector;
 
-    const enqueue = async (data: TInput) => {
+    const request = (data: TInput, selector: (data: TOutput) => boolean) => {
       this.enqueue(data, {
         force: params.force,
         signal: result.signal,
       })
         .then(() => {
+          activeRequest = data;
+          activeSelector = selector;
           // listening が true のときだけ resolve するオプションがあってもいい
           listening = true;
         })
@@ -200,11 +203,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     };
 
     if (this.state === 'connecting' || this.state === 'open') {
-      enqueue(data);
+      request(data, params.selector);
     }
-
-    let activeRequest = data;
-    let activeSelector = params.selector;
 
     const unsubscribeMessage = this.events.on('message', (message) => {
       try {
@@ -232,9 +232,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             if (result.resulted) {
               return;
             }
-            activeRequest = data;
-            activeSelector = selector;
-            enqueue(data);
+            request(data, selector);
           },
           done: () => {
             // いらないかもしれない
