@@ -1,5 +1,5 @@
+import { AsyncResult } from './async-result.ts';
 import {
-  UniplsAbortedError,
   UniplsDisconnectedError,
   UniplsDuplicatedConnectionError,
   UniplsTimeoutError,
@@ -90,7 +90,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * 0-input 1-output の通信を行います。
    *
    * @throws {UniplsDisconnectedError}
-   * @throws {UniplsAbortedError}
    * @throws {UniplsTimeoutError}
    */
   next(params: UniplsNextParams<TOutput>): Promise<T> {}
@@ -113,7 +112,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @returns {Promise<void>} WebSocket 接続が確立している間にデータを送信した場合に resolve される Promise を返します。
    *
    * @throws {UniplsDisconnectedError}
-   * @throws {UniplsAbortedError}
    */
   async cast(
     data: TInput,
@@ -131,7 +129,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @returns {Promise<T>} レスポンスを観測したときに resolve される Promise を返します。
    *
    * @throws {UniplsDisconnectedError}
-   * @throws {UniplsAbortedError}
    * @throws {UniplsTimeoutError}
    */
   async request<T = TOutput>(
@@ -142,26 +139,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw new UniplsDisconnectedError();
     }
 
-    // TODO: AsyncResult class
-    // - resolve, reject のいずれか片方が1回のみしか呼び出されないことを保証する
-    // - timeout または signal または resolve/reject のいずれかによって abort するような signal を返す
-    // - この signal の onabort で cleanup を行う
-    // - この signal を enqueue() に渡して、必要があれば送信をキャンセルする
-    // - finished === signal.aborted
-    const { promise, resolve, reject, finished } = Promise.withResolvers<T>(
-      () => {
-        // cleanup function
+    const result = new AsyncResult<T>({
+      finally: () => {
         stopReconnectionListener();
         stopMessageListener();
       },
-    );
-
-    // TODO:
-    // - AsynResult class の cleanup
-    params.signal?.addEventListener('abort', () => {
-      stopReconnectionListener();
-      stopMessageListener();
-      reject(new UniplsAbortedError());
+      signal: params.signal,
+      timeout: params.timeout,
     });
 
     let activeRequest = data;
@@ -173,13 +157,17 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           // listening が true のときだけ resolve するオプションがあってもいい
           listening = true;
         })
-        .catch(reject);
+        .catch((err) => {
+          if (err instanceof UniplsDisconnectedError) {
+            result.reject(err); // do nothing
+          }
+        });
     }
 
     const stopReconnectionListener = this.events.on(
       'reconnected',
       (reconnection) => {
-        if (finished) {
+        if (result.resulted) {
           return;
         }
 
@@ -190,7 +178,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           data: activeRequest,
           selector: activeSelector,
           request: (data, params) => {
-            if (finished) {
+            if (result.resulted) {
               return;
             }
             activeRequest = data;
@@ -199,12 +187,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
               .then(() => {
                 listening = true;
               })
-              .catch(reject);
+              .catch(result.reject);
           },
           done: () => {
             // いらないかもしれない
           },
-          abort: reject,
+          abort: result.reject,
         });
       },
     );
@@ -212,14 +200,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const stopMessageListener = this.events.on('message', (message) => {
       try {
         if (activeSelector(message)) {
-          resolve(message);
+          result.resolve(message);
         }
       } catch (err) {
-        reject(err);
+        result.reject(err);
       }
     });
 
-    return promise;
+    return result.promise;
   }
 
   /**
@@ -236,7 +224,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @returns {UniplsSubscription} 購読を表すオブジェクトを返します。
    *
    * @throws {UniplsDisconnectedError}
-   * @throws {UniplsAbortedError}
    */
   subscribe(
     data: TInput,
@@ -255,7 +242,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   protected getConnectedSocket(): Promise<WebSocket> {}
 
-  protected async enqueue(data: TInput): Promise<void> {}
+  protected async enqueue(data: TInput): Promise<void> {
+    // 送信が確認できたら resolve する
+  }
 
   protected static getRetryFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
