@@ -11,6 +11,7 @@ import type {
   WebSocketData,
 } from './types.ts';
 import {
+  type SubscriberOperator,
   type UniplsSubscriber,
   UniplsSubscription,
 } from './unipls-subscription.ts';
@@ -108,17 +109,64 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsClosedError}
    */
   listen(
-    subscriber: UniplsSubscriber<TInput, TOutput>,
+    subscriber: UniplsSubscriber<TOutput>,
     params: UniplsListenParams<TOutput>,
   ): UniplsSubscription {
     if (this.state === 'closed') {
       throw new UniplsClosedError();
     }
 
-    // ここをとりあえず書いてみて、AsyncResults の仕様を検討する
-    const { onError, onMessage, onTerminated } = subscriber;
-    const { selector, signal, stopListeningOnDisconnected, terminator } =
-      params;
+    const unsubscribers: Set<() => void> = new Set();
+
+    params.signal?.addEventListener('abort', () => {});
+
+    // TODO: this.events.createSession(); session.dispose() を定義してまとめて unsub する
+    const unsubscribeMessage = this.events.on('message', (message) => {
+      let terminated = false;
+      try {
+        terminated = params.terminator?.(message) ?? false;
+      } catch (err) {
+        subscriber.onError?.(err);
+      }
+      try {
+        if (terminated) {
+          subscriber.onTerminated?.(message);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      let target = false;
+      try {
+        target = params.selector?.(message) ?? false;
+      } catch (err) {
+        subscriber.onError?.(err);
+      }
+      try {
+        if (target) {
+          subscriber.onMessage?.(message);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    });
+    unsubscribers.add(unsubscribeMessage);
+
+    this.events.on('dropeed', () => {
+      if (params.stopListeningOnDropped) {
+        subscriber.finally?.({ reason: 'dropeed' });
+      }
+    });
+
+    const unsubscribeClosed = this.events.once('closed', () => {
+      // TODO: finally の呼び出しが1回だけであることを保証する
+      subscriber.finally?.({
+        reason: 'closed',
+      });
+    });
+    unsubscribers.add(unsubscribeClosed);
   }
 
   /**
@@ -243,7 +291,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       unsubscribers.add(unsubscribe);
     };
 
-    const unsubscribeMayReconnect = this.events.on('may-reconnect', () => {
+    const unsubscribeDropped = this.events.on('dropeed', () => {
       if (result.resulted) {
         return;
       }
@@ -257,7 +305,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         abort: result.reject,
       });
     });
-    unsubscribers.add(unsubscribeMayReconnect);
+    unsubscribers.add(unsubscribeDropped);
 
     return result.promise;
   }
@@ -271,7 +319,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   subscribe(
     data: TInput,
-    subscriber: UniplsSubscriber<TInput, TOutput>,
+    subscriber: UniplsSubscriber<TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
   ): UniplsSubscription {}
 
@@ -280,7 +328,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   subscribeForce(
     data: TInput,
-    subscriber: UniplsSubscriber<TInput, TOutput>,
+    subscriber: UniplsSubscriber<TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
   ): UniplsSubscription {}
 

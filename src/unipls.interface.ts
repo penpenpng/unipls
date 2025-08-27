@@ -62,7 +62,7 @@ export interface UniplsInitializationContext<
    * - {@link UniplsListenParams.retry|retry} を指定することはできません。購読が中断されたときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   listen(
-    subscriber: UniplsSubscriber<TInput, TOutput>,
+    subscriber: UniplsSubscriber<TOutput>,
     params: Omit<UniplsListenParams<TOutput>, 'signal' | 'retry'>,
   ): void;
 
@@ -74,7 +74,7 @@ export interface UniplsInitializationContext<
    */
   subscribe(
     data: TInput,
-    subscriber: UniplsSubscriber<TInput, TOutput>,
+    subscriber: UniplsSubscriber<TOutput>,
     params: Omit<UniplsSubscribeParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): () => void;
 
@@ -114,7 +114,7 @@ export interface UniplsListenParams<TOutput = WebSocketData> {
   signal?: AbortSignal;
 
   /** 購読中に予期しない切断が発生した場合、再接続後も購読を継続するかを指定します。 */
-  stopListeningOnDisconnected?: boolean;
+  stopListeningOnDropped?: boolean;
 }
 
 /**
