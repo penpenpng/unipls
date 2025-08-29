@@ -20,7 +20,11 @@ export class AsyncResult<T> {
     return this.#resulted;
   }
 
-  constructor(params: AsyncResultParams) {
+  constructor(params: {
+    signal?: AbortSignal;
+    timeout?: number;
+    finally: () => void;
+  }) {
     this.#promise = new Promise<T>((resolve, reject) => {
       this.#resolve = resolve;
       this.#reject = reject;
@@ -51,11 +55,7 @@ export class AsyncResult<T> {
       }
       this.#resulted = true;
 
-      try {
-        params.finally();
-      } catch {
-        // ignore
-      }
+      params.finally();
     };
 
     this.#signal.addEventListener('abort', cleanup);
@@ -78,10 +78,4 @@ export class AsyncResult<T> {
     this.#reject(reason);
     this.#controller.abort(); // For cleanup
   };
-}
-
-export interface AsyncResultParams {
-  signal?: AbortSignal;
-  timeout?: number;
-  finally: () => void;
 }

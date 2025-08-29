@@ -1,6 +1,118 @@
+import { UniplsClosedError, UniplsDroppedError } from './errors';
 import type { WebSocketData } from './types.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
+
+export class AsyncResults<T> {
+  #resulted = false;
+  #reason: SubscriptionEndReason = 'fatal-error';
+  #error: unknown = null;
+  #signal: AbortSignal;
+  #controller = new AbortController();
+  #subscriber: UniplsSubscriber<T>;
+
+  get signal(): AbortSignal {
+    return this.#signal;
+  }
+
+  get resulted(): boolean {
+    return this.#resulted;
+  }
+
+  constructor(params: {
+    subscriber: UniplsSubscriber<T>;
+    signal?: AbortSignal;
+    finally: () => void;
+  }) {
+    this.#subscriber = params.subscriber;
+
+    const signals = [this.#controller.signal];
+    if (params.signal) {
+      signals.push(params.signal);
+    }
+    this.#signal = AbortSignal.any(signals);
+
+    const cleanup = () => {
+      this.#signal.removeEventListener('abort', cleanup);
+
+      if (!this.#resulted) {
+        this.#error = this.#signal.reason;
+        this.#reason = 'fatal-error';
+        this.#subscriber.onFatalError?.(this.#error);
+      }
+      this.#resulted = true;
+
+      try {
+        this.#subscriber.finally?.({
+          reason: this.#reason,
+          error: this.#error,
+        });
+      } catch (err) {
+        console.warn(
+          'An error occurred while processing finally callback:',
+          err,
+        );
+      }
+
+      params.finally();
+    };
+
+    this.#signal.addEventListener('abort', cleanup);
+  }
+
+  handleMessage = (message: T): void => {
+    if (this.#resulted) {
+      return;
+    }
+    this.#subscriber.onMessage?.(message);
+  };
+
+  handleTerminator = (message: T): void => {
+    if (this.#resulted) {
+      return;
+    }
+    this.#resulted = true;
+    this.#reason = 'terminated';
+    this.#subscriber.onTerminated?.(message);
+    this.#controller.abort();
+  };
+
+  handleError = (error: unknown): void => {
+    if (this.#resulted) {
+      return;
+    }
+    this.#subscriber.onError?.(error);
+  };
+
+  raiseFatalError = (error: unknown): void => {
+    if (this.#resulted) {
+      return;
+    }
+    this.#resulted = true;
+    this.#error = error;
+    this.#reason = ((): SubscriptionEndReason => {
+      if (error instanceof UniplsClosedError) {
+        return 'closed';
+      } else if (error instanceof UniplsDroppedError) {
+        return 'dropped';
+      } else {
+        return 'fatal-error';
+      }
+    })();
+    this.#subscriber.onFatalError?.(error);
+    this.#controller.abort();
+  };
+
+  unsubscribe = (): void => {
+    if (this.#resulted) {
+      return;
+    }
+    this.#resulted = true;
+    this.#reason = 'unsubscribed';
+    this.#subscriber.onUnsubscribe?.();
+    this.#controller.abort();
+  };
+}
 
 export class UniplsSubscription {
   unsubscribe(): void {}
@@ -17,6 +129,10 @@ export interface UniplsSubscriber<TOutput = WebSocketData> {
   /** 購読の対象となるメッセージがエラーを引き起こしたときに実行されるコールバックを指定します。このエラーは、典型的には `deserializer` によって発生し得ます。 */
   onError?: (error: unknown) => void;
 
+  onUnsubscribe?: () => void;
+
+  onFatalError?: (error: unknown) => void;
+
   /** 購読が終了したときに実行されるコールバックを指定します。 */
   finally?: (ctx: SubscriptionFinalizationContext) => void;
 }
@@ -31,7 +147,7 @@ export interface SubscriptionFinalizationContext {
 
 export type SubscriptionEndReason =
   | 'closed'
-  | 'aborted'
+  | 'dropped'
   | 'unsubscribed'
   | 'terminated'
   | 'fatal-error';

@@ -1,6 +1,7 @@
 import { AsyncResult } from './async-result.ts';
 import {
   UniplsClosedError,
+  UniplsDroppedError,
   UniplsDuplicatedConnectionError,
   UniplsTimeoutError,
 } from './errors.ts';
@@ -11,7 +12,7 @@ import type {
   WebSocketData,
 } from './types.ts';
 import {
-  type SubscriberOperator,
+  AsyncResults,
   type UniplsSubscriber,
   UniplsSubscription,
 } from './unipls-subscription.ts';
@@ -115,54 +116,57 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     if (this.state === 'closed') {
       throw new UniplsClosedError();
     }
+    if (params.signal?.aborted) {
+      throw params.signal.reason;
+    }
 
     const events = this.events.createScope();
-    params.signal?.addEventListener('abort', () => {});
+    const results = new AsyncResults<TOutput>({
+      subscriber,
+      signal: params.signal,
+      finally: () => {
+        events.cleanup();
+      },
+    });
 
     events.on('message', (message) => {
-      let terminated = false;
-      try {
-        terminated = params.terminator?.(message) ?? false;
-      } catch (err) {
-        subscriber.onError?.(err);
-      }
-      try {
-        if (terminated) {
-          subscriber.onTerminated?.(message);
-          return;
-        }
-      } catch {
-        // ignore
-      }
-
-      let target = false;
-      try {
-        target = params.selector?.(message) ?? false;
-      } catch (err) {
-        subscriber.onError?.(err);
-      }
-      try {
-        if (target) {
-          subscriber.onMessage?.(message);
-          return;
-        }
-      } catch {
-        // ignore
-      }
+      Unipls.processMessage({
+        message,
+        selector: params.terminator,
+        processor: results.handleTerminator,
+        onSelectorError: results.handleError,
+        onProcessorError: (err) => {
+          console.warn(
+            'An error occurred while processing onTerminator callback:',
+            err,
+          );
+        },
+      });
+      Unipls.processMessage({
+        message,
+        selector: params.selector,
+        processor: results.handleMessage,
+        onSelectorError: results.handleError,
+        onProcessorError: (err) => {
+          console.warn(
+            'An error occurred while processing onMessage callback:',
+            err,
+          );
+        },
+      });
     });
 
     events.on('dropeed', () => {
       if (params.stopListeningOnDropped) {
-        subscriber.finally?.({ reason: 'dropeed' });
+        results.raiseFatalError(new UniplsDroppedError());
       }
     });
 
     events.once('closed', () => {
-      // TODO: finally の呼び出しが1回だけであることを保証する
-      subscriber.finally?.({
-        reason: 'closed',
-      });
+      results.raiseFatalError(new UniplsClosedError());
     });
+
+    return results.unsubscribe;
   }
 
   /**
@@ -214,6 +218,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     if (this.state === 'closed') {
       throw new UniplsClosedError();
     }
+    if (params.signal?.aborted) {
+      throw params.signal.reason;
+    }
 
     const events = this.events.createScope();
     const result = new AsyncResult<TOutput>({
@@ -256,13 +263,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.on('message', (message) => {
-      try {
-        if (activeSelector(message)) {
-          result.resolve(message);
-        }
-      } catch (err) {
-        result.reject(err);
-      }
+      Unipls.processMessage({
+        message,
+        selector: activeSelector,
+        processor: result.resolve,
+        onSelectorError: result.reject,
+        onProcessorError: () => {
+          // ignore because `result.resolve` never throws
+        },
+      });
     });
 
     const onReconnected: UniplsRetrySetupContext<
@@ -333,6 +342,34 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected static getRetrySetupFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
   ): UniplsRetrySetupFunction<TInput, TOutput> {}
+
+  protected static processMessage<TOutput>({
+    message,
+    selector,
+    processor,
+    onSelectorError,
+    onProcessorError,
+  }: {
+    message: TOutput;
+    selector?: (message: TOutput) => boolean;
+    processor?: (message: TOutput) => void;
+    onSelectorError: (message: unknown) => void;
+    onProcessorError: (message: unknown) => void;
+  }) {
+    let selected = false;
+    try {
+      selected = selector?.(message) ?? false;
+    } catch (err) {
+      onSelectorError?.(err);
+    }
+    if (selected) {
+      try {
+        processor?.(message);
+      } catch (err) {
+        onProcessorError?.(err);
+      }
+    }
+  }
 
   get state(): UniplsConnectionState {}
 }

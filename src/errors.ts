@@ -6,6 +6,12 @@ export class UniplsClosedError extends UniplsError {
   }
 }
 
+export class UniplsDroppedError extends UniplsError {
+  constructor() {
+    super('UniplsDroppedError: The WebSocket connection was dropped.');
+  }
+}
+
 export class UniplsTimeoutError extends UniplsError {
   constructor() {
     super('UniplsTimeoutError: The operation timed out.');

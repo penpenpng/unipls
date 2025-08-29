@@ -27,8 +27,6 @@ export interface ReconnectionAttempt {
   error?: unknown;
 }
 
-export abstract class UniplsReconnector {
-  constructor() {}
-
-  abstract reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
+export interface UniplsReconnector {
+  reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
 }
