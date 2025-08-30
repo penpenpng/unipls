@@ -25,3 +25,5 @@ export namespace u {
     }
   }
 }
+
+export type ValueOf<T> = T[keyof T];

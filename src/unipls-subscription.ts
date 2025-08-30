@@ -114,10 +114,6 @@ export class AsyncResults<T> {
   };
 }
 
-export class UniplsSubscription {
-  unsubscribe(): void {}
-}
-
 /** {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の必須の引数で、購読者を定義します。 */
 export interface UniplsSubscriber<TOutput = WebSocketData> {
   /** 購読の対象となるメッセージを観測したときに実行されるコールバックを指定します。 */

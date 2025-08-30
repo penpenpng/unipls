@@ -20,27 +20,29 @@ export class AsyncResult<T> {
     return this.#resulted;
   }
 
-  constructor(params: {
-    signal?: AbortSignal;
-    timeout?: number;
-    finally: () => void;
-  }) {
+  constructor(
+    options: {
+      signal?: AbortSignal;
+      timeout?: number;
+      finally?: () => void;
+    } = {},
+  ) {
     this.#promise = new Promise<T>((resolve, reject) => {
       this.#resolve = resolve;
       this.#reject = reject;
     });
 
     const signals = [this.#controller.signal];
-    if (params.signal) {
-      signals.push(params.signal);
+    if (options.signal) {
+      signals.push(options.signal);
     }
     this.#signal = AbortSignal.any(signals);
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    if (typeof params.timeout === 'number' && params.timeout > 0) {
+    if (typeof options.timeout === 'number' && options.timeout > 0) {
       timer = setTimeout(() => {
         this.#controller.abort(new UniplsTimeoutError());
-      }, params.timeout);
+      }, options.timeout);
     }
 
     const cleanup = () => {
@@ -55,7 +57,7 @@ export class AsyncResult<T> {
       }
       this.#resulted = true;
 
-      params.finally();
+      options.finally?.();
     };
 
     this.#signal.addEventListener('abort', cleanup);

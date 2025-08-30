@@ -11,11 +11,7 @@ import type {
   WebSocketConstructor,
   WebSocketData,
 } from './types.ts';
-import {
-  AsyncResults,
-  type UniplsSubscriber,
-  UniplsSubscription,
-} from './unipls-subscription.ts';
+import { AsyncResults, type UniplsSubscriber } from './unipls-subscription.ts';
 import type {
   UniplsCastOptions,
   UniplsInitializationContext,
@@ -42,9 +38,17 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected serialize: (data: TInput) => WebSocketData;
   protected deserialize: (data: WebSocketData) => TOutput;
   #WebSocket: WebSocketConstructor;
+  #socket?: WebSocket;
+  #initializer?: UniplsInitializer<TInput, TOutput>;
 
   protected events = new EventBus<{
+    'raw-open': void;
+    'raw-message': WebSocketData;
+    'raw-close': number;
+    initialized: void;
     message: TOutput;
+    closed: void;
+    dropped: { mayReconnect: boolean };
   }>();
 
   constructor({
@@ -56,24 +60,54 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#url = url;
     this.serialize = serializer ?? ((data) => data as WebSocketData);
     this.deserialize = deserializer ?? ((data) => data as TOutput);
-    this.#WebSocket = WebSocket ?? globalThis.WebSocket;
 
+    this.#WebSocket = WebSocket ?? globalThis.WebSocket;
     if (!this.#WebSocket) {
       throw new Error('WebSocket constructor was not provided.');
     }
+
+    this.events.on('raw-open', async () => {
+      await this.#initialize();
+      this.events.emit('initialized', void 0);
+    });
+    this.events.on('raw-message', (data) => {
+      const output = this.deserialize(data);
+      this.events.emit('message', output);
+    });
+    this.events.on('raw-close', (code) => {
+      switch (code) {
+        case WebSocketCloseClode.NORMAL_CLOSURE:
+          this.events.emit('closed', void 0);
+          break;
+        case WebSocketCloseClode.IRRECOVERABLE_DROP:
+          this.events.emit('dropped', { mayReconnect: false });
+          break;
+        case WebSocketCloseClode.ABNORMAL_CLOSURE:
+        default:
+          this.events.emit('dropped', { mayReconnect: true });
+      }
+    });
   }
 
-  protected createWebSocket(): WebSocket {
-    try {
-      const WebSocket = this.#WebSocket;
-      return new WebSocket(this.url);
-    } catch (err: unknown) {
-      // When the given URL is invalid, Deno runtime throws SyntaxError.
+  #initialize() {
+    const result = new AsyncResult<void>();
+    const initialize = this.#initializer ?? (({ done }) => done());
 
-      // TODO: Handle the error
-      console.error(err);
-      throw err;
-    }
+    const ctx: UniplsInitializationContext<TInput, TOutput> = {
+      cast: (data) => this.castForce(data),
+      request: (data, params) => this.requestForce(data, params),
+      listen: (subscriber, params) => this.listen(subscriber, params),
+      subscribe: (data, subscriber, params) =>
+        this.subscribeForce(data, subscriber, params),
+      done: result.resolve,
+      session: '',
+      isSessionBeginning: true,
+      reconnection: undefined,
+    };
+
+    initialize(ctx);
+
+    return result.promise;
   }
 
   /**
@@ -87,12 +121,65 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @remarks
    * 初期化が終了したら必ず {@link UniplsInitializationContext.done|done()} を呼び出さなければなりません。
    */
-  connect(initializer?: UniplsInitializer): Promise<void> {}
+  connect(initializer?: UniplsInitializer<TInput, TOutput>): Promise<void> {
+    // TODO: 接続済みか接続中のときに UniplsDuplicatedConnectionError
+    // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
+
+    const events = this.events.createScope();
+    const result = new AsyncResult<void>({
+      finally: () => {
+        events.cleanup();
+      },
+    });
+
+    events.once('initialized', () => {
+      result.resolve();
+    });
+    events.once('closed', () => {
+      result.reject(new UniplsClosedError());
+    });
+    const off = events.on('dropped', ({ mayReconnect }) => {
+      if (!mayReconnect) {
+        result.reject(new UniplsDroppedError());
+        off();
+      }
+    });
+
+    this.#initializer = initializer;
+
+    try {
+      const WebSocket = this.#WebSocket;
+      const socket = new WebSocket(this.url);
+
+      socket.onopen = () => {
+        this.events.emit('raw-open', void 0);
+      };
+      socket.onmessage = (ev) => {
+        this.events.emit('raw-message', ev.data);
+      };
+      socket.onclose = (ev) => {
+        this.events.emit('raw-close', ev.code);
+      };
+
+      this.#socket = socket;
+    } catch {
+      // When the given URL is invalid, Deno runtime throws SyntaxError.
+      this.events.emit('raw-close', WebSocketCloseClode.IRRECOVERABLE_DROP);
+    }
+
+    return result.promise;
+  }
 
   /**
    * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
    */
-  close(): void {}
+  close(): void {
+    this.#socket?.close(WebSocketCloseClode.NORMAL_CLOSURE);
+  }
+
+  drop(): void {
+    this.#socket?.close(WebSocketCloseClode.ABNORMAL_CLOSURE);
+  }
 
   /**
    * 0-input 1-output の通信を行います。
@@ -100,19 +187,21 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsClosedError}
    * @throws {UniplsTimeoutError}
    */
-  next(params: UniplsNextParams<TOutput>): Promise<T> {}
+  next(params: UniplsNextParams<TOutput>): Promise<TOutput> {
+    return Promise.resolve<TOutput>();
+  }
 
   /**
    * 0-input N-output の通信を行います。
    *
-   * @returns {UniplsSubscription} 購読を表すオブジェクトを返します。
+   * @returns 購読を解除する関数を返します。
    *
    * @throws {UniplsClosedError}
    */
   listen(
     subscriber: UniplsSubscriber<TOutput>,
     params: UniplsListenParams<TOutput>,
-  ): UniplsSubscription {
+  ): () => void {
     if (this.state === 'closed') {
       throw new UniplsClosedError();
     }
@@ -130,7 +219,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('message', (message) => {
-      Unipls.processMessage({
+      Unipls.#processMessage({
         message,
         selector: params.terminator,
         processor: results.handleTerminator,
@@ -142,7 +231,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           );
         },
       });
-      Unipls.processMessage({
+      Unipls.#processMessage({
         message,
         selector: params.selector,
         processor: results.handleMessage,
@@ -156,12 +245,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     });
 
-    events.on('dropeed', () => {
+    events.on('dropped', () => {
       if (params.stopListeningOnDropped) {
         results.raiseFatalError(new UniplsDroppedError());
       }
     });
-
     events.once('closed', () => {
       results.raiseFatalError(new UniplsClosedError());
     });
@@ -263,7 +351,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.on('message', (message) => {
-      Unipls.processMessage({
+      Unipls.#processMessage({
         message,
         selector: activeSelector,
         processor: result.resolve,
@@ -293,7 +381,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    events.on('dropeed', () => {
+    events.on('dropped', () => {
       if (result.resulted) {
         return;
       }
@@ -314,7 +402,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * 1-input N-output の通信を行います。{@link UniplsInitializer} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
    *
-   * @returns {UniplsSubscription} 購読を表すオブジェクトを返します。
+   * @returns 購読を解除する関数を返します
    *
    * @throws {UniplsClosedError}
    */
@@ -322,7 +410,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     data: TInput,
     subscriber: UniplsSubscriber<TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
-  ): UniplsSubscription {}
+  ): () => void {
+    return () => {};
+  }
 
   /**
    * {@link Unipls.subscribe|unipls.subscribe()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
@@ -331,9 +421,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     data: TInput,
     subscriber: UniplsSubscriber<TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
-  ): UniplsSubscription {}
-
-  protected getConnectedSocket(): Promise<WebSocket> {}
+  ): () => void {
+    return () => {};
+  }
 
   protected async enqueue(data: TInput): Promise<void> {
     // 送信が確認できたら resolve する
@@ -343,7 +433,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     retry?: UniplsRetryStrategy<TInput, TOutput>,
   ): UniplsRetrySetupFunction<TInput, TOutput> {}
 
-  protected static processMessage<TOutput>({
+  static #processMessage<TOutput>({
     message,
     selector,
     processor,
@@ -373,3 +463,32 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   get state(): UniplsConnectionState {}
 }
+
+const WebSocketCloseClode = {
+  /**
+   * 1000 indicates a normal closure, meaning that the purpose for
+   * which the connection was established has been fulfilled.
+   *
+   * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+   */
+  NORMAL_CLOSURE: 1000,
+  /**
+   * 1006 is a reserved value and MUST NOT be set as a status code in a
+   * Close control frame by an endpoint.  It is designated for use in
+   * applications expecting a status code to indicate that the
+   * connection was closed abnormally, e.g., without sending or
+   * receiving a Close control frame.
+   *
+   * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+   */
+  ABNORMAL_CLOSURE: 1006,
+  /**
+   * Status codes in the range 3000-3999 are reserved for use by
+   * libraries, frameworks, and applications.  These status codes are
+   * registered directly with IANA.  The interpretation of these codes
+   * is undefined by this protocol.
+   *
+   * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.2
+   */
+  IRRECOVERABLE_DROP: 3000,
+} as const;
