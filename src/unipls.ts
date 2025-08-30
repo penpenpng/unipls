@@ -7,6 +7,7 @@ import {
 } from './errors.ts';
 import { EventBus } from './event-bus.ts';
 import type {
+  UniplsConnectionIntent,
   UniplsConnectionState,
   WebSocketConstructor,
   WebSocketData,
@@ -40,12 +41,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #WebSocket: WebSocketConstructor;
   #socket?: WebSocket;
   #initializer?: UniplsInitializer<TInput, TOutput>;
+  #state: UniplsConnectionState = 'closed';
+  get state(): UniplsConnectionState {
+    return this.#state;
+  }
+  #intent: UniplsConnectionIntent = 'close';
+  get intent() {
+    return this.#intent;
+  }
 
   protected events = new EventBus<{
     'raw-open': void;
     'raw-message': WebSocketData;
     'raw-close': number;
-    initialized: void;
+    connected: void;
     message: TOutput;
     closed: void;
     dropped: { mayReconnect: boolean };
@@ -67,24 +76,25 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.events.on('raw-open', async () => {
+      this.#state = 'initializing';
       await this.#initialize();
-      this.events.emit('initialized', void 0);
+      this.#state = 'connected';
+      this.events.emit('connected', void 0);
     });
     this.events.on('raw-message', (data) => {
       const output = this.deserialize(data);
       this.events.emit('message', output);
     });
     this.events.on('raw-close', (code) => {
-      switch (code) {
-        case WebSocketCloseClode.NORMAL_CLOSURE:
-          this.events.emit('closed', void 0);
-          break;
-        case WebSocketCloseClode.IRRECOVERABLE_DROP:
-          this.events.emit('dropped', { mayReconnect: false });
-          break;
-        case WebSocketCloseClode.ABNORMAL_CLOSURE:
-        default:
-          this.events.emit('dropped', { mayReconnect: true });
+      if (code === WebSocketCloseClode.NORMAL_CLOSURE) {
+        this.#state = 'closed';
+        this.events.emit('closed', void 0);
+      } else if (code === WebSocketCloseClode.IRRECOVERABLE_DROP) {
+        this.#state = 'dropped';
+        this.events.emit('dropped', { mayReconnect: false });
+      } else {
+        this.#state = 'dropped';
+        this.events.emit('dropped', { mayReconnect: true });
       }
     });
   }
@@ -122,8 +132,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * 初期化が終了したら必ず {@link UniplsInitializationContext.done|done()} を呼び出さなければなりません。
    */
   connect(initializer?: UniplsInitializer<TInput, TOutput>): Promise<void> {
-    // TODO: 接続済みか接続中のときに UniplsDuplicatedConnectionError
+    if (this.#intent === 'open') {
+      throw new UniplsDuplicatedConnectionError();
+    }
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
+
+    this.#initializer = initializer;
+    this.#state = 'connecting';
+    this.#intent = 'open';
 
     const events = this.events.createScope();
     const result = new AsyncResult<void>({
@@ -132,7 +148,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       },
     });
 
-    events.once('initialized', () => {
+    events.once('connected', () => {
       result.resolve();
     });
     events.once('closed', () => {
@@ -144,8 +160,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         off();
       }
     });
-
-    this.#initializer = initializer;
 
     try {
       const WebSocket = this.#WebSocket;
@@ -173,8 +187,25 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
    */
-  close(): void {
+  close(): Promise<void> {
+    const events = this.events.createScope();
+    const result = new AsyncResult<void>({
+      finally: () => {
+        this.#intent = 'close';
+        events.cleanup();
+      },
+    });
+
+    events.once('closed', () => {
+      result.resolve();
+    });
+    events.once('dropped', () => {
+      result.reject(new UniplsDroppedError());
+    });
+
     this.#socket?.close(WebSocketCloseClode.NORMAL_CLOSURE);
+
+    return result.promise;
   }
 
   drop(): void {
@@ -431,7 +462,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   protected static getRetrySetupFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
-  ): UniplsRetrySetupFunction<TInput, TOutput> {}
+  ): UniplsRetrySetupFunction<TInput, TOutput> {
+    return ({ abort }) => {
+      abort();
+    };
+  }
 
   static #processMessage<TOutput>({
     message,
@@ -460,8 +495,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
     }
   }
-
-  get state(): UniplsConnectionState {}
 }
 
 const WebSocketCloseClode = {

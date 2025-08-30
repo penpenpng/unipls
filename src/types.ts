@@ -10,7 +10,9 @@ export type WebSocketConstructor = new (url: string) => WebSocket;
 
 export type UniplsConnectionState =
   | 'connecting'
-  | 'open'
-  | 'closing'
+  | 'initializing'
+  | 'connected'
   | 'closed'
-  | 'backoff';
+  | 'dropped';
+
+export type UniplsConnectionIntent = 'open' | 'close';
