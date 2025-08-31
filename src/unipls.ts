@@ -194,6 +194,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   close(): Promise<void> {
     this.#intent = 'close';
+    this.#provisioner = undefined;
 
     if (!this.#socket || this.#intent === 'close' || this.#state === 'closed') {
       return Promise.resolve();
