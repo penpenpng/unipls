@@ -1,9 +1,9 @@
 import { AsyncResult } from './async-result.ts';
 import {
+  NotImplementedError,
   UniplsClosedError,
   UniplsDroppedError,
   UniplsDuplicatedConnectionError,
-  UniplsTimeoutError,
 } from './errors.ts';
 import { EventBus } from './event-bus.ts';
 import type {
@@ -20,12 +20,7 @@ import type {
   UniplsParams,
   UniplsProvisioner,
   UniplsProvisioningContext,
-  UniplsRecastContext,
-  UniplsRecastFunction,
-  UniplsRecastStrategy,
   UniplsRequestParams,
-  UniplsRetryContext,
-  UniplsRetrySetupContext,
   UniplsRetrySetupFunction,
   UniplsRetryStrategy,
   UniplsSubscribeParams,
@@ -113,7 +108,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       subscribe: (data, subscriber, params) =>
         this.subscribeForce(data, subscriber, params),
       done: result.resolve,
-      session: '',
+      session: 0,
       isSessionBeginning: true,
       reconnection: undefined,
     };
@@ -246,7 +241,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsTimeoutError}
    */
   next(params: UniplsNextParams<TOutput>): Promise<TOutput> {
-    return Promise.resolve<TOutput>();
+    void params;
+    throw new NotImplementedError();
   }
 
   /**
@@ -322,15 +318,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @throws {UniplsClosedError}
    */
-  async cast(
-    data: TInput,
-    options?: UniplsCastOptions<TInput>,
-  ): Promise<void> {}
+  async cast(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
+    void data;
+    void options;
+    throw new NotImplementedError();
+  }
 
   /**
    * {@link Unipls.cast|unipls.cast()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
-  castForce(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {}
+  castForce(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
+    void data;
+    void options;
+    throw new NotImplementedError();
+  }
 
   /**
    * 1-input 1-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
@@ -394,8 +395,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         .then(() => {
           activeRequest = data;
           activeSelector = selector;
-          // listening が true のときだけ resolve するオプションがあってもいい
-          listening = true;
+          // TODO: listening が true のときだけ resolve するオプションがあってもいい
+          // listening = true;
         })
         .catch((err) => {
           if (err instanceof UniplsClosedError) {
@@ -404,7 +405,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         });
     };
 
-    if (this.state === 'connecting' || this.state === '') {
+    if (
+      this.state === 'connecting' ||
+      this.state === 'provisioning' ||
+      this.state === 'open'
+    ) {
       request(data, params);
     }
 
@@ -419,6 +424,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         },
       });
     });
+
+    // TODO: 再送処理
+    void activeRequest;
 
     // const onReconnected: UniplsRetrySetupContext<
     //   TInput,
@@ -469,7 +477,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     subscriber: UniplsSubscriber<TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
-    return () => {};
+    void data;
+    void subscriber;
+    void params;
+    throw new NotImplementedError();
   }
 
   /**
@@ -480,7 +491,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     subscriber: UniplsSubscriber<TOutput>,
     params: UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
-    return () => {};
+    void data;
+    void subscriber;
+    void params;
+    throw new NotImplementedError();
   }
 
   /**
@@ -560,6 +574,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected static getRetrySetupFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
   ): UniplsRetrySetupFunction<TInput, TOutput> {
+    void retry;
     return ({ abort }) => {
       abort();
     };

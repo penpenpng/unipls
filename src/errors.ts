@@ -25,3 +25,9 @@ export class UniplsDuplicatedConnectionError extends UniplsError {
     );
   }
 }
+
+export class NotImplementedError extends Error {
+  constructor() {
+    super('NotImplementedError: This feature is not implemented yet.');
+  }
+}
