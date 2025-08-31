@@ -51,9 +51,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   protected events = new EventBus<{
-    'raw-open': void;
-    'raw-message': WebSocketData;
-    'raw-close': number;
+    'raw-open': { socket: WebSocket };
+    'raw-message': { socket: WebSocket; data: WebSocketData };
+    'raw-close': { socket: WebSocket | 'none'; code: number };
     open: void;
     message: TOutput;
     closed: void;
@@ -75,23 +75,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw new Error('WebSocket constructor was not provided.');
     }
 
-    this.events.on('raw-open', async () => {
+    this.events.on('raw-open', async ({ socket }) => {
+      if (this.#socket !== socket) {
+        return;
+      }
       this.#state = 'provisioning';
       await this.#provision();
       this.#state = 'open';
       this.events.emit('open', void 0);
     });
-    this.events.on('raw-message', (data) => {
+    this.events.on('raw-message', ({ socket, data }) => {
+      if (this.#socket !== socket) {
+        return;
+      }
       const output = this.deserialize(data);
       this.events.emit('message', output);
     });
-    this.events.on('raw-close', (code) => {
+    this.events.on('raw-close', ({ code }) => {
       if (code === WebSocketCloseClode.NORMAL_CLOSURE) {
         this.#state = 'closed';
         this.events.emit('closed', void 0);
-      } else if (code === WebSocketCloseClode.IRRECOVERABLE_DROP) {
-        this.#state = 'dropped';
-        this.events.emit('dropped', { mayReconnect: false });
       } else {
         this.#state = 'dropped';
         this.events.emit('dropped', { mayReconnect: true });
@@ -137,9 +140,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
 
-    this.#provisioner = provisioner;
-    this.#state = 'connecting';
     this.#intent = 'open';
+    this.#state = 'connecting';
+    this.#provisioner = provisioner;
 
     const events = this.events.createScope();
     const result = new AsyncResult<void>({
@@ -148,38 +151,45 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       },
     });
 
-    events.once('open', () => {
-      result.resolve();
-    });
-    events.once('closed', () => {
-      result.reject(new UniplsClosedError());
-    });
-    const off = events.on('dropped', ({ mayReconnect }) => {
-      if (!mayReconnect) {
-        result.reject(new UniplsDroppedError());
-        off();
-      }
-    });
-
+    let socket: WebSocket;
     try {
       const WebSocket = this.#WebSocket;
-      const socket = new WebSocket(this.url);
+      socket = new WebSocket(this.url);
+      this.#socket = socket;
 
       socket.onopen = () => {
-        this.events.emit('raw-open', void 0);
+        this.events.emit('raw-open', { socket });
       };
       socket.onmessage = (ev) => {
-        this.events.emit('raw-message', ev.data);
+        this.events.emit('raw-message', { socket, data: ev.data });
       };
       socket.onclose = (ev) => {
-        this.events.emit('raw-close', ev.code);
+        this.events.emit('raw-close', { socket, code: ev.code });
       };
-
-      this.#socket = socket;
     } catch {
       // When the given URL is invalid, Deno runtime throws SyntaxError.
-      this.events.emit('raw-close', WebSocketCloseClode.IRRECOVERABLE_DROP);
+      result.reject(new UniplsDroppedError());
+      return result.promise;
     }
+
+    events.on('open', () => {
+      if (this.#socket !== socket) {
+        return;
+      }
+      result.resolve();
+    });
+    events.on('closed', () => {
+      if (this.#socket !== socket) {
+        return;
+      }
+      result.reject(new UniplsClosedError());
+    });
+    events.on('dropped', ({ mayReconnect }) => {
+      if (this.#socket !== socket || mayReconnect) {
+        return;
+      }
+      result.reject(new UniplsDroppedError());
+    });
 
     return result.promise;
   }
@@ -188,22 +198,39 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
    */
   close(): Promise<void> {
+    this.#intent = 'close';
+
+    if (!this.#socket || this.#intent === 'close' || this.#state === 'closed') {
+      return Promise.resolve();
+    }
+
     const events = this.events.createScope();
     const result = new AsyncResult<void>({
       finally: () => {
-        this.#intent = 'close';
         events.cleanup();
       },
     });
 
-    events.once('closed', () => {
+    const closingSocket = this.#socket;
+    this.#socket = undefined;
+
+    if (this.#state === 'dropped') {
       result.resolve();
-    });
-    events.once('dropped', () => {
-      result.reject(new UniplsDroppedError());
+      // socket は既に閉じているので、onclose イベントはもう発火しない。代わりに closed イベントを直接手動で発行する。
+      this.events.emit('closed', void 0);
+      return result.promise;
+    }
+
+    // 以下の理由から、closed イベントの代わりに raw-close イベントで待つ:
+    // * 接続が drop したとしても resolve する必要がある
+    // * close した socket の同一性を追跡するために、raw-close イベントのイベントパラメータが必要
+    events.on('raw-close', ({ socket }) => {
+      if (socket === closingSocket) {
+        result.resolve();
+      }
     });
 
-    this.#socket?.close(WebSocketCloseClode.NORMAL_CLOSURE);
+    closingSocket.close(WebSocketCloseClode.NORMAL_CLOSURE);
 
     return result.promise;
   }
@@ -354,13 +381,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     const request = (
       data: TInput,
-      params: { selector: (data: TOutput) => boolean },
+      { selector }: { selector: (data: TOutput) => boolean },
     ) => {
       if (result.resulted) {
         return;
       }
 
-      this.enqueue(data, {
+      this.#enqueue(data, {
         force: params.force,
         signal: result.signal,
       })
@@ -456,15 +483,78 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return () => {};
   }
 
-  protected async enqueue(data: TInput): Promise<void> {
-    // 送信が確認できたら resolve する
-  }
-
   /**
-   * 現在 `"connecting"` または `""`
+   * 現在の接続状態が `"connecting"`, `"provisioning"`, `"open"` のいずれかであるとき、接続状態が `"open"` になるのを待ってからデータを送信します。
+   * 接続が drop または close されたとしても、再送信は試みられません。
    */
-  #enqueue() {
-    // リトライのことを考えず、このセッション中に送信する
+  #enqueue(
+    data: TInput,
+    options?: { signal?: AbortSignal; force?: boolean },
+  ): Promise<void> {
+    const events = this.events.createScope();
+    const result = new AsyncResult<void>({
+      signal: options?.signal,
+      finally: () => {
+        events.cleanup();
+      },
+    });
+
+    if (
+      !this.#socket ||
+      this.#state === 'closed' ||
+      this.#state === 'dropped' ||
+      this.#intent === 'close' ||
+      options?.signal?.aborted
+    ) {
+      result.reject();
+      return result.promise;
+    }
+
+    const send = () => {
+      if (
+        !this.#socket ||
+        this.#socket.readyState !== WebSocketReadyState.OPEN
+      ) {
+        result.reject();
+        return;
+      }
+
+      try {
+        this.#socket.send(this.serialize(data));
+        result.resolve();
+      } catch {
+        result.reject();
+      }
+    };
+
+    if (
+      (this.#state === 'open' ||
+        (this.#state === 'provisioning' && options?.force)) &&
+      this.#socket?.readyState === WebSocketReadyState.OPEN
+    ) {
+      send();
+      return result.promise;
+    }
+
+    if (options?.force) {
+      events.once('raw-open', () => {
+        send();
+        result.resolve();
+      });
+    } else {
+      events.once('open', () => {
+        send();
+        result.resolve();
+      });
+    }
+    events.once('closed', () => {
+      result.reject();
+    });
+    events.once('dropped', () => {
+      result.reject();
+    });
+
+    return result.promise;
   }
 
   protected static getRetrySetupFunction<TInput, TOutput>(
@@ -513,16 +603,6 @@ const WebSocketCloseClode = {
    */
   NORMAL_CLOSURE: 1000,
   /**
-   * 1006 is a reserved value and MUST NOT be set as a status code in a
-   * Close control frame by an endpoint.  It is designated for use in
-   * applications expecting a status code to indicate that the
-   * connection was closed abnormally, e.g., without sending or
-   * receiving a Close control frame.
-   *
-   * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
-   */
-  ABNORMAL_CLOSURE: 1006,
-  /**
    * Status codes in the range 3000-3999 are reserved for use by
    * libraries, frameworks, and applications.  These status codes are
    * registered directly with IANA.  The interpretation of these codes
@@ -531,4 +611,15 @@ const WebSocketCloseClode = {
    * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.2
    */
   IRRECOVERABLE_DROP: 3000,
+  /**
+   * 1006 はクライアントサイドからは送信できないため、代わりに 3001 を使用します。
+   */
+  ABNORMAL_CLOSURE: 3001,
+} as const;
+
+const WebSocketReadyState = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSING: 2,
+  CLOSED: 3,
 } as const;
