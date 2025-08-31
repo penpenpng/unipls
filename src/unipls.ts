@@ -15,11 +15,11 @@ import type {
 import { AsyncResults, type UniplsSubscriber } from './unipls-subscription.ts';
 import type {
   UniplsCastOptions,
-  UniplsInitializationContext,
-  UniplsInitializer,
   UniplsListenParams,
   UniplsNextParams,
   UniplsParams,
+  UniplsProvisioner,
+  UniplsProvisioningContext,
   UniplsRecastContext,
   UniplsRecastFunction,
   UniplsRecastStrategy,
@@ -40,7 +40,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected deserialize: (data: WebSocketData) => TOutput;
   #WebSocket: WebSocketConstructor;
   #socket?: WebSocket;
-  #initializer?: UniplsInitializer<TInput, TOutput>;
+  #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #state: UniplsConnectionState = 'closed';
   get state(): UniplsConnectionState {
     return this.#state;
@@ -54,7 +54,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     'raw-open': void;
     'raw-message': WebSocketData;
     'raw-close': number;
-    connected: void;
+    open: void;
     message: TOutput;
     closed: void;
     dropped: { mayReconnect: boolean };
@@ -76,10 +76,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.events.on('raw-open', async () => {
-      this.#state = 'initializing';
-      await this.#initialize();
-      this.#state = 'connected';
-      this.events.emit('connected', void 0);
+      this.#state = 'provisioning';
+      await this.#provision();
+      this.#state = 'open';
+      this.events.emit('open', void 0);
     });
     this.events.on('raw-message', (data) => {
       const output = this.deserialize(data);
@@ -99,11 +99,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
   }
 
-  #initialize() {
+  #provision() {
     const result = new AsyncResult<void>();
-    const initialize = this.#initializer ?? (({ done }) => done());
+    const provision = this.#provisioner ?? (({ done }) => done());
 
-    const ctx: UniplsInitializationContext<TInput, TOutput> = {
+    const ctx: UniplsProvisioningContext<TInput, TOutput> = {
       cast: (data) => this.castForce(data),
       request: (data, params) => this.requestForce(data, params),
       listen: (subscriber, params) => this.listen(subscriber, params),
@@ -115,7 +115,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       reconnection: undefined,
     };
 
-    initialize(ctx);
+    provision(ctx);
 
     return result.promise;
   }
@@ -123,21 +123,21 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * WebSocket 接続を確立します。
    *
-   * @param {UniplsInitializer} initializer WebSocket 接続成功後の初期化処理を定義します。省略した場合は `({ done }) => done()` と同等になります。
+   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。省略した場合は `({ done }) => done()` と同等になります。
    * @returns {Promise<void>} WebSocket 接続と初期化が完了したことを表す Promise を返します。
    *
    * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
    *
    * @remarks
-   * 初期化が終了したら必ず {@link UniplsInitializationContext.done|done()} を呼び出さなければなりません。
+   * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
    */
-  connect(initializer?: UniplsInitializer<TInput, TOutput>): Promise<void> {
+  open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
     if (this.#intent === 'open') {
       throw new UniplsDuplicatedConnectionError();
     }
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
 
-    this.#initializer = initializer;
+    this.#provisioner = provisioner;
     this.#state = 'connecting';
     this.#intent = 'open';
 
@@ -148,7 +148,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       },
     });
 
-    events.once('connected', () => {
+    events.once('open', () => {
       result.resolve();
     });
     events.once('closed', () => {
@@ -289,7 +289,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   /**
-   * 1-input 0-output の通信を行います。{@link UniplsInitializer} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
+   * 1-input 0-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
    *
    * @returns {Promise<void>} WebSocket 接続が確立している間にデータを送信した場合に resolve される Promise を返します。
    *
@@ -306,7 +306,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   castForce(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {}
 
   /**
-   * 1-input 1-output の通信を行います。{@link UniplsInitializer} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
+   * 1-input 1-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
    *
    * @returns {Promise<T>} レスポンスを観測したときに resolve される Promise を返します。
    *
@@ -377,7 +377,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         });
     };
 
-    if (this.state === 'connecting' || this.state === 'open') {
+    if (this.state === 'connecting' || this.state === '') {
       request(data, params);
     }
 
@@ -393,45 +393,45 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     });
 
-    const onReconnected: UniplsRetrySetupContext<
-      TInput,
-      TOutput
-    >['onReconnected'] = (callback) => {
-      events.once('reconnected', (reconnection) => {
-        if (result.resulted) {
-          return;
-        }
+    // const onReconnected: UniplsRetrySetupContext<
+    //   TInput,
+    //   TOutput
+    // >['onReconnected'] = (callback) => {
+    //   events.once('reconnected', (reconnection) => {
+    //     if (result.resulted) {
+    //       return;
+    //     }
 
-        callback({
-          request,
-          done: () => {
-            // いらないかもしれない
-          },
-          reconnection,
-        });
-      });
-    };
+    //     callback({
+    //       request,
+    //       done: () => {
+    //         // いらないかもしれない
+    //       },
+    //       reconnection,
+    //     });
+    //   });
+    // };
 
     events.on('dropped', () => {
       if (result.resulted) {
         return;
       }
 
-      const setupRetry = Unipls.getRetrySetupFunction(params.retry);
+      // const setupRetry = Unipls.getRetrySetupFunction(params.retry);
 
-      setupRetry({
-        onReconnected,
-        data: activeRequest,
-        selector: activeSelector,
-        abort: result.reject,
-      });
+      // setupRetry({
+      //   onReconnected,
+      //   data: activeRequest,
+      //   selector: activeSelector,
+      //   abort: result.reject,
+      // });
     });
 
     return result.promise;
   }
 
   /**
-   * 1-input N-output の通信を行います。{@link UniplsInitializer} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
+   * 1-input N-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
    *
    * @returns 購読を解除する関数を返します
    *
@@ -458,6 +458,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   protected async enqueue(data: TInput): Promise<void> {
     // 送信が確認できたら resolve する
+  }
+
+  /**
+   * 現在 `"connecting"` または `""`
+   */
+  #enqueue() {
+    // リトライのことを考えず、このセッション中に送信する
   }
 
   protected static getRetrySetupFunction<TInput, TOutput>(

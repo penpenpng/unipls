@@ -20,20 +20,20 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
 }
 
 /**
- * {@link Unipls.connect|unipls.connect()} の任意の引数で、{@link UniplsReconnector} による再接続を含む WebSocket 接続の成功直後に実行されます。
+ * {@link Unipls.open|unipls.connect()} の任意の引数で、{@link UniplsReconnector} による再接続を含む WebSocket 接続の成功直後に実行されます。
  *
  * @remarks
- * 初期化が終了したら必ず {@link UniplsInitializationContext.done|done()} を呼び出さなければなりません。
+ * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
  */
-export type UniplsInitializer<
+export type UniplsProvisioner<
   TInput = WebSocketData,
   TOutput = WebSocketData,
-> = (ctx: UniplsInitializationContext<TInput, TOutput>) => void;
+> = (ctx: UniplsProvisioningContext<TInput, TOutput>) => void;
 
 /**
- * {@link UniplsInitializer} の引数で、{@link Unipls} の初期化を行うためのコンテキストを表します。
+ * {@link UniplsProvisioner} の引数で、{@link Unipls} の初期化を行うためのコンテキストを表します。
  */
-export interface UniplsInitializationContext<
+export interface UniplsProvisioningContext<
   TInput = WebSocketData,
   TOutput = WebSocketData,
 > {
