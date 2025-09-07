@@ -1,4 +1,4 @@
-import { ws, type WebSocketData } from 'msw';
+import { ws, type WebSocketData, type WebSocketEventListener } from 'msw';
 import { setupServer } from 'msw/node';
 import { AwaitableQueue } from '../libs/awaitable-queue';
 
@@ -26,12 +26,17 @@ export function createMockServer(url: string) {
 
     sockets.enqueue(socket);
 
-    client.addEventListener('message', (ev) => {
+    const onMessage = (ev: MessageEvent<WebSocketData>) => {
       socket.inbox.enqueue(ev.data);
-    });
-    client.addEventListener('close', (ev) => {
+    };
+    const onClose = (ev: CloseEvent) => {
+      client.removeEventListener('message', onMessage);
+      client.removeEventListener('close', onClose);
       socket.closeEvent.enqueue(ev);
-    });
+    };
+
+    client.addEventListener('message', onMessage);
+    client.addEventListener('close', onClose);
   });
 
   const server = setupServer(handler);
@@ -39,7 +44,7 @@ export function createMockServer(url: string) {
 
   return {
     sockets,
-    [Symbol.dispose]() {
+    reset() {
       server.resetHandlers();
     },
   };

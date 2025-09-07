@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import { UniplsClosedError } from '../errors';
 import { AwaitableQueue } from '../libs/awaitable-queue';
 import { Unipls } from '../unipls';
 import { createMockServer, type SocketMock } from './mock-server';
 
 const url = 'ws://localhost:8080';
 let unipls: Unipls<string, string>;
-let mock: ReturnType<typeof createMockServer>;
+const mock = createMockServer(url);
 let server: SocketMock;
 
 beforeEach(async () => {
-  mock = createMockServer(url);
   unipls = new Unipls<string, string>({ url });
   await unipls.open();
   server = await mock.sockets.dequeue();
@@ -17,7 +17,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   unipls.close();
-  mock[Symbol.dispose]();
+  mock.reset();
 });
 
 test('`.listen()` receives messages.', async () => {
@@ -105,6 +105,33 @@ test('unsubscription trigger `onUnsubscribed` and `finally`.', async () => {
 
   unsubscribe();
   await expect(inbox.dequeue()).resolves.toBe('unsubscribed');
+  await expect(inbox.dequeue()).resolves.toBe('finally');
+
+  server.send('ignored');
+  await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+});
+
+test('`close()` triggers `onFatalError` with `UniplsClosedError` and `finally`.', async () => {
+  const inbox = new AwaitableQueue<unknown>();
+  unipls.listen({
+    onMessage: (message) => {
+      inbox.enqueue(message);
+    },
+    onFatalError: (error) => {
+      inbox.enqueue(error);
+    },
+    finally: () => {
+      inbox.enqueue('finally');
+    },
+  });
+
+  server.send('msg1');
+  server.send('msg2');
+  await expect(inbox.dequeue()).resolves.toBe('msg1');
+  await expect(inbox.dequeue()).resolves.toBe('msg2');
+
+  unipls.close();
+  await expect(inbox.dequeue()).resolves.toBeInstanceOf(UniplsClosedError);
   await expect(inbox.dequeue()).resolves.toBe('finally');
 
   server.send('ignored');

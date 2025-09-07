@@ -5,14 +5,12 @@ import { Unipls } from '../unipls';
 import { createMockServer } from './mock-server';
 
 const url = 'ws://localhost:8080';
-let mock: ReturnType<typeof createMockServer>;
+const mock = createMockServer(url);
 
-beforeEach(async () => {
-  mock = createMockServer(url);
-});
+beforeEach(async () => {});
 
 afterEach(async () => {
-  mock[Symbol.dispose]();
+  mock.reset();
 });
 
 test('`deserializer` option works correctly.', async () => {
