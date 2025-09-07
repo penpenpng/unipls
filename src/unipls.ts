@@ -9,7 +9,7 @@ import { UniplsSocket } from './unipls-socket';
 import { AsyncResults, type UniplsSubscriber } from './unipls-subscription.ts';
 import type {
   UniplsCastOptions,
-  UniplsListenParams,
+  UniplsListenOptions,
   UniplsNextParams,
   UniplsParams,
   UniplsProvisioner,
@@ -58,9 +58,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       const ctx: UniplsProvisioningContext<TInput, TOutput> = {
         cast: (data) => this.castForce(data),
         request: (data, params) => this.requestForce(data, params),
-        listen: (subscriber, params) => this.listen(subscriber, params),
-        subscribe: (data, subscriber, params) =>
-          this.subscribeForce(data, subscriber, params),
+        listen: (params) => this.listen(params),
+        subscribe: (data, params) => this.subscribeForce(data, params),
         done: result.resolve,
         session: 0,
         isSessionBeginning: true,
@@ -103,8 +102,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsClosedError}
    */
   listen(
-    subscriber: UniplsSubscriber<TOutput>,
-    params: UniplsListenParams<TOutput>,
+    params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>,
   ): () => void {
     if (this.state === 'closed') {
       throw new UniplsClosedError();
@@ -115,7 +113,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     const events = this.events.createScope();
     const results = new AsyncResults<TOutput>({
-      subscriber,
+      subscriber: params,
       signal: params.signal,
       finally: () => {
         events.cleanup();
@@ -125,7 +123,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on('message', (message) => {
       Unipls.#processMessage({
         message,
-        selector: params.terminator,
+        filter: params.terminator ?? (() => false),
         processor: results.handleTerminator,
         onSelectorError: results.handleError,
         onProcessorError: (err) => {
@@ -137,7 +135,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
       Unipls.#processMessage({
         message,
-        selector: params.selector,
+        filter: params.selector ?? (() => true),
         processor: results.handleMessage,
         onSelectorError: results.handleError,
         onProcessorError: (err) => {
@@ -267,7 +265,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on('message', (message) => {
       Unipls.#processMessage({
         message,
-        selector: activeSelector,
+        filter: activeSelector,
         processor: result.resolve,
         onSelectorError: result.reject,
         onProcessorError: () => {
@@ -325,11 +323,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   subscribe(
     data: TInput,
-    subscriber: UniplsSubscriber<TOutput>,
-    params: UniplsSubscribeParams<TInput, TOutput>,
+    params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
     void data;
-    void subscriber;
     void params;
     throw new NotImplementedError();
   }
@@ -339,11 +335,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   subscribeForce(
     data: TInput,
-    subscriber: UniplsSubscriber<TOutput>,
-    params: UniplsSubscribeParams<TInput, TOutput>,
+    params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
     void data;
-    void subscriber;
     void params;
     throw new NotImplementedError();
   }
@@ -359,20 +353,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   static #processMessage<TOutput>({
     message,
-    selector,
+    filter,
     processor,
     onSelectorError,
     onProcessorError,
   }: {
     message: TOutput;
-    selector?: (message: TOutput) => boolean;
+    filter: (message: TOutput) => boolean;
     processor?: (message: TOutput) => void;
     onSelectorError: (message: unknown) => void;
     onProcessorError: (message: unknown) => void;
   }) {
     let selected = false;
     try {
-      selected = selector?.(message) ?? false;
+      selected = filter(message);
     } catch (err) {
       onSelectorError?.(err);
     }

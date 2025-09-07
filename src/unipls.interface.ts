@@ -58,12 +58,12 @@ export interface UniplsProvisioningContext<
 
   /**
    * {@link Unipls.listen|unipls.listen()} とほとんど同様ですが、以下が異なります:
-   * - {@link UniplsListenParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
-   * - {@link UniplsListenParams.retry|retry} を指定することはできません。購読が中断されたときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
+   * - {@link UniplsListenOptions.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
+   * - {@link UniplsListenOptions.retry|retry} を指定することはできません。購読が中断されたときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   listen(
-    subscriber: UniplsSubscriber<TOutput>,
-    params: Omit<UniplsListenParams<TOutput>, 'signal' | 'retry'>,
+    params: UniplsSubscriber<TOutput> &
+      Omit<UniplsListenOptions<TOutput>, 'signal' | 'retry'>,
   ): void;
 
   /**
@@ -74,8 +74,8 @@ export interface UniplsProvisioningContext<
    */
   subscribe(
     data: TInput,
-    subscriber: UniplsSubscriber<TOutput>,
-    params: Omit<UniplsSubscribeParams<TInput, TOutput>, 'signal' | 'retry'>,
+    params: UniplsSubscriber<TOutput> &
+      Omit<UniplsSubscribeParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): () => void;
 
   /** 初期化が完了したことを {@link Unipls} に通知します。この関数は初期化完了時に必ず呼び出されなければなりません。 */
@@ -103,9 +103,9 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
 }
 
 /** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
-export interface UniplsListenParams<TOutput = WebSocketData> {
+export interface UniplsListenOptions<TOutput = WebSocketData> {
   /** どのメッセージを購読の対象とみなすかを決定する述語関数です。この条件を満たしたすべてのメッセージが購読の対象になります。 */
-  selector: (data: TOutput) => boolean;
+  selector?: (data: TOutput) => boolean;
 
   /** どのメッセージを購読の終端とみなすかを決定する述語関数です。この条件を最初に満たしたメッセージが購読の終端になります。 */
   terminator?: (data: TOutput) => boolean;

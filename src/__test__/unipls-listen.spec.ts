@@ -11,16 +11,11 @@ test('.listen() receives messages', async () => {
   const socket = await mock.sockets.dequeue();
 
   const inbox = new AwaitableQueue<string>();
-  unipls.listen(
-    {
-      onMessage: (message) => {
-        inbox.enqueue(message);
-      },
+  unipls.listen({
+    onMessage: (message) => {
+      inbox.enqueue(message);
     },
-    {
-      selector: () => true,
-    },
-  );
+  });
 
   socket.send('msg1');
   socket.send('msg2');
