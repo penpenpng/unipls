@@ -1,11 +1,11 @@
-import { u } from "./utils.ts";
+import { u } from './utils.ts';
 
 export class AwaitableQueue<T> {
   private queue: Array<{ value: T; resolve: () => void }> = [];
   private resolvers: Array<(value: T) => void> = [];
 
   /** Enqueue a value and return a promise, which is resolved when the value is dequeued. */
-  async enqueue(value: T, timeout?: number): Promise<void> {
+  async enqueue(value: T, options?: { timeout?: number }): Promise<void> {
     if (this.resolvers.length > 0) {
       const resolve = this.resolvers.shift();
       if (resolve) {
@@ -15,8 +15,8 @@ export class AwaitableQueue<T> {
       const { promise, resolve } = Promise.withResolvers<void>();
       this.queue.push({ value, resolve });
 
-      if (timeout) {
-        return u.Promise.timeout(promise, timeout);
+      if (options?.timeout) {
+        return u.Promise.timeout(promise, options.timeout);
       } else {
         return promise;
       }
@@ -24,7 +24,7 @@ export class AwaitableQueue<T> {
   }
 
   /** Dequeue a value if exists. Otherwise, wait for the next value. */
-  async dequeue(timeout?: number): Promise<T> {
+  async dequeue(options?: { timeout?: number }): Promise<T> {
     if (this.queue.length > 0) {
       const { value, resolve } = this.queue.shift()!;
       resolve();
@@ -35,8 +35,8 @@ export class AwaitableQueue<T> {
 
     this.resolvers.push(resolve);
 
-    if (timeout) {
-      return u.Promise.timeout(promise, timeout);
+    if (options?.timeout) {
+      return u.Promise.timeout(promise, options.timeout);
     } else {
       return promise;
     }

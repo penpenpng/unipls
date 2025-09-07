@@ -40,19 +40,42 @@ test('`.listen()` receives messages.', async () => {
 test('`selector` option filters messages.', async () => {
   const inbox = new AwaitableQueue<string>();
   unipls.listen({
-    selector: (message) => message.startsWith('foo'),
+    selector: (message) => message.startsWith('msg'),
     onMessage: (message) => {
       inbox.enqueue(message);
     },
   });
 
-  server.send('foo1');
-  server.send('bar1');
-  server.send('foo2');
-  server.send('bar2');
-  server.send('foo3');
+  server.send('msg1');
+  server.send('ignored');
+  server.send('msg2');
+  server.send('ignored');
+  server.send('msg3');
 
-  await expect(inbox.dequeue()).resolves.toBe('foo1');
-  await expect(inbox.dequeue()).resolves.toBe('foo2');
-  await expect(inbox.dequeue()).resolves.toBe('foo3');
+  await expect(inbox.dequeue()).resolves.toBe('msg1');
+  await expect(inbox.dequeue()).resolves.toBe('msg2');
+  await expect(inbox.dequeue()).resolves.toBe('msg3');
+});
+
+test('`terminator` option terminates subscription.', async () => {
+  const inbox = new AwaitableQueue<unknown>();
+  unipls.listen({
+    terminator: (message) => message === 'stop',
+    onMessage: (message) => {
+      inbox.enqueue(message);
+    },
+    onTerminated: (message) => {
+      inbox.enqueue(message);
+    },
+  });
+
+  server.send('msg1');
+  server.send('msg2');
+  server.send('stop');
+  server.send('ignored');
+
+  await expect(inbox.dequeue()).resolves.toBe('msg1');
+  await expect(inbox.dequeue()).resolves.toBe('msg2');
+  await expect(inbox.dequeue()).resolves.toBe('stop');
+  await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
 });
