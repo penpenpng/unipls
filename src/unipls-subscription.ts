@@ -109,7 +109,7 @@ export class AsyncResults<T> {
     }
     this.#resulted = true;
     this.#reason = 'unsubscribed';
-    this.#subscriber.onUnsubscribe?.();
+    this.#subscriber.onUnsubscribed?.();
     this.#controller.abort();
   };
 }
@@ -125,7 +125,7 @@ export interface UniplsSubscriber<TOutput = WebSocketData> {
   /** 購読の対象となるメッセージがエラーを引き起こしたときに実行されるコールバックを指定します。このエラーは、典型的には `deserializer` によって発生し得ます。 */
   onError?: (error: unknown) => void;
 
-  onUnsubscribe?: () => void;
+  onUnsubscribed?: () => void;
 
   onFatalError?: (error: unknown) => void;
 

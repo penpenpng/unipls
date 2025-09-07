@@ -57,7 +57,7 @@ test('`selector` option filters messages.', async () => {
   await expect(inbox.dequeue()).resolves.toBe('msg3');
 });
 
-test('`terminator` option terminates subscription.', async () => {
+test('`terminator` option terminates subscription, and triggers `onTerminated` and `finally`.', async () => {
   const inbox = new AwaitableQueue<unknown>();
   unipls.listen({
     terminator: (message) => message === 'stop',
@@ -66,6 +66,9 @@ test('`terminator` option terminates subscription.', async () => {
     },
     onTerminated: (message) => {
       inbox.enqueue(message);
+    },
+    finally: () => {
+      inbox.enqueue('finally');
     },
   });
 
@@ -77,5 +80,33 @@ test('`terminator` option terminates subscription.', async () => {
   await expect(inbox.dequeue()).resolves.toBe('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg2');
   await expect(inbox.dequeue()).resolves.toBe('stop');
+  await expect(inbox.dequeue()).resolves.toBe('finally');
+  await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+});
+
+test('unsubscription trigger `onUnsubscribed` and `finally`.', async () => {
+  const inbox = new AwaitableQueue<unknown>();
+  const unsubscribe = unipls.listen({
+    onMessage: (message) => {
+      inbox.enqueue(message);
+    },
+    onUnsubscribed: () => {
+      inbox.enqueue('unsubscribed');
+    },
+    finally: () => {
+      inbox.enqueue('finally');
+    },
+  });
+
+  server.send('msg1');
+  server.send('msg2');
+  await expect(inbox.dequeue()).resolves.toBe('msg1');
+  await expect(inbox.dequeue()).resolves.toBe('msg2');
+
+  unsubscribe();
+  await expect(inbox.dequeue()).resolves.toBe('unsubscribed');
+  await expect(inbox.dequeue()).resolves.toBe('finally');
+
+  server.send('ignored');
   await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
 });
