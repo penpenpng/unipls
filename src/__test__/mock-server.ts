@@ -5,7 +5,7 @@ import { AwaitableQueue } from '../libs/awaitable-queue';
 interface SocketMock {
   send(data: WebSocketData): void;
   close(): void;
-  messages: AwaitableQueue<WebSocketData>;
+  inbox: AwaitableQueue<WebSocketData>;
   closeEvent: AwaitableQueue<CloseEvent>;
 }
 
@@ -20,14 +20,14 @@ export function createMockServer(url: string) {
       close() {
         client.close();
       },
-      messages: new AwaitableQueue<WebSocketData>(),
+      inbox: new AwaitableQueue<WebSocketData>(),
       closeEvent: new AwaitableQueue<CloseEvent>(),
     };
 
     sockets.enqueue(socket);
 
     client.addEventListener('message', (ev) => {
-      socket.messages.enqueue(ev.data);
+      socket.inbox.enqueue(ev.data);
     });
     client.addEventListener('close', (ev) => {
       socket.closeEvent.enqueue(ev);
