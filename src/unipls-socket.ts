@@ -129,6 +129,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     socket.onclose = (ev) => {
       if (this.#socket !== socket) return;
       this.#events.emit('raw-close', { socket, code: ev.code });
+      this.#socket = undefined;
     };
 
     events.on('open', () => {
@@ -151,12 +152,12 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
    * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
    */
   close(): Promise<void> {
-    this.#intent = 'close';
-    this.#provisioner = undefined;
-
     if (!this.#socket || this.#intent === 'close' || this.#state === 'closed') {
       return Promise.resolve();
     }
+
+    this.#provisioner = undefined;
+    this.#intent = 'close';
 
     const events = this.#events.createScope();
     const result = new AsyncResult<void>({
@@ -165,9 +166,6 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       },
     });
 
-    const closingSocket = this.#socket;
-    this.#socket = undefined;
-
     if (this.#state === 'dropped') {
       result.resolve();
       // socket は既に閉じているので、onclose イベントはもう発火しない。代わりに closed イベントを直接手動で発行する。
@@ -175,16 +173,14 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       return result.promise;
     }
 
-    // 以下の理由から、closed イベントの代わりに raw-close イベントで待つ:
-    // * 接続が drop したとしても resolve する必要がある
-    // * close した socket の同一性を追跡するために、raw-close イベントのイベントパラメータが必要
-    events.on('raw-close', ({ socket }) => {
-      if (socket === closingSocket) {
-        result.resolve();
-      }
+    events.on('closed', () => {
+      result.resolve();
+    });
+    events.on('dropped', () => {
+      result.resolve();
     });
 
-    closingSocket.close(WebSocketCloseClode.NORMAL_CLOSURE);
+    this.#socket.close(WebSocketCloseClode.NORMAL_CLOSURE);
 
     return result.promise;
   }
