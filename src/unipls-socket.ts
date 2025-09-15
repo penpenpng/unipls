@@ -55,22 +55,18 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       throw new Error('WebSocket constructor was not provided.');
     }
 
-    this.#events.on('raw-open', async ({ socket }) => {
-      if (this.#socket !== socket) {
-        return;
-      }
+    this.#events.on('raw-open', async () => {
       this.#state = 'provisioning';
       await this.#provisioner?.();
       this.#state = 'open';
       this.#events.emit('open', void 0);
     });
-    this.#events.on('raw-message', ({ socket, data }) => {
-      if (this.#socket !== socket) {
-        return;
-      }
+
+    this.#events.on('raw-message', ({ data }) => {
       const output = this.deserialize(data);
       this.#events.emit('message', output);
     });
+
     this.#events.on('raw-close', ({ code }) => {
       if (code === WebSocketCloseClode.NORMAL_CLOSURE) {
         this.#state = 'closed';
@@ -114,39 +110,37 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     try {
       const WebSocket = this.#WebSocket;
       socket = new WebSocket(this.url);
-      this.#socket = socket;
-
-      socket.onopen = () => {
-        this.#events.emit('raw-open', { socket });
-      };
-      socket.onmessage = (ev) => {
-        this.#events.emit('raw-message', { socket, data: ev.data });
-      };
-      socket.onclose = (ev) => {
-        this.#events.emit('raw-close', { socket, code: ev.code });
-      };
     } catch {
       // When the given URL is invalid, Deno runtime throws SyntaxError.
       result.reject(new UniplsDroppedError());
       return result.promise;
     }
 
+    this.#socket = socket;
+
+    socket.onopen = () => {
+      if (this.#socket !== socket) return;
+      this.#events.emit('raw-open', void 0);
+    };
+    socket.onmessage = (ev) => {
+      if (this.#socket !== socket) return;
+      this.#events.emit('raw-message', { data: ev.data });
+    };
+    socket.onclose = (ev) => {
+      if (this.#socket !== socket) return;
+      this.#events.emit('raw-close', { socket, code: ev.code });
+    };
+
     events.on('open', () => {
-      if (this.#socket !== socket) {
-        return;
-      }
+      if (this.#socket !== socket) return;
       result.resolve();
     });
     events.on('closed', () => {
-      if (this.#socket !== socket) {
-        return;
-      }
+      if (this.#socket !== socket) return;
       result.reject(new UniplsClosedError());
     });
     events.on('dropped', ({ mayReconnect }) => {
-      if (this.#socket !== socket || mayReconnect) {
-        return;
-      }
+      if (this.#socket !== socket || mayReconnect) return;
       result.reject(new UniplsDroppedError());
     });
 
@@ -282,9 +276,9 @@ export interface UniplsSocketPublicEvents<TOutput> {
 }
 
 interface UniplsSocketRawEvents {
-  'raw-open': { socket: WebSocket };
-  'raw-message': { socket: WebSocket; data: WebSocketData };
-  'raw-close': { socket: WebSocket | 'none'; code: number };
+  'raw-open': void;
+  'raw-message': { data: WebSocketData };
+  'raw-close': { socket: WebSocket; code: number };
 }
 
 const WebSocketCloseClode = {
