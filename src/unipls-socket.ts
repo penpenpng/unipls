@@ -31,6 +31,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   get intent() {
     return this.#intent;
   }
+  #activeSessionId = 0;
 
   #events = new EventBus<
     UniplsSocketPublicEvents<TOutput> & UniplsSocketRawEvents
@@ -55,25 +56,28 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       throw new Error('WebSocket constructor was not provided.');
     }
 
-    this.#events.on('raw-open', async () => {
+    this.#events.on('raw-open', async ({ sessionId }) => {
       this.#state = 'provisioning';
       await this.#provisioner?.();
       this.#state = 'open';
-      this.#events.emit('open', void 0);
+      this.#events.emit('open', { sessionId });
     });
 
-    this.#events.on('raw-message', ({ data }) => {
-      const output = this.deserialize(data);
-      this.#events.emit('message', output);
+    this.#events.on('raw-message', ({ data, sessionId }) => {
+      const message = this.deserialize(data);
+      this.#events.emit('message', {
+        sessionId,
+        message,
+      });
     });
 
-    this.#events.on('raw-close', ({ code }) => {
+    this.#events.on('raw-close', ({ sessionId, code }) => {
       if (code === WebSocketCloseClode.NORMAL_CLOSURE) {
         this.#state = 'closed';
-        this.#events.emit('closed', void 0);
+        this.#events.emit('closed', { sessionId });
       } else {
         this.#state = 'dropped';
-        this.#events.emit('dropped', { mayReconnect: true });
+        this.#events.emit('dropped', { sessionId, mayReconnect: true });
       }
     });
   }
@@ -98,6 +102,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#intent = 'open';
     this.#state = 'connecting';
     this.#provisioner = provisioner;
+    const sessionId = ++this.#activeSessionId;
 
     const events = this.#events.createScope();
     const result = new AsyncResult<void>({
@@ -119,29 +124,23 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#socket = socket;
 
     socket.onopen = () => {
-      if (this.#socket !== socket) return;
-      this.#events.emit('raw-open', void 0);
+      this.#events.emit('raw-open', { sessionId });
     };
     socket.onmessage = (ev) => {
-      if (this.#socket !== socket) return;
-      this.#events.emit('raw-message', { data: ev.data });
+      this.#events.emit('raw-message', { sessionId, data: ev.data });
     };
     socket.onclose = (ev) => {
-      if (this.#socket !== socket) return;
-      this.#events.emit('raw-close', { socket, code: ev.code });
-      this.#socket = undefined;
+      this.#events.emit('raw-close', { sessionId, socket, code: ev.code });
     };
 
     events.on('open', () => {
-      if (this.#socket !== socket) return;
       result.resolve();
     });
     events.on('closed', () => {
-      if (this.#socket !== socket) return;
       result.reject(new UniplsClosedError());
     });
     events.on('dropped', ({ mayReconnect }) => {
-      if (this.#socket !== socket || mayReconnect) return;
+      if (mayReconnect) return;
       result.reject(new UniplsDroppedError());
     });
 
@@ -158,6 +157,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     this.#provisioner = undefined;
     this.#intent = 'close';
+    const targetSessionId = this.#activeSessionId;
 
     const events = this.#events.createScope();
     const result = new AsyncResult<void>({
@@ -168,19 +168,21 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     if (this.#state === 'dropped') {
       result.resolve();
-      // socket は既に閉じているので、onclose イベントはもう発火しない。代わりに closed イベントを直接手動で発行する。
-      this.#events.emit('closed', void 0);
+      this.#events.emit('closed', { sessionId: targetSessionId });
       return result.promise;
     }
 
-    events.on('closed', () => {
+    events.on('closed', ({ sessionId }) => {
+      if (targetSessionId !== sessionId) return;
       result.resolve();
     });
-    events.on('dropped', () => {
+    events.on('dropped', ({ sessionId }) => {
+      if (targetSessionId !== sessionId) return;
       result.resolve();
     });
 
     this.#socket.close(WebSocketCloseClode.NORMAL_CLOSURE);
+    this.#socket = undefined;
 
     return result.promise;
   }
@@ -265,16 +267,16 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 }
 
 export interface UniplsSocketPublicEvents<TOutput> {
-  open: void;
-  message: TOutput;
-  closed: void;
-  dropped: { mayReconnect: boolean };
+  open: { sessionId: number };
+  message: { sessionId: number; message: TOutput };
+  closed: { sessionId: number };
+  dropped: { sessionId: number; mayReconnect: boolean };
 }
 
 interface UniplsSocketRawEvents {
-  'raw-open': void;
-  'raw-message': { data: WebSocketData };
-  'raw-close': { socket: WebSocket; code: number };
+  'raw-open': { sessionId: number };
+  'raw-message': { sessionId: number; data: WebSocketData };
+  'raw-close': { sessionId: number; socket: WebSocket; code: number };
 }
 
 const WebSocketCloseClode = {

@@ -120,7 +120,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       },
     });
 
-    events.on('message', (message) => {
+    events.on('message', ({ message }) => {
       Unipls.#processMessage({
         message,
         filter: params.terminator ?? (() => false),
@@ -262,7 +262,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       request(data, params);
     }
 
-    events.on('message', (message) => {
+    events.on('message', ({ message }) => {
       Unipls.#processMessage({
         message,
         filter: activeSelector,
