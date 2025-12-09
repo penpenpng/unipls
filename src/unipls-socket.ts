@@ -3,6 +3,7 @@ import {
   UniplsClosedError,
   UniplsDroppedError,
   UniplsDuplicatedConnectionError,
+  UniplsTimeoutError,
 } from './errors.ts';
 import { EventBus } from './event-bus.ts';
 import type {
@@ -13,6 +14,14 @@ import type {
 } from './types.ts';
 import type { UniplsParams } from './unipls.interface.ts';
 
+/**
+ * 基礎的な機能を備えた WebSocket クライアントです。
+ *
+ * - コネクションプロビジョニング
+ * - 同インスタンス上での (手動の) 再接続
+ * - メッセージのシリアライズ/デシリアライズ
+ * - drop イベントの検知
+ */
 export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   #url: string;
   get url(): string {
@@ -20,6 +29,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   }
   protected serialize: (data: TInput) => WebSocketData;
   protected deserialize: (data: WebSocketData) => TOutput;
+  protected timeout: number;
   #WebSocket: WebSocketConstructor;
   #session: UniplsSessionState = UniplsSessionState.dead();
   #events = new EventBus<
@@ -43,15 +53,17 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
   constructor({
     url,
-    serializer,
-    deserializer,
-    WebSocket,
+    serializer = (data) => data as WebSocketData,
+    deserializer = (data) => data as TOutput,
+    WebSocket = globalThis.WebSocket,
+    timeout = 5000,
   }: UniplsParams<TInput, TOutput>) {
     this.#url = url;
-    this.serialize = serializer ?? ((data) => data as WebSocketData);
-    this.deserialize = deserializer ?? ((data) => data as TOutput);
+    this.serialize = serializer;
+    this.deserialize = deserializer;
+    this.timeout = timeout;
 
-    this.#WebSocket = WebSocket ?? globalThis.WebSocket;
+    this.#WebSocket = WebSocket;
     if (!this.#WebSocket) {
       throw new Error('WebSocket constructor was not provided.');
     }
@@ -72,21 +84,26 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     this.#events.on('raw-close', ({ session, code }) => {
-      if (code === WebSocketCloseClode.NORMAL_CLOSURE) {
+      // 接続がタイムアウトしたとみなされたとき、念のため MARKED_AS_TIMED_OUT でクローズする。
+      // 万が一このイベントを観測できたとしても、もとより接続の確立には失敗したものとみなすべきなので、何もしない。
+      if (code === WebSocketCloseCode.MARKED_AS_TIMED_OUT) {
+        return;
+      }
+
+      if (code === WebSocketCloseCode.NORMAL_CLOSURE) {
         session.conn.state = 'closed';
         this.#events.emit('closed', { session });
       } else {
         session.conn.state = 'dropped';
-        this.#events.emit('dropped', { session, mayReconnect: true });
+        this.#events.emit('dropped', { session });
       }
     });
   }
 
   /**
-   * WebSocket 接続を確立します。
+   * WebSocket 接続が未確立ならば新規の接続を試みて、接続とプロビジョニングに成功したときに解決する Promise を返します。
    *
    * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。省略した場合は `({ done }) => done()` と同等になります。
-   * @returns {Promise<void>} WebSocket 接続と初期化が完了したことを表す Promise を返します。
    *
    * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
    *
@@ -97,29 +114,69 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     if (this.intent === 'open') {
       throw new UniplsDuplicatedConnectionError();
     }
-    // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
     const session = UniplsSessionState.create(provisioner);
     session.conn.state = 'connecting';
     this.#session = session;
 
-    const events = this.#events.createScope();
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const events = this.#events.spawnReadonlyBus();
     const result = new AsyncResult<void>({
       finally: () => {
-        events.cleanup();
+        events.dispose();
+        if (timeoutTimer) clearTimeout(timeoutTimer);
       },
     });
 
+    let socket: WebSocket;
+    try {
+      session.conn.socket = socket = this.#createSocket(session);
+    } catch (err) {
+      result.reject(err);
+      return result.promise;
+    }
+
+    events.on('open', (ev) => {
+      if (ev.session.id !== session.id) {
+        return;
+      }
+      result.resolve();
+    });
+    events.on('closed', (ev) => {
+      if (ev.session.id !== session.id) {
+        return;
+      }
+      result.reject(new UniplsClosedError());
+    });
+    events.on('dropped', (ev) => {
+      if (ev.session.id !== session.id) {
+        return;
+      }
+      result.reject(new UniplsDroppedError());
+    });
+
+    timeoutTimer = setTimeout(() => {
+      if (result.resulted) {
+        return;
+      }
+
+      result.reject(new UniplsTimeoutError());
+      session.conn.state = 'dropped';
+      timeoutTimer = undefined;
+      socket.close(WebSocketCloseCode.MARKED_AS_TIMED_OUT);
+    }, this.timeout);
+
+    return result.promise;
+  }
+
+  #createSocket(session: UniplsSessionState): WebSocket {
     let socket: WebSocket;
     try {
       const WebSocket = this.#WebSocket;
       socket = new WebSocket(this.url);
     } catch {
       // When the given URL is invalid, Deno runtime throws SyntaxError.
-      result.reject(new UniplsDroppedError());
-      return result.promise;
+      throw new UniplsDroppedError();
     }
-
-    session.conn.socket = socket;
 
     socket.onopen = () => {
       this.#events.emit('raw-open', { session });
@@ -131,22 +188,11 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       this.#events.emit('raw-close', { session, socket, code: ev.code });
     };
 
-    events.on('open', () => {
-      result.resolve();
-    });
-    events.on('closed', () => {
-      result.reject(new UniplsClosedError());
-    });
-    events.on('dropped', ({ mayReconnect }) => {
-      if (mayReconnect) return;
-      result.reject(new UniplsDroppedError());
-    });
-
-    return result.promise;
+    return socket;
   }
 
   /**
-   * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
+   * WebSocket 接続を切断します。既に切断されている場合は何もしません。
    */
   close(): Promise<void> {
     if (!this.#socket || this.intent === 'close' || this.state === 'closed') {
@@ -158,11 +204,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     const targetSession = this.#session;
     const targetSessionId = this.#session.id;
 
-    const events = this.#events.createScope();
+    const events = this.#events.spawnReadonlyBus();
     const result = new AsyncResult<void>({
-      finally: () => {
-        events.cleanup();
-      },
+      finally: () => events.dispose(),
     });
 
     if (this.state === 'dropped') {
@@ -180,13 +224,13 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       result.resolve();
     });
 
-    this.#socket.close(WebSocketCloseClode.NORMAL_CLOSURE);
+    this.#socket.close(WebSocketCloseCode.NORMAL_CLOSURE);
 
     return result.promise;
   }
 
   drop(): void {
-    this.#socket?.close(WebSocketCloseClode.ABNORMAL_CLOSURE);
+    this.#socket?.close(WebSocketCloseCode.ABNORMAL_CLOSURE);
   }
 
   /**
@@ -197,12 +241,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     data: TInput,
     options?: { signal?: AbortSignal; force?: boolean },
   ): Promise<void> {
-    const events = this.#events.createScope();
+    const events = this.#events.spawnReadonlyBus();
     const result = new AsyncResult<void>({
       signal: options?.signal,
-      finally: () => {
-        events.cleanup();
-      },
+      finally: () => events.dispose(),
     });
 
     if (
@@ -264,11 +306,12 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 }
 
+// FIXME: session は外部から操作不可能であるべき。id などのみ公開するに留めたほうがいい
 export interface UniplsSocketPublicEvents<TOutput> {
   open: { session: UniplsSessionState };
   message: { session: UniplsSessionState; message: TOutput };
   closed: { session: UniplsSessionState };
-  dropped: { session: UniplsSessionState; mayReconnect: boolean };
+  dropped: { session: UniplsSessionState };
 }
 
 interface UniplsSocketRawEvents {
@@ -279,6 +322,7 @@ interface UniplsSocketRawEvents {
 
 type UniplsProvisioner = () => Promise<void>;
 
+// FIXME: ドメインを記述する
 class UniplsSessionState {
   static #nextSessionId = 1;
 
@@ -320,7 +364,7 @@ class UniplsConnection {
   constructor(public sessionId: number) {}
 }
 
-const WebSocketCloseClode = {
+const WebSocketCloseCode = {
   /**
    * 1000 indicates a normal closure, meaning that the purpose for
    * which the connection was established has been fulfilled.
@@ -341,6 +385,7 @@ const WebSocketCloseClode = {
    * 1006 はクライアントサイドからは送信できないため、代わりに 3001 を使用します。
    */
   ABNORMAL_CLOSURE: 3001,
+  MARKED_AS_TIMED_OUT: 3002,
 } as const;
 
 const WebSocketReadyState = {

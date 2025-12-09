@@ -3,10 +3,6 @@ import type {
   WebSocketConstructor,
   WebSocketData,
 } from './types.ts';
-import {
-  type ReconnectionContext,
-  UniplsReconnector,
-} from './unipls-reconnector.ts';
 import { type UniplsSubscriber } from './unipls-subscription.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
@@ -15,8 +11,8 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   url: string;
   serializer?: (data: TInput) => WebSocketData;
   deserializer?: (data: WebSocketData) => TOutput;
-  reconnector?: UniplsReconnector;
   WebSocket?: WebSocketConstructor;
+  timeout?: number;
 }
 
 /**
@@ -86,9 +82,6 @@ export interface UniplsProvisioningContext<
 
   /** これが現在のセッションの中での最初の初期化ならば `true`、そうでなければ `false` を与えます。 */
   isSessionBeginning: boolean;
-
-  /** 再接続時にのみ、再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
-  reconnection?: ReconnectionContext;
 }
 
 export interface UniplsNextParams<TOutput = WebSocketData> {
@@ -160,9 +153,6 @@ export type UniplsRecastFunction<TInput = WebSocketData> = (
  * {@link UniplsRecastFunction} の引数で、再送の方法を制御するためのコンテキストを表します。
  */
 export interface UniplsRecastContext<TInput = WebSocketData> {
-  /** 再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
-  reconnection: ReconnectionContext;
-
   /** 直前に送信が試行されたデータを表します。すなわち、初回の再送では {@link Unipls.cast|unipls.cast()} の引数に等しく、それ以降の再送では直前の再送で送信を試行したデータに等しいです。 */
   data: TInput;
 
@@ -238,23 +228,6 @@ export interface UniplsRetrySetupContext<
 
   /** 再送処理を中断したことを {@link Unipls} に通知します。 */
   abort(error?: unknown): void;
-}
-
-export interface UniplsRetryContext<
-  TInput = WebSocketData,
-  TOutput = WebSocketData,
-> {
-  /** 再送コンテストを表します。{@link UniplsReconnector.reconnect|reconnector.reconnect()} の引数に与えられるものと同一です。*/
-  reconnection: ReconnectionContext;
-
-  /** 再送を試行します。 */
-  request(
-    data: TInput,
-    params: Pick<UniplsRequestParams<TInput, TOutput>, 'selector'>,
-  ): void;
-
-  /** 再送処理を完了したことを {@link Unipls} に通知します。 */
-  done(): void;
 }
 
 /** {@link Unipls.subscribe|unipls.subscribe()} の必須の第2引数で、`subscribe()` の挙動を制御します。 */

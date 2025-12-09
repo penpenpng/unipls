@@ -1,4 +1,4 @@
-import { ws, type WebSocketData, type WebSocketEventListener } from 'msw';
+import { ws, type WebSocketData } from 'msw';
 import { setupServer } from 'msw/node';
 import { AwaitableQueue } from '../libs/awaitable-queue';
 

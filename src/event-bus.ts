@@ -54,13 +54,18 @@ export class EventBus<TEvents extends Record<string, any>> {
     }
   }
 
-  createScope(): ScopedEventBus<TEvents> {
-    return new ScopedEventBus(this);
+  spawnReadonlyBus(): ReadonlyEventBus<TEvents> {
+    return new ReadonlyEventBus(this);
   }
+
+  [Symbol.dispose] = () => {
+    this.#listeners = {};
+  };
+  dispose = this[Symbol.dispose];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-class ScopedEventBus<TEvents extends Record<string, any>> {
+class ReadonlyEventBus<TEvents extends Record<string, any>> {
   #events: EventBus<TEvents>;
   #cleanups: Set<() => void> = new Set();
 
@@ -94,10 +99,11 @@ class ScopedEventBus<TEvents extends Record<string, any>> {
     };
   }
 
-  cleanup(): void {
+  [Symbol.dispose] = () => {
     for (const cleanup of this.#cleanups) {
       cleanup();
     }
     this.#cleanups.clear();
-  }
+  };
+  dispose = this[Symbol.dispose];
 }

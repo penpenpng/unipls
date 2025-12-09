@@ -51,6 +51,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
    */
   open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
+    // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
     return this.#socket.open(async () => {
       const result = new AsyncResult<void>();
       const provision = provisioner ?? (({ done }) => done());
@@ -63,7 +64,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         done: result.resolve,
         session: 0,
         isSessionBeginning: true,
-        reconnection: undefined,
       };
 
       provision(ctx);
@@ -111,12 +111,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.createScope();
+    const events = this.events.spawnReadonlyBus();
     const results = new AsyncResults<TOutput>({
       subscriber: params,
       signal: params.signal,
       finally: () => {
-        events.cleanup();
+        events.dispose();
       },
     });
 
@@ -217,10 +217,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.createScope();
+    const events = this.events.spawnReadonlyBus();
     const result = new AsyncResult<TOutput>({
       finally: () => {
-        events.cleanup();
+        events.dispose();
       },
       signal: params.signal,
       timeout: params.timeout,
@@ -301,7 +301,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         return;
       }
 
-      // const setupRetry = Unipls.getRetrySetupFunction(params.retry);
+      const setupRetry = Unipls.getRetrySetupFunction(params.retry);
 
       // setupRetry({
       //   onReconnected,
