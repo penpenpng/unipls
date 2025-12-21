@@ -6,7 +6,11 @@ import {
   UniplsDroppedError,
 } from './errors.ts';
 import type { EventBus } from './event-bus';
-import type { UniplsConnectionState, WebSocketData } from './types.ts';
+import type {
+  SessionId,
+  UniplsConnectionState,
+  WebSocketData,
+} from './types.ts';
 import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {
   UniplsCastOptions,
@@ -20,6 +24,13 @@ import type {
   UniplsRetryStrategy,
   UniplsSubscribeParams,
 } from './unipls.interface.ts';
+
+type UniplsEvents<TOutput> = UniplsSocketPublicEvents<TOutput> & {
+  reconnect: {
+    previousSessionId: SessionId;
+    sessionId: SessionId;
+  };
+};
 
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #socket: UniplsSocket<TInput, TOutput>;
@@ -35,14 +46,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   get intent() {
     return this.#socket.intent;
   }
-  protected get events() {
-    return this.#socket.events;
+  protected get events(): EventBus<UniplsEvents<TOutput>> {
+    return this.#socket.events as EventBus<UniplsEvents<TOutput>>;
   }
   get on() {
-    return this.#socket.events.on.bind(this.#socket.events);
+    return this.events.on.bind(this.events);
   }
   get off() {
-    return this.#socket.events.off.bind(this.#socket.events);
+    return this.events.off.bind(this.events);
   }
 
   constructor(params: UniplsParams<TInput, TOutput>) {
@@ -357,9 +368,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.#ensureProvisioner();
+    const previousSessionId = this.#socket.sessionId;
 
     this.#reconnectPromise = this.#socket
       .open(async () => this.#runProvisioner())
+      .then(() => {
+        this.events.emit('reconnect', {
+          previousSessionId,
+          sessionId: this.#socket.sessionId,
+        });
+      })
       .catch((err) => {
         console.warn('Reconnection attempt failed:', err);
       })

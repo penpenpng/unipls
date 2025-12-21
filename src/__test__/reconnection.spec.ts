@@ -66,3 +66,23 @@ test('再接続後にプロビジョニングが再実行される', async () =>
 
   await expect(provisioned.dequeue()).resolves.toBe(2);
 });
+
+test('再接続時に reconnect イベントが発火する', async () => {
+  const reconnects = new AwaitableQueue<{
+    previousSessionId: number;
+    sessionId: number;
+  }>();
+
+  unipls.on('reconnect', (ev) => {
+    void reconnects.enqueue(ev);
+  });
+
+  server.close(3001);
+
+  await mock.sockets.dequeue();
+
+  const reconnectEvent = await reconnects.dequeue();
+
+  expect(reconnectEvent.sessionId).not.toBe(reconnectEvent.previousSessionId);
+  expect(reconnectEvent.sessionId).toBeGreaterThan(0);
+});
