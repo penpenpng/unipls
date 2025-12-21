@@ -15,6 +15,7 @@ import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {
   UniplsCastOptions,
   UniplsListenOptions,
+  UniplsMessageFactory,
   UniplsNextParams,
   UniplsParams,
   UniplsProvisioner,
@@ -200,7 +201,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsTimeoutError}
    */
   request(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: UniplsRequestParams<TInput, TOutput>,
   ): Promise<TOutput> {
     return this.#request(data, { ...params, force: false });
@@ -210,14 +211,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * {@link Unipls.request|unipls.request()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
   requestForce(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: UniplsRequestParams<TInput, TOutput>,
   ): Promise<TOutput> {
     return this.#request(data, { ...params, force: true });
   }
 
   #request(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: UniplsRequestParams<TInput, TOutput> & { force: boolean },
   ): Promise<TOutput> {
     if (this.state === 'closed') {
@@ -239,20 +240,22 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let activeSelector = params.selector;
 
     const request = (
-      data: TInput,
+      payload: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
       if (result.resulted) {
         return;
       }
 
+      const evaluatedPayload = Unipls.#evaluatePayload(payload);
+
       this.#socket
-        .enqueue(data, {
+        .enqueue(evaluatedPayload, {
           force: params.force,
           signal: result.signal,
         })
         .then(() => {
-          activeRequest = data;
+          activeRequest = payload;
           activeSelector = selector;
           // TODO: listening が true のときだけ resolve するオプションがあってもいい
           // listening = true;
@@ -306,12 +309,42 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     //   });
     // };
 
+    let retryRegistered = false;
+
+    const onReconnected: UniplsRetrySetupContext<
+      TInput,
+      TOutput
+    >['onReconnected'] = (callback) => {
+      events.once('reconnect', (reconnection) => {
+        if (result.resulted) {
+          return;
+        }
+
+        callback({
+          request,
+          done: () => {
+            // no-op: provided for symmetry with other retry contexts
+          },
+          reconnection,
+        });
+      });
+    };
+
     events.on('dropped', () => {
-      if (result.resulted) {
+      if (result.resulted || retryRegistered) {
         return;
       }
+      retryRegistered = true;
 
       const setupRetry = Unipls.getRetrySetupFunction(params.retry);
+      setupRetry({
+        onReconnected,
+        data: activeRequest,
+        selector: activeSelector,
+        abort: (error) => {
+          result.reject(error ?? new UniplsDroppedError());
+        },
+      });
     });
 
     return result.promise;
@@ -394,7 +427,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsClosedError}
    */
   subscribe(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
     void data;
@@ -406,7 +439,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * {@link Unipls.subscribe|unipls.subscribe()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
   subscribeForce(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
     void data;
@@ -417,10 +450,43 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected static getRetrySetupFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
   ): UniplsRetrySetupFunction<TInput, TOutput> {
-    void retry;
-    return ({ abort }) => {
-      abort();
-    };
+    if (retry === undefined || retry === 'never') {
+      return ({ abort }) => {
+        abort();
+      };
+    }
+
+    if (retry === 're-request') {
+      return ({ onReconnected, data, selector, abort }) => {
+        onReconnected(({ request, done }) => {
+          try {
+            request(data, { selector });
+            done?.();
+          } catch (err) {
+            abort(err);
+          }
+        });
+      };
+    }
+
+    if (retry === 'keep-listening') {
+      return ({ onReconnected }) => {
+        onReconnected(({ done }) => {
+          done?.();
+        });
+      };
+    }
+
+    return retry;
+  }
+
+  protected static #evaluatePayload<TInput>(
+    payload: UniplsMessageFactory<TInput>,
+  ): TInput {
+    if (typeof payload === 'function') {
+      return (payload as () => TInput)();
+    }
+    return payload;
   }
 
   static #processMessage<TOutput>({

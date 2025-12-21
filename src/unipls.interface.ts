@@ -7,6 +7,11 @@ import type {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
 
+/** 送信するメッセージを値または評価関数として受け取ります。 */
+export type UniplsMessageFactory<TInput = WebSocketData> =
+  | TInput
+  | (() => TInput);
+
 export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   url: string;
   serializer?: (data: TInput) => WebSocketData;
@@ -48,7 +53,7 @@ export interface UniplsProvisioningContext<
    * - {@link UniplsRequestParams.retry|retry} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   request(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: Omit<UniplsRequestParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): Promise<TOutput>;
 
@@ -69,7 +74,7 @@ export interface UniplsProvisioningContext<
    * - {@link UniplsSubscribeParams.retry|retry} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   subscribe(
-    data: TInput,
+    data: UniplsMessageFactory<TInput>,
     params: UniplsSubscriber<TOutput> &
       Omit<UniplsSubscribeParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): () => void;
@@ -211,6 +216,21 @@ export type UniplsRetrySetupFunction<
   TOutput = WebSocketData,
 > = (ctx: UniplsRetrySetupContext<TInput, TOutput>) => void;
 
+export interface UniplsRetryContext<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> {
+  request: (
+    data: UniplsMessageFactory<TInput>,
+    params: { selector: (data: TOutput) => boolean },
+  ) => void;
+  done?: () => void;
+  reconnection: {
+    previousSessionId: SessionId;
+    sessionId: SessionId;
+  };
+}
+
 /** {@link UniplsRetrySetupFunction} の引数で、再送の方法を制御するためのコンテキストを表します。 */
 export interface UniplsRetrySetupContext<
   TInput = WebSocketData,
@@ -221,7 +241,7 @@ export interface UniplsRetrySetupContext<
   ) => void;
 
   /** 直前に送信したデータを表します。すなわち、初回の再送では {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の引数に等しく、それ以降の再送では直前の再送で送信したデータに等しいです。 */
-  data: TInput;
+  data: UniplsMessageFactory<TInput>;
 
   /** 直前に指定したセレクタを表します。すなわち、初回の再送では {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の引数に等しく、それ以降の再送では直前の再送で指定したセレクタに等しいです。 */
   selector: (data: TOutput) => boolean;
