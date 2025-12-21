@@ -113,7 +113,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#session = session;
 
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
-    const events = this.#events.spawnReadonlyBus();
+    const events = this.#events.spawnEventBusView();
     const result = new AsyncResult<void>({
       finally: () => {
         events.dispose();
@@ -198,7 +198,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     const targetSession = this.#session;
     const targetSessionId = this.#session.id;
 
-    const events = this.#events.spawnReadonlyBus();
+    const events = this.#events.spawnEventBusView();
     const result = new AsyncResult<void>({
       finally: () => events.dispose(),
     });
@@ -235,7 +235,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     data: TInput,
     options?: { signal?: AbortSignal; force?: boolean },
   ): Promise<void> {
-    const events = this.#events.spawnReadonlyBus();
+    const events = this.#events.spawnEventBusView();
     const result = new AsyncResult<void>({
       signal: options?.signal,
       finally: () => events.dispose(),

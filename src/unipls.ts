@@ -5,8 +5,9 @@ import {
   UniplsClosedError,
   UniplsDroppedError,
 } from './errors.ts';
+import type { EventBus } from './event-bus';
 import type { UniplsConnectionState, WebSocketData } from './types.ts';
-import { UniplsSocket } from './unipls-socket';
+import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {
   UniplsCastOptions,
   UniplsListenOptions,
@@ -36,6 +37,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
   protected get events() {
     return this.#socket.events;
+  }
+  get on() {
+    return this.#socket.events.on.bind(this.#socket.events);
+  }
+  get off() {
+    return this.#socket.events.off.bind(this.#socket.events);
   }
 
   constructor(params: UniplsParams<TInput, TOutput>) {
@@ -103,7 +110,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnReadonlyBus();
+    const events = this.events.spawnEventBusView();
     const results = new AsyncResults<TOutput>({
       subscriber: params,
       signal: params.signal,
@@ -209,7 +216,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnReadonlyBus();
+    const events = this.events.spawnEventBusView();
     const result = new AsyncResult<TOutput>({
       finally: () => {
         events.dispose();

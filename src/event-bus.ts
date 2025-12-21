@@ -54,8 +54,8 @@ export class EventBus<TEvents extends Record<string, any>> {
     }
   }
 
-  spawnReadonlyBus(): ReadonlyEventBus<TEvents> {
-    return new ReadonlyEventBus(this);
+  spawnEventBusView(): EventBusView<TEvents> {
+    return new EventBusView(this);
   }
 
   [Symbol.dispose] = () => {
@@ -65,7 +65,7 @@ export class EventBus<TEvents extends Record<string, any>> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-class ReadonlyEventBus<TEvents extends Record<string, any>> {
+class EventBusView<TEvents extends Record<string, any>> {
   #events: EventBus<TEvents>;
   #cleanups: Set<() => void> = new Set();
 
