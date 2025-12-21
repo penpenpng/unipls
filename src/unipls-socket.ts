@@ -84,12 +84,6 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     this.#events.on('raw-close', ({ session, code }) => {
-      // 接続がタイムアウトしたとみなされたとき、念のため MARKED_AS_TIMED_OUT でクローズする。
-      // 万が一このイベントを観測できたとしても、もとより接続の確立には失敗したものとみなすべきなので、何もしない。
-      if (code === WebSocketCloseCode.MARKED_AS_TIMED_OUT) {
-        return;
-      }
-
       if (code === WebSocketCloseCode.NORMAL_CLOSURE) {
         session.conn.state = 'closed';
         this.#events.emit('closed', { session });
