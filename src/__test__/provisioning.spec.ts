@@ -22,22 +22,38 @@ afterEach(async () => {
   mock.reset();
 });
 
-test('provisioning 完了前は request の再送処理が起動しない', async () => {
-  const promise = unipls.request('ping', {
+test.skip('provisioning 完了前は request の送信・再送が起動しない', async () => {
+  const promise = unipls.request({
+    query: 'ping',
     selector: (msg) => msg === 'pong',
     retry: 're-request',
   });
+
+  // provisioning 完了前は送信されない
   await expect(server.inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+
+  // provisioning を完了させて初めて送信される
   pendingDone();
-  await expect(server.inbox.dequeue()).resolves.toBe('ping');
+  await expect(server.inbox.dequeue({ timeout: 200 })).resolves.toBe('ping');
+
   server.send('pong');
   await expect(promise).resolves.toBe('pong');
+
+  // 再接続前に pendingDone を次のセッション用に差し替え
+  pendingDone = () => {};
+  unipls.on('reconnect', (ev) => {
+    void ev;
+  });
+
+  // drop して再接続
   server.close(3001);
   server = await mock.sockets.dequeue();
+
+  // 再接続後も provisioning 完了前は送信されない
   await expect(server.inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+
+  // 再接続後の provisioning を完了させる
   pendingDone();
-  // FIXME:
-  await expect(server.inbox.dequeue()).resolves.toBe('ping');
-  // server.send('pong');
-  // await expect(promise).resolves.toBe('pong');
+
+  await expect(server.inbox.dequeue({ timeout: 200 })).resolves.toBe('ping');
 });

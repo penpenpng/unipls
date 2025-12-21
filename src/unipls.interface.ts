@@ -53,7 +53,6 @@ export interface UniplsProvisioningContext<
    * - {@link UniplsRequestParams.retry|retry} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   request(
-    data: UniplsMessageFactory<TInput>,
     params: Omit<UniplsRequestParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): Promise<TOutput>;
 
@@ -74,7 +73,6 @@ export interface UniplsProvisioningContext<
    * - {@link UniplsSubscribeParams.retry|retry} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   subscribe(
-    data: UniplsMessageFactory<TInput>,
     params: UniplsSubscriber<TOutput> &
       Omit<UniplsSubscribeParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): () => void;
@@ -176,6 +174,7 @@ export interface UniplsRequestParams<
   TInput = WebSocketData,
   TOutput = WebSocketData,
 > {
+  query: UniplsMessageFactory<TInput>;
   /** どのメッセージをレスポンスとみなすかを決定する述語関数です。この条件を最初に満たしたメッセージがレスポンスになります。 */
   selector: (data: TOutput) => boolean;
 
@@ -255,6 +254,8 @@ export interface UniplsSubscribeParams<
   TInput = WebSocketData,
   TOutput = WebSocketData,
 > {
+  query: UniplsMessageFactory<TInput>;
+
   /** どのメッセージを購読の対象とみなすかを決定する述語関数です。この条件を満たしたすべてのメッセージが購読の対象になります。 */
   selector: (data: TOutput) => boolean;
 

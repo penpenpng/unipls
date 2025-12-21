@@ -20,7 +20,8 @@ afterEach(async () => {
 });
 
 test('request はセレクタに合致したレスポンスで resolve する', async () => {
-  const promise = unipls.request('ping', {
+  const promise = unipls.request({
+    query: 'ping',
     selector: (msg) => msg === 'pong',
   });
 
@@ -32,7 +33,8 @@ test('request はセレクタに合致したレスポンスで resolve する', 
 });
 
 test('selector が一致しないレスポンスを無視し、一致したときに resolve する', async () => {
-  const promise = unipls.request('ping', {
+  const promise = unipls.request({
+    query: 'ping',
     selector: (msg) => msg.startsWith('pong-ok'),
   });
 
@@ -53,7 +55,8 @@ test('request を再接続時に再送し、ペイロードを再評価する', 
     return `ping-${id}`;
   };
 
-  const promise = unipls.request(payloadFactory, {
+  const promise = unipls.request({
+    query: payloadFactory,
     selector: (msg) => msg === expectedResponse,
     retry: 're-request',
   });

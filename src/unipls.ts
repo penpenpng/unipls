@@ -200,25 +200,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsClosedError}
    * @throws {UniplsTimeoutError}
    */
-  request(
-    data: UniplsMessageFactory<TInput>,
-    params: UniplsRequestParams<TInput, TOutput>,
-  ): Promise<TOutput> {
-    return this.#request(data, { ...params, force: false });
+  request(params: UniplsRequestParams<TInput, TOutput>): Promise<TOutput> {
+    return this.#request({ ...params, force: false });
   }
 
   /**
    * {@link Unipls.request|unipls.request()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
-  requestForce(
-    data: UniplsMessageFactory<TInput>,
-    params: UniplsRequestParams<TInput, TOutput>,
-  ): Promise<TOutput> {
-    return this.#request(data, { ...params, force: true });
+  requestForce(params: UniplsRequestParams<TInput, TOutput>): Promise<TOutput> {
+    return this.#request({ ...params, force: true });
   }
 
   #request(
-    data: UniplsMessageFactory<TInput>,
     params: UniplsRequestParams<TInput, TOutput> & { force: boolean },
   ): Promise<TOutput> {
     if (this.state === 'closed') {
@@ -236,7 +229,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal: params.signal,
       timeout: params.timeout,
     });
-    let activeRequest = data;
+    let activeRequest = params.query;
     let activeSelector = params.selector;
 
     const request = (
@@ -272,7 +265,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.state === 'provisioning' ||
       this.state === 'open'
     ) {
-      request(data, params);
+      request(params.query, params);
     }
 
     events.on('message', ({ message }) => {
@@ -338,9 +331,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     const ctx: UniplsProvisioningContext<TInput, TOutput> = {
       cast: (data) => this.castForce(data),
-      request: (data, params) => this.requestForce(data, params),
+      request: (params) => this.requestForce(params),
       listen: (params) => this.listen(params),
-      subscribe: (data, params) => this.subscribeForce(data, params),
+      subscribe: (params) => this.subscribeForce(params),
       done: result.resolve,
       session: sessionId,
       isSessionBeginning,
@@ -405,10 +398,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsClosedError}
    */
   subscribe(
-    data: UniplsMessageFactory<TInput>,
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
-    void data;
     void params;
     throw new NotImplementedError();
   }
@@ -417,10 +408,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * {@link Unipls.subscribe|unipls.subscribe()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
   subscribeForce(
-    data: UniplsMessageFactory<TInput>,
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
-    void data;
     void params;
     throw new NotImplementedError();
   }
