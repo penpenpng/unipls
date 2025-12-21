@@ -123,8 +123,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on('message', ({ message }) => {
       Unipls.#processMessage({
         message,
-        filter: params.terminator ?? (() => false),
-        processor: results.handleTerminator,
+        selector: params.terminator ?? (() => false),
+        onSelected: results.handleTerminator,
         onSelectorError: results.handleError,
         onProcessorError: (err) => {
           console.warn(
@@ -135,8 +135,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
       Unipls.#processMessage({
         message,
-        filter: params.selector ?? (() => true),
-        processor: results.handleMessage,
+        selector: params.selector ?? (() => true),
+        onSelected: results.handleMessage,
         onSelectorError: results.handleError,
         onProcessorError: (err) => {
           console.warn(
@@ -265,8 +265,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on('message', ({ message }) => {
       Unipls.#processMessage({
         message,
-        filter: activeSelector,
-        processor: result.resolve,
+        selector: activeSelector,
+        onSelected: result.resolve,
         onSelectorError: result.reject,
         onProcessorError: () => {
           // ignore because `result.resolve` never throws
@@ -353,20 +353,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   static #processMessage<TOutput>({
     message,
-    filter,
-    processor,
+    selector,
+    onSelected: processor,
     onSelectorError,
     onProcessorError,
   }: {
     message: TOutput;
-    filter: (message: TOutput) => boolean;
-    processor?: (message: TOutput) => void;
+    selector: (message: TOutput) => boolean;
+    onSelected?: (message: TOutput) => void;
     onSelectorError: (message: unknown) => void;
     onProcessorError: (message: unknown) => void;
   }) {
     let selected = false;
     try {
-      selected = filter(message);
+      selected = selector(message);
     } catch (err) {
       onSelectorError?.(err);
     }
