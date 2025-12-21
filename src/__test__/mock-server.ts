@@ -46,6 +46,7 @@ export function createMockServer(url: string) {
     sockets,
     reset() {
       server.resetHandlers();
+      sockets.clear();
     },
   };
 }

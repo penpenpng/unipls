@@ -287,28 +287,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     });
 
-    // TODO: 再送処理
-    void activeRequest;
-
-    // const onReconnected: UniplsRetrySetupContext<
-    //   TInput,
-    //   TOutput
-    // >['onReconnected'] = (callback) => {
-    //   events.once('reconnected', (reconnection) => {
-    //     if (result.resulted) {
-    //       return;
-    //     }
-
-    //     callback({
-    //       request,
-    //       done: () => {
-    //         // いらないかもしれない
-    //       },
-    //       reconnection,
-    //     });
-    //   });
-    // };
-
     let retryRegistered = false;
 
     const onReconnected: UniplsRetrySetupContext<
@@ -480,7 +458,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return retry;
   }
 
-  protected static #evaluatePayload<TInput>(
+  static #evaluatePayload<TInput>(
     payload: UniplsMessageFactory<TInput>,
   ): TInput {
     if (typeof payload === 'function') {

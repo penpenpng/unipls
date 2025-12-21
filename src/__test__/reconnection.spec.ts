@@ -16,7 +16,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  unipls.close();
+  await unipls.close();
   mock.reset();
 });
 
@@ -43,9 +43,6 @@ test('drop されると自動で再接続する', async () => {
 });
 
 test('再接続後にプロビジョニングが再実行される', async () => {
-  await unipls.close();
-  server.close();
-
   const provisioned = new AwaitableQueue<number>();
   let provisionCount = 0;
 

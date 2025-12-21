@@ -36,7 +36,9 @@ export class AwaitableQueue<T> {
     this.resolvers.push(resolve);
 
     if (options?.timeout) {
-      return u.Promise.timeout(promise, options.timeout);
+      return u.Promise.timeout(promise, options.timeout).finally(() => {
+        this.resolvers = this.resolvers.filter((r) => r !== resolve);
+      });
     } else {
       return promise;
     }
@@ -50,6 +52,11 @@ export class AwaitableQueue<T> {
     } else {
       throw new AwaitableQueueEmptyError();
     }
+  }
+
+  clear(): void {
+    this.queue = [];
+    this.resolvers = [];
   }
 }
 
