@@ -105,7 +105,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
    * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
    */
   open(provisioner?: () => Promise<void>): Promise<void> {
-    if (this.intent === 'open') {
+    if (this.intent === 'open' && this.state !== 'dropped') {
       throw new UniplsDuplicatedConnectionError();
     }
     const session = UniplsSessionState.create(provisioner);

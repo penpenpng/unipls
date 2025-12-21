@@ -22,6 +22,9 @@ import type {
 
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #socket: UniplsSocket<TInput, TOutput>;
+  #provisioner?: UniplsProvisioner<TInput, TOutput>;
+  #provisionedSessions = new Set<number>();
+  #reconnectPromise?: Promise<void>;
   get url(): string {
     return this.#socket.url;
   }
@@ -37,6 +40,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   constructor(params: UniplsParams<TInput, TOutput>) {
     this.#socket = new UniplsSocket(params);
+
+    this.events.on('dropped', ({ session }) => {
+      this.#handleDropped(session.id);
+    });
   }
 
   /**
@@ -51,25 +58,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
    */
   open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
+    this.#ensureProvisioner(provisioner);
+
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
-    return this.#socket.open(async () => {
-      const result = new AsyncResult<void>();
-      const provision = provisioner ?? (({ done }) => done());
-
-      const ctx: UniplsProvisioningContext<TInput, TOutput> = {
-        cast: (data) => this.castForce(data),
-        request: (data, params) => this.requestForce(data, params),
-        listen: (params) => this.listen(params),
-        subscribe: (data, params) => this.subscribeForce(data, params),
-        done: result.resolve,
-        session: 0,
-        isSessionBeginning: true,
-      };
-
-      provision(ctx);
-
-      return result.promise;
-    });
+    return this.#socket.open(async () => this.#runProvisioner());
   }
 
   /**
@@ -302,16 +294,71 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
 
       const setupRetry = Unipls.getRetrySetupFunction(params.retry);
-
-      // setupRetry({
-      //   onReconnected,
-      //   data: activeRequest,
-      //   selector: activeSelector,
-      //   abort: result.reject,
-      // });
     });
 
     return result.promise;
+  }
+
+  #runProvisioner(): Promise<void> {
+    const result = new AsyncResult<void>();
+    const provision = this.#provisioner ?? (({ done }) => done());
+    const sessionId = this.#socket.sessionId;
+    const isSessionBeginning = !this.#provisionedSessions.has(sessionId);
+
+    this.#provisionedSessions.add(sessionId);
+
+    const ctx: UniplsProvisioningContext<TInput, TOutput> = {
+      cast: (data) => this.castForce(data),
+      request: (data, params) => this.requestForce(data, params),
+      listen: (params) => this.listen(params),
+      subscribe: (data, params) => this.subscribeForce(data, params),
+      done: result.resolve,
+      session: sessionId,
+      isSessionBeginning,
+    };
+
+    try {
+      provision(ctx);
+    } catch (err) {
+      result.reject(err);
+    }
+
+    return result.promise;
+  }
+
+  #ensureProvisioner(provisioner?: UniplsProvisioner<TInput, TOutput>): void {
+    if (provisioner) {
+      this.#provisioner = provisioner;
+    }
+
+    if (!this.#provisioner) {
+      this.#provisioner = ({ done }) => done();
+    }
+  }
+
+  #handleDropped(sessionId: number): void {
+    if (this.intent === 'close') {
+      return;
+    }
+
+    if (sessionId !== this.#socket.sessionId) {
+      return;
+    }
+
+    if (this.#reconnectPromise) {
+      return;
+    }
+
+    this.#ensureProvisioner();
+
+    this.#reconnectPromise = this.#socket
+      .open(async () => this.#runProvisioner())
+      .catch((err) => {
+        console.warn('Reconnection attempt failed:', err);
+      })
+      .finally(() => {
+        this.#reconnectPromise = undefined;
+      });
   }
 
   /**

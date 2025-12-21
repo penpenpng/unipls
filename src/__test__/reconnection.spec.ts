@@ -1,29 +1,68 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { AwaitableQueue } from '../libs/awaitable-queue';
-import type { WebSocketData } from '../types';
 import { Unipls } from '../unipls';
+import { createMockServer, type SocketMock } from './mock-server';
 
 const url = 'ws://localhost:8080';
+const mock = createMockServer(url);
 
-beforeEach(async () => {});
+let unipls: Unipls<string, string>;
+let server: SocketMock;
 
-afterEach(async () => {});
-
-test.only('接続失敗シナリオの再現テスト', async () => {
-  const unipls = new Unipls<number, number>({
-    url,
-    deserializer: (data: WebSocketData) => Number(data),
-  });
+beforeEach(async () => {
+  unipls = new Unipls<string, string>({ url });
   await unipls.open();
+  server = await mock.sockets.dequeue();
+});
 
-  const inbox = new AwaitableQueue<number>();
+afterEach(async () => {
+  unipls.close();
+  mock.reset();
+});
+
+test('drop されると自動で再接続する', async () => {
+  const inbox = new AwaitableQueue<string>();
   unipls.listen({
     onMessage: (message) => {
       inbox.enqueue(message);
     },
   });
 
-  await expect(inbox.dequeue()).resolves.toBe(1);
-  await expect(inbox.dequeue()).resolves.toBe(2);
-  await expect(inbox.dequeue()).resolves.toBe(3);
+  // 1 回目の接続でメッセージを受信する
+  server.send('before-drop');
+  await expect(inbox.dequeue()).resolves.toBe('before-drop');
+
+  // 異常コードで切断して drop を発生させる
+  server.close(3001);
+
+  // 自動再接続後のソケットが生成されることを確認
+  const reconnectedServer = await mock.sockets.dequeue();
+
+  reconnectedServer.send('after-reconnect');
+  await expect(inbox.dequeue()).resolves.toBe('after-reconnect');
+});
+
+test('再接続後にプロビジョニングが再実行される', async () => {
+  await unipls.close();
+  server.close();
+
+  const provisioned = new AwaitableQueue<number>();
+  let provisionCount = 0;
+
+  unipls = new Unipls<string, string>({ url });
+  await unipls.open(({ done }) => {
+    provisionCount += 1;
+    provisioned.enqueue(provisionCount);
+    done();
+  });
+
+  server = await mock.sockets.dequeue();
+
+  await expect(provisioned.dequeue()).resolves.toBe(1);
+
+  server.close(3001);
+
+  await mock.sockets.dequeue();
+
+  await expect(provisioned.dequeue()).resolves.toBe(2);
 });
