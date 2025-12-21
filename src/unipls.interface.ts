@@ -1,9 +1,9 @@
+import { type UniplsSubscriber } from './async-results.ts';
 import type {
   SessionId,
   WebSocketConstructor,
   WebSocketData,
 } from './types.ts';
-import { type UniplsSubscriber } from './unipls-subscription.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
 

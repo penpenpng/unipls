@@ -1,4 +1,4 @@
-import { UniplsClosedError, UniplsDroppedError } from './errors';
+import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
 import type { WebSocketData } from './types.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';

@@ -1,4 +1,5 @@
 import { AsyncResult } from './async-result.ts';
+import { AsyncResults, type UniplsSubscriber } from './async-results.ts';
 import {
   NotImplementedError,
   UniplsClosedError,
@@ -6,7 +7,6 @@ import {
 } from './errors.ts';
 import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import { UniplsSocket } from './unipls-socket';
-import { AsyncResults, type UniplsSubscriber } from './unipls-subscription.ts';
 import type {
   UniplsCastOptions,
   UniplsListenOptions,
@@ -354,7 +354,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   static #processMessage<TOutput>({
     message,
     selector,
-    onSelected: processor,
+    onSelected,
     onSelectorError,
     onProcessorError,
   }: {
@@ -372,7 +372,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
     if (selected) {
       try {
-        processor?.(message);
+        onSelected?.(message);
       } catch (err) {
         onProcessorError?.(err);
       }
