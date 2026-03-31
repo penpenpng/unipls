@@ -416,8 +416,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         data: activeData,
         cast: (newData) => {
           activeData = newData;
-          // fire-and-forget: enqueue waits for the next open event
-          void this.#socket.enqueue(newData, { force });
+          // fire-and-forget: send after the next open event if not already open
+          if (this.state === 'open') {
+            void this.#socket.enqueue(newData, { force });
+            return;
+          }
+          let offOpen: () => void;
+          let offClose: () => void;
+          offOpen = this.events.once('open', () => {
+            offClose();
+            void this.#socket.enqueue(newData, { force });
+          });
+          offClose = this.events.once('closed', () => {
+            offOpen();
+          });
         },
         done: () => result.resolve(),
         abort: (error) => result.reject(error ?? new UniplsDroppedError()),
