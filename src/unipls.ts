@@ -1,10 +1,6 @@
 import { AsyncResult } from './async-result.ts';
 import { AsyncResults, type UniplsSubscriber } from './async-results.ts';
-import {
-  NotImplementedError,
-  UniplsClosedError,
-  UniplsDroppedError,
-} from './errors.ts';
+import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
 import type { DropDetectorContext } from './drop-detector';
 import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
 import type { EventBus } from './event-bus';
@@ -23,6 +19,8 @@ import type {
   UniplsParams,
   UniplsProvisioner,
   UniplsProvisioningContext,
+  UniplsRecastFunction,
+  UniplsRecastStrategy,
   UniplsRequestParams,
   UniplsRetrySetupFunction,
   UniplsRetryStrategy,
@@ -225,19 +223,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @throws {UniplsClosedError}
    */
-  async cast(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
-    void data;
-    void options;
-    throw new NotImplementedError();
+  cast(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
+    return this.#cast(data, options, false);
   }
 
   /**
    * {@link Unipls.cast|unipls.cast()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
   castForce(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
-    void data;
-    void options;
-    throw new NotImplementedError();
+    return this.#cast(data, options, true);
   }
 
   /**
@@ -369,6 +363,74 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
+  #cast(
+    data: TInput,
+    options: UniplsCastOptions<TInput> | undefined,
+    force: boolean,
+  ): Promise<void> {
+    if (this.state === 'closed') {
+      throw new UniplsClosedError();
+    }
+    if (options?.signal?.aborted) {
+      throw options.signal.reason;
+    }
+
+    const events = this.events.spawnEventBusView();
+    const result = new AsyncResult<void>({
+      finally: () => {
+        events.dispose();
+      },
+      signal: options?.signal,
+    });
+
+    let activeData = data;
+
+    const sendOnce = (payload: TInput) => {
+      if (result.resulted) return;
+      this.#socket
+        .enqueue(payload, { force, signal: result.signal })
+        .then(() => result.resolve())
+        .catch(() => {
+          // Handled by event listeners below
+        });
+    };
+
+    if (
+      this.state === 'connecting' ||
+      this.state === 'provisioning' ||
+      this.state === 'open'
+    ) {
+      sendOnce(data);
+    }
+
+    let recastRegistered = false;
+
+    events.on('dropped', () => {
+      if (result.resulted || recastRegistered) return;
+      recastRegistered = true;
+
+      const setupRecast = Unipls.#getRecastSetupFunction(
+        options?.recast ?? 'always',
+      );
+      setupRecast({
+        data: activeData,
+        cast: (newData) => {
+          activeData = newData;
+          // fire-and-forget: enqueue waits for the next open event
+          void this.#socket.enqueue(newData, { force });
+        },
+        done: () => result.resolve(),
+        abort: (error) => result.reject(error ?? new UniplsDroppedError()),
+      });
+    });
+
+    events.once('closed', () => {
+      result.reject(new UniplsClosedError());
+    });
+
+    return result.promise;
+  }
+
   #runProvisioner(): Promise<void> {
     const result = new AsyncResult<void>();
     const provision = this.#provisioner ?? (({ done }) => done());
@@ -469,8 +531,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   subscribe(
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
-    void params;
-    throw new NotImplementedError();
+    return this.#subscribe(params, false);
   }
 
   /**
@@ -479,8 +540,155 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   subscribeForce(
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
   ): () => void {
-    void params;
-    throw new NotImplementedError();
+    return this.#subscribe(params, true);
+  }
+
+  #subscribe(
+    params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
+    force: boolean,
+  ): () => void {
+    if (this.state === 'closed') {
+      throw new UniplsClosedError();
+    }
+    if (params.signal?.aborted) {
+      throw params.signal.reason;
+    }
+
+    const events = this.events.spawnEventBusView();
+    const results = new AsyncResults<TOutput>({
+      subscriber: params,
+      signal: params.signal,
+      finally: () => {
+        events.dispose();
+      },
+    });
+
+    let activeRequest = params.query;
+    let activeSelector = params.selector;
+
+    const request = (
+      payload: UniplsMessageFactory<TInput>,
+      { selector }: { selector: (data: TOutput) => boolean },
+    ) => {
+      if (results.resulted) {
+        return;
+      }
+
+      const evaluatedPayload = Unipls.#evaluatePayload(payload);
+
+      this.#socket
+        .enqueue(evaluatedPayload, {
+          force,
+          signal: results.signal,
+        })
+        .then(() => {
+          activeRequest = payload;
+          activeSelector = selector;
+        })
+        .catch((err) => {
+          if (err instanceof UniplsClosedError) {
+            results.raiseFatalError(err);
+          }
+        });
+    };
+
+    if (
+      this.state === 'connecting' ||
+      this.state === 'provisioning' ||
+      this.state === 'open'
+    ) {
+      request(params.query, params);
+    }
+
+    events.on('message', ({ message }) => {
+      Unipls.#processMessage({
+        message,
+        selector: params.terminator ?? (() => false),
+        onSelected: results.handleTerminator,
+        onSelectorError: results.handleError,
+        onProcessorError: (err) => {
+          console.warn(
+            'An error occurred while processing onTerminator callback:',
+            err,
+          );
+        },
+      });
+      Unipls.#processMessage({
+        message,
+        selector: activeSelector,
+        onSelected: results.handleMessage,
+        onSelectorError: results.handleError,
+        onProcessorError: (err) => {
+          console.warn(
+            'An error occurred while processing onMessage callback:',
+            err,
+          );
+        },
+      });
+    });
+
+    const onReconnected: UniplsRetrySetupContext<
+      TInput,
+      TOutput
+    >['onReconnected'] = (callback) => {
+      events.once('reconnect', (reconnection) => {
+        if (results.resulted) {
+          return;
+        }
+
+        callback({
+          request,
+          done: () => {
+            // no-op: provided for symmetry with other retry contexts
+          },
+          reconnection,
+        });
+      });
+    };
+
+    let retryRegistered = false;
+
+    events.on('dropped', () => {
+      if (results.resulted || retryRegistered) {
+        return;
+      }
+      retryRegistered = true;
+
+      const setupRetry = Unipls.getRetrySetupFunction(params.retry);
+      setupRetry({
+        onReconnected,
+        data: activeRequest,
+        selector: activeSelector,
+        abort: (error) => {
+          results.raiseFatalError(error ?? new UniplsDroppedError());
+        },
+      });
+    });
+
+    events.once('closed', () => {
+      results.raiseFatalError(new UniplsClosedError());
+    });
+
+    return results.unsubscribe;
+  }
+
+  static #getRecastSetupFunction<TInput>(
+    strategy: UniplsRecastStrategy<TInput>,
+  ): UniplsRecastFunction<TInput> {
+    if (strategy === 'never') {
+      return ({ abort }) => {
+        abort();
+      };
+    }
+
+    if (strategy === 'always') {
+      return ({ data, cast, done }) => {
+        cast(data);
+        done();
+      };
+    }
+
+    return strategy;
   }
 
   protected static getRetrySetupFunction<TInput, TOutput>(
