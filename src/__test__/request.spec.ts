@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { Unipls } from '../unipls';
+import type { UniplsReconnector } from '../unipls-reconnector';
 import { createMockServer, type SocketMock } from './mock-server';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
 
+const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
+
 let unipls: Unipls<string, string>;
 let server: SocketMock;
 
 beforeEach(async () => {
-  unipls = new Unipls<string, string>({ url });
+  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
   server = await mock.sockets.dequeue();
 });

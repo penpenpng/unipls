@@ -1,16 +1,20 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { AwaitableQueue } from '../libs/awaitable-queue';
 import { Unipls } from '../unipls';
+import type { UniplsReconnector } from '../unipls-reconnector';
 import { createMockServer, type SocketMock } from './mock-server';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
 
+/** 常に即時再接続する reconnector */
+const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
+
 let unipls: Unipls<string, string>;
 let server: SocketMock;
 
 beforeEach(async () => {
-  unipls = new Unipls<string, string>({ url });
+  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
   server = await mock.sockets.dequeue();
 });
@@ -46,7 +50,7 @@ test('再接続後にプロビジョニングが再実行される', async () =>
   const provisioned = new AwaitableQueue<number>();
   let provisionCount = 0;
 
-  unipls = new Unipls<string, string>({ url });
+  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open(({ done }) => {
     provisionCount += 1;
     provisioned.enqueue(provisionCount);
@@ -82,4 +86,43 @@ test('再接続時に reconnect イベントが発火する', async () => {
 
   expect(reconnectEvent.sessionId).not.toBe(reconnectEvent.previousSessionId);
   expect(reconnectEvent.sessionId).toBeGreaterThan(0);
+});
+
+test('reconnector が指定されていない場合は再接続しない', async () => {
+  const uniплsNoReconnect = new Unipls<string, string>({ url });
+  await uniплsNoReconnect.open();
+  const s = await mock.sockets.dequeue();
+
+  s.close(3001);
+
+  // 再接続が発生しないことを確認（新しいソケットが来ない）
+  await expect(mock.sockets.dequeue({ timeout: 100 })).rejects.toThrowError();
+});
+
+test('close() 呼び出し時に reconnector.reconnect() の待機がキャンセルされる', async () => {
+  const reconnectCalled = new AwaitableQueue<void>();
+
+  const slowReconnector: UniplsReconnector = {
+    reconnect: async (ctx) => {
+      reconnectCalled.enqueue();
+      // close() が呼ばれるまで待機し続ける
+      await new Promise<void>((_, reject) => {
+        ctx.signal.addEventListener('abort', () => reject(ctx.signal.reason));
+      });
+      return true;
+    },
+  };
+
+  unipls = new Unipls<string, string>({ url, reconnector: slowReconnector });
+  await unipls.open();
+  server = await mock.sockets.dequeue();
+
+  server.close(3001);
+
+  // reconnect() が呼ばれるのを待つ
+  await reconnectCalled.dequeue();
+
+  // close() で待機がキャンセルされ、再接続は行われない
+  await unipls.close();
+  await expect(mock.sockets.dequeue({ timeout: 100 })).rejects.toThrowError();
 });

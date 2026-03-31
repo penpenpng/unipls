@@ -6,6 +6,7 @@ import type {
 } from './types.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
+import type { UniplsReconnector } from './unipls-reconnector.ts';
 
 /** 送信するメッセージを値または評価関数として受け取ります。 */
 export type UniplsMessageFactory<TInput = WebSocketData> =
@@ -18,6 +19,8 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   deserializer?: (data: WebSocketData) => TOutput;
   WebSocket?: WebSocketConstructor;
   timeout?: number;
+  /** 再接続戦略を定義します。省略した場合は再接続を行いません。 */
+  reconnector?: UniplsReconnector;
 }
 
 /**

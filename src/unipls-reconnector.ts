@@ -18,6 +18,9 @@ export interface ReconnectionContext {
 
   /** すべてのセッションで行われた再接続のリストを表します。この値は変更可能です。 */
   allAttempts: ReconnectionAttempt[];
+
+  /** {@link Unipls.close|unipls.close()} が呼ばれたときに abort される {@link AbortSignal} です。再接続待機の中断に利用できます。 */
+  signal: AbortSignal;
 }
 
 export interface ReconnectionAttempt {

@@ -11,6 +11,8 @@ import type {
   UniplsConnectionState,
   WebSocketData,
 } from './types.ts';
+import { UniplsSessionManager } from './unipls-reconnection.ts';
+import type { UniplsReconnector } from './unipls-reconnector.ts';
 import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {
   UniplsCastOptions,
@@ -37,7 +39,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #socket: UniplsSocket<TInput, TOutput>;
   #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #provisionedSessions = new Set<number>();
-  #reconnectPromise?: Promise<void>;
+  #reconnector?: UniplsReconnector;
+  #session = new UniplsSessionManager();
   get url(): string {
     return this.#socket.url;
   }
@@ -59,9 +62,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   constructor(params: UniplsParams<TInput, TOutput>) {
     this.#socket = new UniplsSocket(params);
+    this.#reconnector = params.reconnector;
 
     this.events.on('dropped', ({ session }) => {
-      this.#handleDropped(session.id);
+      void this.#handleDropped(session.id);
     });
   }
 
@@ -78,6 +82,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
     this.#ensureProvisioner(provisioner);
+    this.#session.new();
 
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
     return this.#socket.open(async () => this.#runProvisioner());
@@ -87,6 +92,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
    */
   close(): Promise<void> {
+    this.#session.abort();
     return this.#socket.close();
   }
 
@@ -358,7 +364,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
   }
 
-  #handleDropped(sessionId: number): void {
+  async #handleDropped(sessionId: number): Promise<void> {
     if (this.intent === 'close') {
       return;
     }
@@ -367,26 +373,40 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       return;
     }
 
-    if (this.#reconnectPromise) {
+    if (!this.#reconnector) {
       return;
     }
 
-    this.#ensureProvisioner();
-    const previousSessionId = this.#socket.sessionId;
+    const ctx = this.#session.buildContext(sessionId);
 
-    this.#reconnectPromise = this.#socket
+    let shouldReconnect: boolean;
+    try {
+      shouldReconnect = await this.#reconnector.reconnect(ctx);
+    } catch {
+      return;
+    }
+
+    if (!shouldReconnect || this.intent === 'close') {
+      return;
+    }
+
+    this.#session.recordAttempt(sessionId);
+
+    const previousSessionId = this.#socket.sessionId;
+    this.#ensureProvisioner();
+
+    this.#socket
       .open(async () => this.#runProvisioner())
       .then(() => {
+        this.#session.onSuccess();
         this.events.emit('reconnect', {
           previousSessionId,
           sessionId: this.#socket.sessionId,
         });
       })
       .catch((err) => {
-        console.warn('Reconnection attempt failed:', err);
-      })
-      .finally(() => {
-        this.#reconnectPromise = undefined;
+        this.#session.onFailure(err);
+        // dropped が再発火して次の #handleDropped につながる
       });
   }
 
