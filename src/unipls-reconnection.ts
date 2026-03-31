@@ -86,7 +86,6 @@ export class UniplsSessionManager {
   onSuccess(): UniplsReconnectEvent {
     const event: UniplsReconnectEvent = {
       session: this.#session.id,
-      streak: this.#session.streak,
       sessionAttempts: [...this.#session.attempts],
     };
     this.#session.onSuccess();
