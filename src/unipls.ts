@@ -5,6 +5,8 @@ import {
   UniplsClosedError,
   UniplsDroppedError,
 } from './errors.ts';
+import type { DropDetectorContext } from './drop-detector';
+import { DropDetectorManager } from './drop-detector/manager.ts';
 import type { EventBus } from './event-bus';
 import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import type {
@@ -37,6 +39,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #provisionedSessions = new Set<number>();
   #reconnector?: UniplsReconnector;
   #session = new UniplsSessionManager();
+  #detectorManager: DropDetectorManager<TInput, TOutput>;
   get url(): string {
     return this.#socket.url;
   }
@@ -59,8 +62,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   constructor(params: UniplsParams<TInput, TOutput>) {
     this.#socket = new UniplsSocket(params);
     this.#reconnector = params.reconnector;
+    this.#detectorManager = new DropDetectorManager(params.dropDetectors ?? []);
 
     this.events.on('dropped', ({ session }) => {
+      this.#detectorManager.stop();
       void this.#handleDropped(session.id);
     });
   }
@@ -81,7 +86,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#session.new();
 
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
-    return this.#socket.open(async () => this.#runProvisioner());
+    return this.#socket.open(async () => {
+      await this.#runProvisioner();
+      this.#detectorManager.start(this.#createDropDetectorContext());
+    });
   }
 
   /**
@@ -89,6 +97,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   close(): Promise<void> {
     this.#session.abort();
+    this.#detectorManager.stop();
     return this.#socket.close();
   }
 
@@ -350,6 +359,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
+  #createDropDetectorContext(): DropDetectorContext<TInput, TOutput> {
+    return {
+      drop: () => this.drop(),
+      request: (params) => this.request(params),
+      listen: (params) => this.listen(params),
+    };
+  }
+
   #ensureProvisioner(provisioner?: UniplsProvisioner<TInput, TOutput>): void {
     if (provisioner) {
       this.#provisioner = provisioner;
@@ -391,7 +408,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#ensureProvisioner();
 
     this.#socket
-      .open(async () => this.#runProvisioner())
+      .open(async () => {
+        await this.#runProvisioner();
+        this.#detectorManager.start(this.#createDropDetectorContext());
+      })
       .then(() => {
         const event = this.#session.onSuccess();
         this.events.emit('reconnect', event);
