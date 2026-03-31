@@ -69,10 +69,7 @@ test('再接続後にプロビジョニングが再実行される', async () =>
 });
 
 test('再接続時に reconnect イベントが発火する', async () => {
-  const reconnects = new AwaitableQueue<{
-    previousSessionId: number;
-    sessionId: number;
-  }>();
+  const reconnects = new AwaitableQueue<{ session: number; streak: number }>();
 
   unipls.on('reconnect', (ev) => {
     void reconnects.enqueue(ev);
@@ -84,8 +81,37 @@ test('再接続時に reconnect イベントが発火する', async () => {
 
   const reconnectEvent = await reconnects.dequeue();
 
-  expect(reconnectEvent.sessionId).not.toBe(reconnectEvent.previousSessionId);
-  expect(reconnectEvent.sessionId).toBeGreaterThan(0);
+  expect(reconnectEvent.session).toBeGreaterThan(0);
+  expect(reconnectEvent.streak).toBe(0);
+  expect(reconnectEvent.sessionAttempts).toHaveLength(1);
+});
+
+test('再接続が複数回失敗した後に成功した場合、streak が正しい値になる', async () => {
+  const reconnects = new AwaitableQueue<{
+    session: number;
+    streak: number;
+    sessionAttempts: readonly unknown[];
+  }>();
+
+  unipls.on('reconnect', (ev) => {
+    void reconnects.enqueue(ev);
+  });
+
+  // 1 回目の切断 → 再接続試行 #1 開始
+  server.close(3001);
+
+  // 再接続試行 #1 の接続を受け取り、即座に切断 → onFailure (streak=1)、試行 #2 開始
+  const failedServer = await mock.sockets.dequeue();
+  failedServer.close(3001);
+
+  // 再接続試行 #2 の接続を受け取る（成功）
+  await mock.sockets.dequeue();
+
+  const reconnectEvent = await reconnects.dequeue();
+
+  // 1 回失敗してから成功したので streak === 1
+  expect(reconnectEvent.streak).toBe(1);
+  expect(reconnectEvent.sessionAttempts).toHaveLength(2);
 });
 
 test('reconnector が指定されていない場合は再接続しない', async () => {

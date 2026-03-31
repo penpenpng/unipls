@@ -30,6 +30,17 @@ export interface ReconnectionAttempt {
   error?: unknown;
 }
 
+export interface UniplsReconnectEvent {
+  /** 再接続後のセッションを表します。 */
+  session: SessionId;
+
+  /** この再接続が成功するまでに何回連続で再接続を試行したかを表します。 */
+  streak: number;
+
+  /** このセッションで行われた再接続の試行履歴を表します。 */
+  sessionAttempts: readonly ReconnectionAttempt[];
+}
+
 export interface UniplsReconnector {
   reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
 }

@@ -2,11 +2,17 @@ import type { SessionId } from './types.ts';
 import type {
   ReconnectionAttempt,
   ReconnectionContext,
+  UniplsReconnectEvent,
 } from './unipls-reconnector.ts';
 
 /** 1 回の open() 呼び出しに対応するセッションスコープの再接続状態を表します。 */
 class ReconnectionSessionState {
+  readonly #id: SessionId;
   readonly #controller = new AbortController();
+
+  get id(): SessionId {
+    return this.#id;
+  }
 
   get signal(): AbortSignal {
     return this.#controller.signal;
@@ -15,6 +21,10 @@ class ReconnectionSessionState {
   streak = 0;
   lastError: unknown = undefined;
   readonly attempts: ReconnectionAttempt[] = [];
+
+  constructor(id: SessionId) {
+    this.#id = id;
+  }
 
   abort(): void {
     this.#controller.abort();
@@ -33,12 +43,13 @@ class ReconnectionSessionState {
 
 /** セッションに関する状態を一元管理するクラスです。セッションを跨ぐ履歴と、セッションスコープの状態を保持します。 */
 export class UniplsSessionManager {
+  static #nextId = 1;
   readonly #allAttempts: ReconnectionAttempt[] = [];
-  #session = new ReconnectionSessionState();
+  #session = new ReconnectionSessionState(NaN); // 初期状態（open() 前）
 
   /** open() 呼び出し時に新しいセッション状態を作成します。 */
   new(): void {
-    this.#session = new ReconnectionSessionState();
+    this.#session = new ReconnectionSessionState(UniplsSessionManager.#nextId++);
   }
 
   /** close() 呼び出し時に現在のセッションの AbortSignal を abort します。 */
@@ -47,9 +58,9 @@ export class UniplsSessionManager {
   }
 
   /** {@link ReconnectionContext} を構築します。 */
-  buildContext(sessionId: SessionId): ReconnectionContext {
+  buildContext(): ReconnectionContext {
     return {
-      session: sessionId,
+      session: this.#session.id,
       streak: this.#session.streak,
       lastAttemptedAt: this.#session.attempts.at(-1)?.attemptedAt,
       error: this.#session.lastError,
@@ -60,9 +71,9 @@ export class UniplsSessionManager {
   }
 
   /** 再接続を試行したことを記録します。 */
-  recordAttempt(sessionId: SessionId): void {
+  recordAttempt(): void {
     const attempt: ReconnectionAttempt = {
-      session: sessionId,
+      session: this.#session.id,
       streak: this.#session.streak,
       attemptedAt: Date.now(),
       error: this.#session.lastError,
@@ -71,9 +82,15 @@ export class UniplsSessionManager {
     this.#allAttempts.push(attempt);
   }
 
-  /** 再接続成功時に呼び出します。streak をリセットします。 */
-  onSuccess(): void {
+  /** 再接続成功時に呼び出します。リセット前の状態を DTO として返し、streak をリセットします。 */
+  onSuccess(): UniplsReconnectEvent {
+    const event: UniplsReconnectEvent = {
+      session: this.#session.id,
+      streak: this.#session.streak,
+      sessionAttempts: [...this.#session.attempts],
+    };
     this.#session.onSuccess();
+    return event;
   }
 
   /** 再接続失敗時に呼び出します。streak をインクリメントし、エラーを記録します。 */

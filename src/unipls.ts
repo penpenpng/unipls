@@ -7,12 +7,11 @@ import {
 } from './errors.ts';
 import type { EventBus } from './event-bus';
 import type {
-  SessionId,
   UniplsConnectionState,
   WebSocketData,
 } from './types.ts';
 import { UniplsSessionManager } from './unipls-reconnection.ts';
-import type { UniplsReconnector } from './unipls-reconnector.ts';
+import type { UniplsReconnectEvent, UniplsReconnector } from './unipls-reconnector.ts';
 import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {
   UniplsCastOptions,
@@ -29,10 +28,7 @@ import type {
 } from './unipls.interface.ts';
 
 type UniplsEvents<TOutput> = UniplsSocketPublicEvents<TOutput> & {
-  reconnect: {
-    previousSessionId: SessionId;
-    sessionId: SessionId;
-  };
+  reconnect: UniplsReconnectEvent;
 };
 
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
@@ -377,7 +373,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       return;
     }
 
-    const ctx = this.#session.buildContext(sessionId);
+    const ctx = this.#session.buildContext();
 
     let shouldReconnect: boolean;
     try {
@@ -390,19 +386,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       return;
     }
 
-    this.#session.recordAttempt(sessionId);
+    this.#session.recordAttempt();
 
-    const previousSessionId = this.#socket.sessionId;
     this.#ensureProvisioner();
 
     this.#socket
       .open(async () => this.#runProvisioner())
       .then(() => {
-        this.#session.onSuccess();
-        this.events.emit('reconnect', {
-          previousSessionId,
-          sessionId: this.#socket.sessionId,
-        });
+        const event = this.#session.onSuccess();
+        this.events.emit('reconnect', event);
       })
       .catch((err) => {
         this.#session.onFailure(err);
