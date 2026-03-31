@@ -97,6 +97,9 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
   /** どのメッセージをレスポンスとみなすかを決定する述語関数です。この条件を最初に満たしたメッセージがレスポンスになります。 */
   selector: (data: TOutput) => boolean;
 
+  /** レスポンスを待つ最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
+  timeout?: number;
+
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 

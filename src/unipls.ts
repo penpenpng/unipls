@@ -6,7 +6,7 @@ import {
   UniplsDroppedError,
 } from './errors.ts';
 import type { DropDetectorContext } from './drop-detector';
-import { DropDetectorManager } from './drop-detector/manager.ts';
+import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
 import type { EventBus } from './event-bus';
 import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import type {
@@ -112,8 +112,45 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsTimeoutError}
    */
   next(params: UniplsNextParams<TOutput>): Promise<TOutput> {
-    void params;
-    throw new NotImplementedError();
+    if (this.state === 'closed') {
+      throw new UniplsClosedError();
+    }
+    if (params.signal?.aborted) {
+      throw params.signal.reason;
+    }
+
+    const events = this.events.spawnEventBusView();
+    const result = new AsyncResult<TOutput>({
+      finally: () => {
+        events.dispose();
+      },
+      signal: params.signal,
+      timeout: params.timeout,
+    });
+
+    events.on('message', ({ message }) => {
+      Unipls.#processMessage({
+        message,
+        selector: params.selector,
+        onSelected: result.resolve,
+        onSelectorError: result.reject,
+        onProcessorError: () => {
+          // ignore because `result.resolve` never throws
+        },
+      });
+    });
+
+    events.on('dropped', () => {
+      if (params.stopListeningOnDisconnected) {
+        result.reject(new UniplsDroppedError());
+      }
+    });
+
+    events.once('closed', () => {
+      result.reject(new UniplsClosedError());
+    });
+
+    return result.promise;
   }
 
   /**
