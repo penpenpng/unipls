@@ -4,9 +4,6 @@ export interface ReconnectionContext {
   /** 現在のセッションを表します。 */
   session: SessionId;
 
-  /** open イベントを挟まずに何回連続で再接続を試行しているかを表します。 */
-  streak: number;
-
   /** この再接続よりも前に試行した再接続の中で最も新しい試行を行った時刻を表します。 */
   lastAttemptedAt?: number;
 
@@ -25,7 +22,6 @@ export interface ReconnectionContext {
 
 export interface ReconnectionAttempt {
   session: SessionId;
-  streak: number;
   attemptedAt: number;
   error?: unknown;
 }

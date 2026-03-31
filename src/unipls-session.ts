@@ -6,7 +6,7 @@ import type {
 } from './unipls-reconnector.ts';
 
 /** 1 回の open() 呼び出しに対応するセッションスコープの再接続状態を表します。 */
-class ReconnectionSessionState {
+class UniplsSectionState {
   readonly #id: SessionId;
   readonly #controller = new AbortController();
 
@@ -18,7 +18,6 @@ class ReconnectionSessionState {
     return this.#controller.signal;
   }
 
-  streak = 0;
   lastError: unknown = undefined;
   readonly attempts: ReconnectionAttempt[] = [];
 
@@ -31,12 +30,10 @@ class ReconnectionSessionState {
   }
 
   onSuccess(): void {
-    this.streak = 0;
     this.lastError = undefined;
   }
 
   onFailure(err: unknown): void {
-    this.streak++;
     this.lastError = err;
   }
 }
@@ -45,11 +42,11 @@ class ReconnectionSessionState {
 export class UniplsSessionManager {
   static #nextId = 1;
   readonly #allAttempts: ReconnectionAttempt[] = [];
-  #session = new ReconnectionSessionState(NaN); // 初期状態（open() 前）
+  #session = new UniplsSectionState(NaN); // 初期状態（open() 前）
 
   /** open() 呼び出し時に新しいセッション状態を作成します。 */
   new(): void {
-    this.#session = new ReconnectionSessionState(UniplsSessionManager.#nextId++);
+    this.#session = new UniplsSectionState(UniplsSessionManager.#nextId++);
   }
 
   /** close() 呼び出し時に現在のセッションの AbortSignal を abort します。 */
@@ -61,7 +58,6 @@ export class UniplsSessionManager {
   buildContext(): ReconnectionContext {
     return {
       session: this.#session.id,
-      streak: this.#session.streak,
       lastAttemptedAt: this.#session.attempts.at(-1)?.attemptedAt,
       error: this.#session.lastError,
       sessionAttempts: this.#session.attempts,
@@ -74,7 +70,6 @@ export class UniplsSessionManager {
   recordAttempt(): void {
     const attempt: ReconnectionAttempt = {
       session: this.#session.id,
-      streak: this.#session.streak,
       attemptedAt: Date.now(),
       error: this.#session.lastError,
     };
@@ -82,7 +77,7 @@ export class UniplsSessionManager {
     this.#allAttempts.push(attempt);
   }
 
-  /** 再接続成功時に呼び出します。リセット前の状態を DTO として返し、streak をリセットします。 */
+  /** 再接続成功時に呼び出します。 */
   onSuccess(): UniplsReconnectEvent {
     const event: UniplsReconnectEvent = {
       session: this.#session.id,
@@ -92,7 +87,7 @@ export class UniplsSessionManager {
     return event;
   }
 
-  /** 再接続失敗時に呼び出します。streak をインクリメントし、エラーを記録します。 */
+  /** 再接続失敗時に呼び出します。エラーを記録します。 */
   onFailure(err: unknown): void {
     this.#session.onFailure(err);
   }

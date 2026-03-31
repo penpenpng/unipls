@@ -84,8 +84,10 @@ test('再接続時に reconnect イベントが発火する', async () => {
   expect(reconnectEvent.session).toBeGreaterThan(0);
 });
 
-test('再接続が複数回失敗した後に成功した場合、streak が正しい値になる', async () => {
-  const reconnects = new AwaitableQueue<{ sessionAttempts: readonly unknown[] }>();
+test('再接続が複数回失敗した後に成功した場合、 sessionAttempts が正しい値になる', async () => {
+  const reconnects = new AwaitableQueue<{
+    sessionAttempts: readonly unknown[];
+  }>();
 
   unipls.on('reconnect', (ev) => {
     void reconnects.enqueue(ev);

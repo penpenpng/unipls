@@ -93,13 +93,13 @@ dropped
 
 #### close code の扱い
 
-| コード | 定数名 | 意味 |
-|---|---|---|
-| 1000 | `NORMAL_CLOSURE` | 正常切断 → `'closed'` 状態へ |
-| 3000 | `IRRECOVERABLE_DROP` | 回復不能な drop（将来利用予定） |
-| 3001 | `ABNORMAL_CLOSURE` | `drop()` による強制切断（1006 の代替） |
-| 3002 | `MARKED_AS_TIMED_OUT` | タイムアウトによる強制切断 |
-| その他 | — | 異常切断 → `'dropped'` 状態へ |
+| コード | 定数名                | 意味                                   |
+| ------ | --------------------- | -------------------------------------- |
+| 1000   | `NORMAL_CLOSURE`      | 正常切断 → `'closed'` 状態へ           |
+| 3000   | `IRRECOVERABLE_DROP`  | 回復不能な drop（将来利用予定）        |
+| 3001   | `ABNORMAL_CLOSURE`    | `drop()` による強制切断（1006 の代替） |
+| 3002   | `MARKED_AS_TIMED_OUT` | タイムアウトによる強制切断             |
+| その他 | —                     | 異常切断 → `'dropped'` 状態へ          |
 
 #### `enqueue()` メソッド
 
@@ -167,8 +167,8 @@ interface UniplsReconnector {
 ```
 
 `ReconnectionContext` には以下が含まれます:
+
 - `session`: 現在のセッション ID
-- `streak`: 連続再接続試行回数
 - `lastAttemptedAt`: 前回の試行時刻
 - `sessionAttempts` / `allAttempts`: 試行履歴
 
