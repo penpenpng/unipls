@@ -1,22 +1,22 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import { Unipls, UniplsClosedError, UniplsDroppedError } from '..';
 import {
-  Unipls,
-  UniplsClosedError,
-  UniplsDroppedError,
-  type UniplsReconnector,
-} from '..';
-import { createMockServer, type SocketMock } from './test-utils';
+  createMockServer,
+  immediateReconnector,
+  SocketMock,
+} from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
-
-const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
 let socket: SocketMock;
 
 beforeEach(async () => {
-  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
+  unipls = new Unipls<string, string>({
+    url,
+    reconnector: immediateReconnector,
+  });
   await unipls.open();
   socket = await mock.sockets.dequeue();
 });
@@ -73,7 +73,10 @@ test('recast が never のとき、送信前に drop が発生すると UniplsDr
 
 test('recast が always（デフォルト）のとき、drop 後に再接続されてメッセージが再送される', async () => {
   let provisionDone = () => {};
-  const u = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
+  const u = new Unipls<string, string>({
+    url,
+    reconnector: immediateReconnector,
+  });
   void u
     .open(({ done }) => {
       provisionDone = done;
@@ -98,7 +101,10 @@ test('recast が always（デフォルト）のとき、drop 後に再接続さ�
 
 test('カスタム recast 関数で異なるデータを再送できる', async () => {
   let provisionDone = () => {};
-  const u = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
+  const u = new Unipls<string, string>({
+    url,
+    reconnector: immediateReconnector,
+  });
   void u
     .open(({ done }) => {
       provisionDone = done;

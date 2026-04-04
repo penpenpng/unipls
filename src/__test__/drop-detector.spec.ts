@@ -1,15 +1,14 @@
 import { afterEach, expect, test } from 'vitest';
-import { Unipls, type UniplsReconnector } from '..';
+import { Unipls } from '..';
 import {
   AwaitableQueue,
   createMockServer,
+  immediateReconnector,
   ManualDropDetector,
 } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
-
-const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 afterEach(() => {
   mock.reset();
@@ -80,7 +79,7 @@ test('再接続後に setup() が再度呼ばれる', async () => {
   const detector = new ManualDropDetector();
   const unipls = new Unipls({
     url,
-    reconnector: alwaysReconnect,
+    reconnector: immediateReconnector,
     dropDetectors: [detector],
   });
 

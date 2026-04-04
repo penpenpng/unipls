@@ -4,14 +4,15 @@ import {
   UniplsClosedError,
   UniplsDroppedError,
   UniplsTimeoutError,
-  type UniplsReconnector,
 } from '..';
-import { createMockServer, type SocketMock } from './test-utils';
+import {
+  createMockServer,
+  immediateReconnector,
+  type SocketMock,
+} from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
-
-const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
 let socket: SocketMock;
@@ -86,7 +87,10 @@ test('stopListeningOnDisconnected が true のとき、切断時に UniplsDroppe
 });
 
 test('stopListeningOnDisconnected が false のとき、再接続後もメッセージを待ち続ける', async () => {
-  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
+  unipls = new Unipls<string, string>({
+    url,
+    reconnector: immediateReconnector,
+  });
   await unipls.open();
   socket = await mock.sockets.dequeue();
 

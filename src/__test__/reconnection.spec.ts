@@ -3,20 +3,21 @@ import { Unipls, type UniplsReconnector } from '..';
 import {
   AwaitableQueue,
   createMockServer,
+  immediateReconnector,
   type SocketMock,
 } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
 
-/** 常に即時再接続する reconnector */
-const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
-
 let unipls: Unipls<string, string>;
 let socket: SocketMock;
 
 beforeEach(async () => {
-  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
+  unipls = new Unipls<string, string>({
+    url,
+    reconnector: immediateReconnector,
+  });
   await unipls.open();
   socket = await mock.sockets.dequeue();
 });
@@ -52,7 +53,10 @@ test('再接続後にプロビジョニングが再実行される', async () =>
   const provisioned = new AwaitableQueue<number>();
   let provisionCount = 0;
 
-  unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
+  unipls = new Unipls<string, string>({
+    url,
+    reconnector: immediateReconnector,
+  });
   await unipls.open(({ done }) => {
     provisionCount += 1;
     provisioned.enqueue(provisionCount);
