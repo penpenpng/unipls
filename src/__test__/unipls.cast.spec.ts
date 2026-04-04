@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { UniplsClosedError, UniplsDroppedError } from '../errors';
 import { Unipls } from '../unipls';
 import type { UniplsReconnector } from '../unipls-reconnector';
-import { createMockServer, type SocketMock } from './mock-server';
+import { createMockServer, type SocketMock } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
@@ -49,7 +49,11 @@ test('state が closed のとき同期的に throw する', async () => {
 test('recast が never のとき、送信前に drop が発生すると UniplsDroppedError で reject する', async () => {
   let provisionDone = () => {};
   const u = new Unipls<string, string>({ url });
-  void u.open(({ done }) => { provisionDone = done; }).catch(() => {});
+  void u
+    .open(({ done }) => {
+      provisionDone = done;
+    })
+    .catch(() => {});
   const s = await mock.sockets.dequeue();
 
   // プロビジョニング中に cast を呼ぶ。enqueue は 'open' イベント待ちで pending になる
@@ -67,7 +71,11 @@ test('recast が never のとき、送信前に drop が発生すると UniplsDr
 test('recast が always（デフォルト）のとき、drop 後に再接続されてメッセージが再送される', async () => {
   let provisionDone = () => {};
   const u = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
-  void u.open(({ done }) => { provisionDone = done; }).catch(() => {});
+  void u
+    .open(({ done }) => {
+      provisionDone = done;
+    })
+    .catch(() => {});
   const s = await mock.sockets.dequeue();
 
   // プロビジョニング中に cast を呼ぶ
@@ -88,7 +96,11 @@ test('recast が always（デフォルト）のとき、drop 後に再接続さ�
 test('カスタム recast 関数で異なるデータを再送できる', async () => {
   let provisionDone = () => {};
   const u = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
-  void u.open(({ done }) => { provisionDone = done; }).catch(() => {});
+  void u
+    .open(({ done }) => {
+      provisionDone = done;
+    })
+    .catch(() => {});
   const s = await mock.sockets.dequeue();
 
   const promise = u.cast('original', {

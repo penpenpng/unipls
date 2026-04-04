@@ -1,9 +1,8 @@
 import { afterEach, expect, test } from 'vitest';
 import { AwaitableQueue } from '../libs/awaitable-queue.ts';
-import { Unipls } from '../unipls.ts';
 import type { UniplsReconnector } from '../unipls-reconnector.ts';
-import { createMockServer } from './mock-server.ts';
-import { ManualDropDetector } from './manual-drop-detector.ts';
+import { Unipls } from '../unipls.ts';
+import { createMockServer, ManualDropDetector } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);

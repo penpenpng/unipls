@@ -3,7 +3,7 @@ import { UniplsClosedError, UniplsDroppedError } from '../errors';
 import { AwaitableQueue } from '../libs/awaitable-queue';
 import { Unipls } from '../unipls';
 import type { UniplsReconnector } from '../unipls-reconnector';
-import { createMockServer, type SocketMock } from './mock-server';
+import { createMockServer, type SocketMock } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
@@ -162,7 +162,9 @@ test('retry が keep-listening のとき、再接続後もクエリを再送せ�
   const reconnected = await mock.sockets.dequeue();
 
   // クエリは再送されない
-  await expect(reconnected.inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+  await expect(
+    reconnected.inbox.dequeue({ timeout: 50 }),
+  ).rejects.toThrowError();
 
   reconnected.send('item-after-reconnect');
   await expect(inbox.dequeue()).resolves.toBe('item-after-reconnect');

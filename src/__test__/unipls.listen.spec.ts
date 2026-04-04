@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { UniplsClosedError } from '../errors';
 import { AwaitableQueue } from '../libs/awaitable-queue';
 import { Unipls } from '../unipls';
-import { createMockServer, type SocketMock } from './mock-server';
+import { createMockServer, type SocketMock } from './test-utils';
 
 const url = 'ws://localhost:8080';
 let unipls: Unipls<string, string>;
