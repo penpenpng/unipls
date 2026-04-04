@@ -1,4 +1,4 @@
-import { u } from './utils.ts';
+import { u } from '../../libs/utils.ts';
 
 export class AwaitableQueue<T> {
   private queue: Array<{ value: T; resolve: () => void }> = [];

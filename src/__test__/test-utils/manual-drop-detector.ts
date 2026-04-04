@@ -1,5 +1,8 @@
-import type { DropDetector, DropDetectorContext } from '../../drop-detector/index.ts';
-import { AwaitableQueue } from '../../libs/awaitable-queue.ts';
+import type {
+  DropDetector,
+  DropDetectorContext,
+} from '../../drop-detector/index.ts';
+import { AwaitableQueue } from './awaitable-queue.ts';
 
 /**
  * テスト用の手動 {@link DropDetector} です。

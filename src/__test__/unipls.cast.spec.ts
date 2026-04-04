@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { UniplsClosedError, UniplsDroppedError } from '../errors';
-import { Unipls } from '../unipls';
-import type { UniplsReconnector } from '../unipls-reconnector';
+import {
+  Unipls,
+  UniplsClosedError,
+  UniplsDroppedError,
+  type UniplsReconnector,
+} from '..';
 import { createMockServer, type SocketMock } from './test-utils';
 
 const url = 'ws://localhost:8080';

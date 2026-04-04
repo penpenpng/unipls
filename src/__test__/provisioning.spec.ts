@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { Unipls } from '../unipls';
+import { Unipls } from '..';
 import { createMockServer, type SocketMock } from './test-utils';
 
 const url = 'ws://localhost:8080';

@@ -1,6 +1,6 @@
 import { ws, type WebSocketData } from 'msw';
 import { setupServer } from 'msw/node';
-import { AwaitableQueue } from '../../libs/awaitable-queue';
+import { AwaitableQueue } from './awaitable-queue';
 
 export interface SocketMock {
   send(data: WebSocketData): void;
