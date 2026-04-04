@@ -11,12 +11,12 @@ const mock = createMockServer(url);
 const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
-let server: SocketMock;
+let socket: SocketMock;
 
 beforeEach(async () => {
   unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 });
 
 afterEach(async () => {
@@ -33,11 +33,11 @@ test('drop されると自動で再接続する', async () => {
   });
 
   // 1 回目の接続でメッセージを受信する
-  server.send('before-drop');
+  socket.send('before-drop');
   await expect(inbox.dequeue()).resolves.toBe('before-drop');
 
   // 異常コードで切断して drop を発生させる
-  server.close(3001);
+  socket.close(3001);
 
   // 自動再接続後のソケットが生成されることを確認
   const reconnectedServer = await mock.sockets.dequeue();
@@ -57,11 +57,11 @@ test('再接続後にプロビジョニングが再実行される', async () =>
     done();
   });
 
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 
   await expect(provisioned.dequeue()).resolves.toBe(1);
 
-  server.close(3001);
+  socket.close(3001);
 
   await mock.sockets.dequeue();
 
@@ -75,7 +75,7 @@ test('再接続時に reconnect イベントが発火する', async () => {
     void reconnects.enqueue(ev);
   });
 
-  server.close(3001);
+  socket.close(3001);
 
   await mock.sockets.dequeue();
 
@@ -94,7 +94,7 @@ test('再接続が複数回失敗した後に成功した場合、 sessionAttemp
   });
 
   // 1 回目の切断 → 再接続試行 #1 開始
-  server.close(3001);
+  socket.close(3001);
 
   // 再接続試行 #1 の接続を受け取り、即座に切断 → onFailure、試行 #2 開始
   const failedServer = await mock.sockets.dequeue();
@@ -136,9 +136,9 @@ test('close() 呼び出し時に reconnector.reconnect() の待機がキャン�
 
   unipls = new Unipls<string, string>({ url, reconnector: slowReconnector });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 
-  server.close(3001);
+  socket.close(3001);
 
   // reconnect() が呼ばれるのを待つ
   await reconnectCalled.dequeue();

@@ -7,12 +7,12 @@ import { createMockServer, type SocketMock } from './test-utils';
 const url = 'ws://localhost:8080';
 let unipls: Unipls<string, string>;
 const mock = createMockServer(url);
-let server: SocketMock;
+let socket: SocketMock;
 
 beforeEach(async () => {
   unipls = new Unipls<string, string>({ url });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 });
 
 afterEach(async () => {
@@ -28,9 +28,9 @@ test('`.listen()` receives messages.', async () => {
     },
   });
 
-  server.send('msg1');
-  server.send('msg2');
-  server.send('msg3');
+  socket.send('msg1');
+  socket.send('msg2');
+  socket.send('msg3');
 
   await expect(inbox.dequeue()).resolves.toBe('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg2');
@@ -46,11 +46,11 @@ test('`selector` option filters messages.', async () => {
     },
   });
 
-  server.send('msg1');
-  server.send('ignored');
-  server.send('msg2');
-  server.send('ignored');
-  server.send('msg3');
+  socket.send('msg1');
+  socket.send('ignored');
+  socket.send('msg2');
+  socket.send('ignored');
+  socket.send('msg3');
 
   await expect(inbox.dequeue()).resolves.toBe('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg2');
@@ -72,10 +72,10 @@ test('`terminator` option terminates subscription, and triggers `onTerminated` a
     },
   });
 
-  server.send('msg1');
-  server.send('msg2');
-  server.send('stop');
-  server.send('ignored');
+  socket.send('msg1');
+  socket.send('msg2');
+  socket.send('stop');
+  socket.send('ignored');
 
   await expect(inbox.dequeue()).resolves.toBe('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg2');
@@ -98,8 +98,8 @@ test('unsubscription trigger `onUnsubscribed` and `finally`.', async () => {
     },
   });
 
-  server.send('msg1');
-  server.send('msg2');
+  socket.send('msg1');
+  socket.send('msg2');
   await expect(inbox.dequeue()).resolves.toBe('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg2');
 
@@ -107,7 +107,7 @@ test('unsubscription trigger `onUnsubscribed` and `finally`.', async () => {
   await expect(inbox.dequeue()).resolves.toBe('unsubscribed');
   await expect(inbox.dequeue()).resolves.toBe('finally');
 
-  server.send('ignored');
+  socket.send('ignored');
   await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
 });
 
@@ -125,8 +125,8 @@ test('`close()` triggers `onFatalError` with `UniplsClosedError` and `finally`.'
     },
   });
 
-  server.send('msg1');
-  server.send('msg2');
+  socket.send('msg1');
+  socket.send('msg2');
   await expect(inbox.dequeue()).resolves.toBe('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg2');
 
@@ -134,6 +134,6 @@ test('`close()` triggers `onFatalError` with `UniplsClosedError` and `finally`.'
   await expect(inbox.dequeue()).resolves.toBeInstanceOf(UniplsClosedError);
   await expect(inbox.dequeue()).resolves.toBe('finally');
 
-  server.send('ignored');
+  socket.send('ignored');
   await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
 });

@@ -9,12 +9,12 @@ const mock = createMockServer(url);
 const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
-let server: SocketMock;
+let socket: SocketMock;
 
 beforeEach(async () => {
   unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 });
 
 afterEach(async () => {
@@ -28,9 +28,9 @@ test('request はセレクタに合致したレスポンスで resolve する', 
     selector: (msg) => msg === 'pong',
   });
 
-  await expect(server.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 
-  server.send('pong');
+  socket.send('pong');
 
   await expect(promise).resolves.toBe('pong');
 });
@@ -41,10 +41,10 @@ test('selector が一致しないレスポンスを無視し、一致したと�
     selector: (msg) => msg.startsWith('pong-ok'),
   });
 
-  await expect(server.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 
-  server.send('pong-ng');
-  server.send('pong-ok-1');
+  socket.send('pong-ng');
+  socket.send('pong-ok-1');
 
   await expect(promise).resolves.toBe('pong-ok-1');
 });
@@ -65,10 +65,10 @@ test('request を再接続時に再送し、ペイロードを再評価する', 
   });
 
   // 1 回目の送信を確認するがレスポンスは返さない
-  await expect(server.inbox.dequeue()).resolves.toBe('ping-1');
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping-1');
 
   // ドロップさせて再接続させる
-  server.close(3001);
+  socket.close(3001);
 
   const reconnected = await mock.sockets.dequeue();
 

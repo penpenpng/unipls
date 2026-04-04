@@ -11,12 +11,12 @@ const mock = createMockServer(url);
 const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
-let server: SocketMock;
+let socket: SocketMock;
 
 beforeEach(async () => {
   unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 });
 
 afterEach(async () => {
@@ -32,11 +32,11 @@ test('クエリを送信し、selector に合致した複数のメッセージ�
     onMessage: (msg) => inbox.enqueue(msg),
   });
 
-  await expect(server.inbox.dequeue()).resolves.toBe('subscribe-cmd');
+  await expect(socket.inbox.dequeue()).resolves.toBe('subscribe-cmd');
 
-  server.send('item-1');
-  server.send('ignored');
-  server.send('item-2');
+  socket.send('item-1');
+  socket.send('ignored');
+  socket.send('item-2');
 
   await expect(inbox.dequeue()).resolves.toBe('item-1');
   await expect(inbox.dequeue()).resolves.toBe('item-2');
@@ -53,11 +53,11 @@ test('terminator に合致したメッセージで購読が終了し、onTermina
     finally: () => inbox.enqueue('finally'),
   });
 
-  await server.inbox.dequeue();
+  await socket.inbox.dequeue();
 
-  server.send('item-1');
-  server.send('done');
-  server.send('ignored');
+  socket.send('item-1');
+  socket.send('done');
+  socket.send('ignored');
 
   await expect(inbox.dequeue()).resolves.toBe('item-1');
   await expect(inbox.dequeue()).resolves.toBe('terminated:done');
@@ -75,16 +75,16 @@ test('unsubscribe で購読が解除され onUnsubscribed が呼ばれる', asyn
     finally: () => inbox.enqueue('finally'),
   });
 
-  await server.inbox.dequeue();
+  await socket.inbox.dequeue();
 
-  server.send('msg1');
+  socket.send('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg1');
 
   unsubscribe();
   await expect(inbox.dequeue()).resolves.toBe('unsubscribed');
   await expect(inbox.dequeue()).resolves.toBe('finally');
 
-  server.send('ignored');
+  socket.send('ignored');
   await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
 });
 
@@ -98,9 +98,9 @@ test('close() 時に onFatalError が UniplsClosedError で呼ばれる', async 
     finally: () => inbox.enqueue('finally'),
   });
 
-  await server.inbox.dequeue();
+  await socket.inbox.dequeue();
 
-  server.send('msg1');
+  socket.send('msg1');
   await expect(inbox.dequeue()).resolves.toBe('msg1');
 
   unipls.close();
@@ -117,9 +117,9 @@ test('retry が未指定のとき、切断時に onFatalError が UniplsDroppedE
     onFatalError: (err) => inbox.enqueue(err),
   });
 
-  await server.inbox.dequeue();
+  await socket.inbox.dequeue();
 
-  server.close(3001);
+  socket.close(3001);
   await expect(inbox.dequeue()).resolves.toBeInstanceOf(UniplsDroppedError);
 });
 
@@ -134,9 +134,9 @@ test('retry が re-request のとき、再接続後にクエリを再送して�
     onMessage: (msg) => inbox.enqueue(msg),
   });
 
-  await expect(server.inbox.dequeue()).resolves.toBe('subscribe-cmd-1');
+  await expect(socket.inbox.dequeue()).resolves.toBe('subscribe-cmd-1');
 
-  server.close(3001);
+  socket.close(3001);
 
   const reconnected = await mock.sockets.dequeue();
   await expect(reconnected.inbox.dequeue()).resolves.toBe('subscribe-cmd-2');
@@ -155,9 +155,9 @@ test('retry が keep-listening のとき、再接続後もクエリを再送せ�
     onMessage: (msg) => inbox.enqueue(msg),
   });
 
-  await expect(server.inbox.dequeue()).resolves.toBe('subscribe-cmd');
+  await expect(socket.inbox.dequeue()).resolves.toBe('subscribe-cmd');
 
-  server.close(3001);
+  socket.close(3001);
 
   const reconnected = await mock.sockets.dequeue();
 

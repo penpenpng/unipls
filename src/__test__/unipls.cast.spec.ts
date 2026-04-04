@@ -10,12 +10,12 @@ const mock = createMockServer(url);
 const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
-let server: SocketMock;
+let socket: SocketMock;
 
 beforeEach(async () => {
   unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 });
 
 afterEach(async () => {
@@ -26,7 +26,7 @@ afterEach(async () => {
 test('メッセージを送信して resolve する', async () => {
   const promise = unipls.cast('hello');
 
-  await expect(server.inbox.dequeue()).resolves.toBe('hello');
+  await expect(socket.inbox.dequeue()).resolves.toBe('hello');
   await expect(promise).resolves.toBeUndefined();
 });
 

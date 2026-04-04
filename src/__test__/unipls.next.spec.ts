@@ -14,12 +14,12 @@ const mock = createMockServer(url);
 const alwaysReconnect: UniplsReconnector = { reconnect: () => true };
 
 let unipls: Unipls<string, string>;
-let server: SocketMock;
+let socket: SocketMock;
 
 beforeEach(async () => {
   unipls = new Unipls<string, string>({ url });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 });
 
 afterEach(async () => {
@@ -30,7 +30,7 @@ afterEach(async () => {
 test('selector に合致したメッセージで resolve する', async () => {
   const promise = unipls.next({ selector: (msg) => msg === 'target' });
 
-  server.send('target');
+  socket.send('target');
 
   await expect(promise).resolves.toBe('target');
 });
@@ -38,9 +38,9 @@ test('selector に合致したメッセージで resolve する', async () => {
 test('selector が一致しないメッセージを無視し、一致したときに resolve する', async () => {
   const promise = unipls.next({ selector: (msg) => msg.startsWith('ok-') });
 
-  server.send('ng-1');
-  server.send('ng-2');
-  server.send('ok-1');
+  socket.send('ng-1');
+  socket.send('ng-2');
+  socket.send('ok-1');
 
   await expect(promise).resolves.toBe('ok-1');
 });
@@ -80,7 +80,7 @@ test('stopListeningOnDisconnected が true のとき、切断時に UniplsDroppe
     stopListeningOnDisconnected: true,
   });
 
-  server.close(3001);
+  socket.close(3001);
 
   await expect(promise).rejects.toBeInstanceOf(UniplsDroppedError);
 });
@@ -88,11 +88,11 @@ test('stopListeningOnDisconnected が true のとき、切断時に UniplsDroppe
 test('stopListeningOnDisconnected が false のとき、再接続後もメッセージを待ち続ける', async () => {
   unipls = new Unipls<string, string>({ url, reconnector: alwaysReconnect });
   await unipls.open();
-  server = await mock.sockets.dequeue();
+  socket = await mock.sockets.dequeue();
 
   const promise = unipls.next({ selector: () => true });
 
-  server.close(3001);
+  socket.close(3001);
 
   const reconnectedServer = await mock.sockets.dequeue();
   reconnectedServer.send('after-reconnect');
