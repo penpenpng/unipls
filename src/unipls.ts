@@ -19,8 +19,6 @@ import type {
   UniplsParams,
   UniplsProvisioner,
   UniplsProvisioningContext,
-  UniplsRecastFunction,
-  UniplsRecastStrategy,
   UniplsRequestParams,
   UniplsRetrySetupContext,
   UniplsRetrySetupFunction,
@@ -326,18 +324,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       TInput,
       TOutput
     >['onReconnected'] = (callback) => {
-      events.once('reconnect', (reconnection) => {
+      events.once('reconnect', async (reconnection) => {
         if (result.resulted) {
           return;
         }
 
-        callback({
-          request,
-          done: () => {
-            // no-op: provided for symmetry with other retry contexts
-          },
-          reconnection,
-        });
+        try {
+          await callback({
+            request,
+            reconnection,
+          });
+        } catch (err) {
+          result.reject(err ?? new UniplsDroppedError());
+        }
       });
     };
 
@@ -352,9 +351,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onReconnected,
         data: activeRequest,
         selector: activeSelector,
-        abort: (error) => {
-          result.reject(error ?? new UniplsDroppedError());
-        },
       });
     });
 
@@ -381,8 +377,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal: options?.signal,
     });
 
-    let activeData = data;
-
     const sendOnce = (payload: TInput) => {
       if (result.resulted) return;
       this.#socket
@@ -401,37 +395,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       sendOnce(data);
     }
 
-    let recastRegistered = false;
-
     events.on('dropped', () => {
-      if (result.resulted || recastRegistered) return;
-      recastRegistered = true;
-
-      const setupRecast = Unipls.#getRecastSetupFunction(
-        options?.recast ?? 'always',
-      );
-      setupRecast({
-        data: activeData,
-        cast: (newData) => {
-          activeData = newData;
-          // fire-and-forget: send after the next open event if not already open
-          if (this.state === 'open') {
-            void this.#socket.enqueue(newData, { force });
-            return;
-          }
-          let offOpen: () => void;
-          let offClose: () => void;
-          offOpen = this.events.once('open', () => {
-            offClose();
-            void this.#socket.enqueue(newData, { force });
-          });
-          offClose = this.events.once('closed', () => {
-            offOpen();
-          });
-        },
-        done: () => result.resolve(),
-        abort: (error) => result.reject(error ?? new UniplsDroppedError()),
-      });
+      // TODO
     });
 
     events.once('closed', () => {
@@ -627,18 +592,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       TInput,
       TOutput
     >['onReconnected'] = (callback) => {
-      events.once('reconnect', (reconnection) => {
+      events.once('reconnect', async (reconnection) => {
         if (results.resulted) {
           return;
         }
 
-        callback({
-          request,
-          done: () => {
-            // no-op: provided for symmetry with other retry contexts
-          },
-          reconnection,
-        });
+        try {
+          await callback({
+            request,
+            reconnection,
+          });
+        } catch (err) {
+          results.raiseFatalError(err ?? new UniplsDroppedError());
+        }
       });
     };
 
@@ -651,14 +617,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       retryRegistered = true;
 
       const setupRetry = Unipls.getRetrySetupFunction(params.retry);
-      setupRetry({
-        onReconnected,
-        data: activeRequest,
-        selector: activeSelector,
-        abort: (error) => {
-          results.raiseFatalError(error ?? new UniplsDroppedError());
-        },
-      });
+
+      try {
+        setupRetry({
+          onReconnected,
+          data: activeRequest,
+          selector: activeSelector,
+        });
+      } catch (err) {
+        results.raiseFatalError(err ?? new UniplsDroppedError());
+      }
     });
 
     events.once('closed', () => {
@@ -668,52 +636,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return results.unsubscribe;
   }
 
-  static #getRecastSetupFunction<TInput>(
-    strategy: UniplsRecastStrategy<TInput>,
-  ): UniplsRecastFunction<TInput> {
-    if (strategy === 'never') {
-      return ({ abort }) => {
-        abort();
-      };
-    }
-
-    if (strategy === 'always') {
-      return ({ data, cast, done }) => {
-        cast(data);
-        done();
-      };
-    }
-
-    return strategy;
-  }
-
   protected static getRetrySetupFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
   ): UniplsRetrySetupFunction<TInput, TOutput> {
     if (retry === undefined || retry === 'never') {
-      return ({ abort }) => {
-        abort();
+      return () => {
+        throw new UniplsDroppedError();
       };
     }
 
     if (retry === 're-request') {
-      return ({ onReconnected, data, selector, abort }) => {
-        onReconnected(({ request, done }) => {
-          try {
-            request(data, { selector });
-            done?.();
-          } catch (err) {
-            abort(err);
-          }
+      return ({ onReconnected, data, selector }) => {
+        onReconnected(async ({ request }) => {
+          await request(data, { selector });
         });
       };
     }
 
     if (retry === 'keep-listening') {
       return ({ onReconnected }) => {
-        onReconnected(({ done }) => {
-          done?.();
-        });
+        onReconnected(() => {});
       };
     }
 
