@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
-import { Unipls } from '..';
+import { Unipls, UniplsClosedError } from '..';
 import {
   createMockServer,
   TestProvisioner,
@@ -15,7 +15,47 @@ afterEach(() => {
   server.reset();
 });
 
-test('初回接続後、Provisioning が完了するまで cast() の送信は遅延される', async () => {
+test('初回接続後、Provisioning が完了するまで open() の解決は保留される', async () => {
+  await using unipls = new Unipls({ url });
+  const provisioner = new TestProvisioner();
+
+  const promise = unipls.open(provisioner);
+  await server.sockets.dequeue();
+
+  await expect(timeout(promise, 50)).rejects.toThrow(TimeoutError);
+
+  // Complete provisioning manually.
+  (await provisioner.dequeueContext()).resolve();
+
+  await expect(promise).resolves.toBeUndefined();
+});
+
+test('初回接続後、Provisioning が失敗した場合、open() の結果は reject される', async () => {
+  await using unipls = new Unipls({ url });
+  const provisioner = new TestProvisioner();
+
+  const promise = unipls.open(provisioner);
+  await server.sockets.dequeue();
+
+  // Fail provisioning manually.
+  (await provisioner.dequeueContext()).reject();
+
+  await expect(promise).rejects.toThrow();
+});
+
+test('初回接続後、Provisioning が完了する前に close() された場合、open() の結果は reject される', async () => {
+  await using unipls = new Unipls({ url });
+  const provisioner = new TestProvisioner();
+
+  const promise = unipls.open(provisioner);
+  await server.sockets.dequeue();
+
+  unipls.close();
+
+  await expect(promise).rejects.toThrow(UniplsClosedError);
+});
+
+test('初回接続後、Provisioning が完了するまで cast() の送信は保留される', async () => {
   await using unipls = new Unipls({ url });
   const provisioner = new TestProvisioner();
 
@@ -36,7 +76,7 @@ test('初回接続後、Provisioning が完了するまで cast() の送信は�
   await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 });
 
-test('初回接続後、Provisioning が完了するまで request() の送信は遅延される', async () => {
+test('初回接続後、Provisioning が完了するまで request() の送信は保留される', async () => {
   await using unipls = new Unipls({ url });
   const provisioner = new TestProvisioner();
 
@@ -58,7 +98,7 @@ test('初回接続後、Provisioning が完了するまで request() の送信�
   await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 });
 
-test('初回接続後、Provisioning が完了するまで subscribe() の送信は遅延される', async () => {
+test('初回接続後、Provisioning が完了するまで subscribe() の送信は保留される', async () => {
   await using unipls = new Unipls({ url });
   const provisioner = new TestProvisioner();
 
@@ -82,6 +122,10 @@ test('初回接続後、Provisioning が完了するまで subscribe() の送信
   await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 });
 
-test.skip('再接続後、Provisioning が完了するまで request() の送信は遅延される', () => {
+test.skip('再接続後、Provisioning が完了するまで request() の送信は保留される', () => {
+  // TODO
+});
+
+test.skip('Provisioning の中で通信関数を呼び出すことができる', async () => {
   // TODO
 });

@@ -13,6 +13,10 @@ afterEach(() => {
   server.reset();
 });
 
+test.skip('drop 後、Reconnector は適切なコンテキストとともに呼び出される', async () => {
+  // TODO
+});
+
 test('drop 後、Reconnector が指定されていない場合は、再接続は実行されない', async () => {
   await using unipls = new Unipls({ url });
 

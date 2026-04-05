@@ -34,6 +34,10 @@ test('request() は query を送信した後、selector に合致する次にメ
   await expect(promise).resolves.toBe('pong');
 });
 
+test.skip('query を送信するよりも前に受け取ったメッセージは無視される', async () => {
+  // TODO
+});
+
 test('timeout した場合、 UniplsTimeoutError で reject する', async () => {
   await using unipls = new Unipls({ url });
 
@@ -155,7 +159,7 @@ test('reconnector が与えられていて、リトライ戦略に never が指�
   await expect(promise).rejects.toThrow(UniplsDroppedError);
 });
 
-test('query が関数形式の場合、再送時にペイロードは再評価される', async () => {
+test('query が関数形式の場合、再送時に query は再評価される', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 

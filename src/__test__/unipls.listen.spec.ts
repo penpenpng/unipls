@@ -92,6 +92,27 @@ test('unsubscribe によって onUnsubscribed と finally がトリガーされ�
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
+test('signal が abort されると reason: aborted で onFatalError がトリガーされる', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
+  const controller = new AbortController();
+  const sub = new TestSubscriber();
+  unipls.listen({
+    ...sub,
+    signal: controller.signal,
+  });
+
+  controller.abort(new Error('cancelled'));
+
+  await expect(sub.termination).rejects.toThrow('cancelled');
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'aborted',
+  });
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
+});
+
 test('Unipls を close() すると reason: closed で onFatalError がトリガーされる', async () => {
   await using unipls = new Unipls<string, string>({ url });
 

@@ -29,3 +29,35 @@ test('deserializer が指定されたとき、受信したメッセージはデ�
   await expect(sub.messages.dequeue()).resolves.toBe(2);
   await expect(sub.messages.dequeue()).resolves.toBe(3);
 });
+
+test.skip('serializer が指定されたとき、送信するメッセージはシリアライズされる', async () => {
+  // TODO
+});
+
+test.skip('デシリアライズに失敗したとき、next() は reject される', async () => {
+  // TODO
+});
+
+test.skip('デシリアライズに失敗したとき、listen() は onError をトリガーする', async () => {
+  // TODO
+});
+
+test.skip('デシリアライズに失敗したとき、request() は reject される', async () => {
+  // TODO
+});
+
+test.skip('デシリアライズに失敗したとき、subscribe() は onError をトリガーする', async () => {
+  // TODO
+});
+
+test.skip('シリアライズに失敗したとき、cast() は reject される', async () => {
+  // TODO
+});
+
+test.skip('シリアライズに失敗したとき、request() は reject される', async () => {
+  // TODO
+});
+
+test.skip('デシリアライズに失敗したとき、subscribe() は onFatalError をトリガーする', async () => {
+  // TODO
+});

@@ -40,6 +40,10 @@ test('subscribe() は query を送信した後、selector に合致するメッ�
   await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
 });
 
+test.skip('query を送信するよりも前に受け取ったメッセージは無視される', async () => {
+  // TODO
+});
+
 test('terminator オプションがメッセージの終端を定義する', async () => {
   await using unipls = new Unipls<string, string>({ url });
 
@@ -123,7 +127,11 @@ test('Unipls を close() すると onFatalError がトリガーされる', async
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('signal が abort されると reason: aborted で onFatalError がトリガーする', async () => {
+test.skip('timeout した場合、onFatalError がトリガーされる', async () => {
+  // TODO
+});
+
+test('signal が abort されると reason: aborted で onFatalError がトリガーされる', async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -144,7 +152,7 @@ test('signal が abort されると reason: aborted で onFatalError がトリ�
   });
 });
 
-test('close() 時に UniplsClosedError で reason: closed で onFatalError がトリガーする', async () => {
+test('close() 時に UniplsClosedError で reason: closed で onFatalError がトリガーされる', async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -163,7 +171,7 @@ test('close() 時に UniplsClosedError で reason: closed で onFatalError が�
   });
 });
 
-test('reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
+test('reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーされる', async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -230,7 +238,7 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
   await expect(sub.messages.dequeue()).resolves.toBe('pong');
 });
 
-test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
+test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に reason: dropped で onFatalError がトリガーされる', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -252,4 +260,8 @@ test('reconnector が与えられていて、リトライ戦略に never が指�
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
   await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
   await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
+});
+
+test.skip('query が関数形式の場合、再送時に query は再評価される', async () => {
+  // TODO
 });
