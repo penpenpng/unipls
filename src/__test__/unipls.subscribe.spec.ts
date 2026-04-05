@@ -123,14 +123,14 @@ test('Unipls を close() すると onFatalError がトリガーされる', async
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('signal が abort されると reject する', async () => {
+test('signal が abort されると reason: aborted で onFatalError がトリガーする', async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
 
   const sub = new TestSubscriber();
   const controller = new AbortController();
-  const promise = unipls.subscribe({
+  unipls.subscribe({
     ...sub,
     ...query,
     signal: controller.signal,
@@ -138,36 +138,36 @@ test('signal が abort されると reject する', async () => {
 
   controller.abort(new Error('cancelled'));
 
-  await expect(promise).rejects.toThrow('cancelled');
+  await expect(sub.termination).rejects.toThrow('cancelled');
   await expect(sub.finalization).resolves.toMatchObject({
     reason: 'aborted',
   });
 });
 
-test('close() 時に UniplsClosedError で reject する', async () => {
+test('close() 時に UniplsClosedError で reason: closed で onFatalError がトリガーする', async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
 
   const sub = new TestSubscriber();
-  const promise = unipls.request({
+  unipls.subscribe({
     ...sub,
     ...query,
   });
 
   unipls.close();
 
-  await expect(promise).rejects.toThrow(UniplsClosedError);
+  await expect(sub.termination).rejects.toThrow(UniplsClosedError);
   await expect(sub.finalization).resolves.toMatchObject({
     reason: 'closed',
   });
 });
 
-test('reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する', async () => {
+test('reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
   // TODO
 });
 
-test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する', async () => {
+test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
   // TODO
 });
 
@@ -219,7 +219,7 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
   await expect(sub.messages.dequeue()).resolves.toBe('pong');
 });
 
-test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に UniplsDroppedError で reject する', async () => {
+test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -230,7 +230,7 @@ test('reconnector が与えられていて、リトライ戦略に never が指�
   unipls.subscribe({
     ...sub,
     ...query,
-    retry: 're-request',
+    retry: 'never',
   });
 
   unipls.drop();

@@ -120,10 +120,12 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
   unipls.drop();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('pong');
-
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
   await expect(socket2.inbox.dequeue()).resolves.toBe('ping');
+
+  // We must check twice pings before sending 'pong' because receiving 'pong' stops `request()` retry.
+  socket2.send('pong');
+
   await expect(promise).resolves.toBe('pong');
 });
 
@@ -166,9 +168,11 @@ test('query が関数形式の場合、再送時にペイロードは再評価�
   unipls.drop();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('pong');
-
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping-1');
   await expect(socket2.inbox.dequeue()).resolves.toBe('ping-2');
+
+  // We must check twice pings before sending 'pong' because receiving 'pong' stops `request()` retry.
+  socket2.send('pong');
+
   await expect(promise).resolves.toBe('pong');
 });
