@@ -1,3 +1,3 @@
-export * from './drop-detector.ts';
-export * from './heartbeat-drop-detector.ts';
-export * from './network-drop-detector.ts';
+export * from './drop-detector';
+export * from './heartbeat-drop-detector';
+export * from './network-drop-detector';

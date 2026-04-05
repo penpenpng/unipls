@@ -1,6 +1,6 @@
 import { UniplsTimeoutError } from '../errors.ts';
 import type { UniplsMessageFactory } from '../unipls.interface.ts';
-import type { DropDetector, DropDetectorContext } from './index.ts';
+import type { DropDetectorContext, UniplsDropDetector } from './drop-detector';
 
 export interface HeartbeatOptions<TInput, TOutput> {
   /** ping 送信間隔 (ms) */
@@ -32,7 +32,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 export class HeartbeatDropDetector<TInput, TOutput>
-  implements DropDetector<TInput, TOutput>
+  implements UniplsDropDetector<TInput, TOutput>
 {
   #options: HeartbeatOptions<TInput, TOutput>;
 

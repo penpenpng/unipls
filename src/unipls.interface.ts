@@ -1,14 +1,14 @@
 import { type UniplsSubscriber } from './async-results.ts';
-import type { DropDetector } from './drop-detector';
+import type { UniplsDropDetector } from './drop-detector';
+import type {
+  UniplsReconnectEvent,
+  UniplsReconnector,
+} from './reconnector/reconnector.ts';
 import type {
   SessionId,
   WebSocketConstructor,
   WebSocketData,
 } from './types.ts';
-import type {
-  UniplsReconnectEvent,
-  UniplsReconnector,
-} from './unipls-reconnector.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
 
@@ -26,7 +26,7 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   /** 再接続戦略を定義します。省略した場合は再接続を行いません。 */
   reconnector?: UniplsReconnector;
   /** 切断検知プラグインのリストを指定します。各プラグインはプロビジョニング完了後に起動し、切断を検知した際に drop を発生させます。 */
-  dropDetectors?: DropDetector<TInput, TOutput>[];
+  dropDetectors?: UniplsDropDetector<TInput, TOutput>[];
 }
 
 /**

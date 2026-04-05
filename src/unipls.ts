@@ -4,11 +4,11 @@ import type { DropDetectorContext } from './drop-detector';
 import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
 import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
 import type { EventBus } from './event-bus';
-import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import type {
   UniplsReconnectEvent,
   UniplsReconnector,
-} from './unipls-reconnector.ts';
+} from './reconnector/reconnector.ts';
+import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import { UniplsSessionManager } from './unipls-session.ts';
 import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {

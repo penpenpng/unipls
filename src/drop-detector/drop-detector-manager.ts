@@ -1,11 +1,11 @@
-import type { DropDetector, DropDetectorContext } from './index.ts';
+import type { DropDetectorContext, UniplsDropDetector } from './drop-detector';
 
-/** {@link DropDetector} のライフサイクルを管理するクラスです。 */
+/** {@link UniplsDropDetector} のライフサイクルを管理するクラスです。 */
 export class DropDetectorManager<TInput, TOutput> {
-  #detectors: readonly DropDetector<TInput, TOutput>[];
+  #detectors: readonly UniplsDropDetector<TInput, TOutput>[];
   #disposes: (() => void)[] = [];
 
-  constructor(detectors: readonly DropDetector<TInput, TOutput>[]) {
+  constructor(detectors: readonly UniplsDropDetector<TInput, TOutput>[]) {
     this.#detectors = detectors;
   }
 

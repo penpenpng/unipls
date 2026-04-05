@@ -1,9 +1,9 @@
-import type { SessionId } from './types.ts';
 import type {
   ReconnectionAttempt,
   ReconnectionContext,
   UniplsReconnectEvent,
-} from './unipls-reconnector.ts';
+} from './reconnector/reconnector.ts';
+import type { SessionId } from './types.ts';
 
 /** 1 回の open() 呼び出しに対応するセッションスコープの再接続状態を表します。 */
 class UniplsSectionState {

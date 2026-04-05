@@ -1,44 +1,42 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { Unipls } from '..';
 import {
   AwaitableQueue,
   createMockServer,
   immediateReconnector,
-  ManualDropDetector,
+  TestDropDetector,
 } from './test-utils';
 
 const url = 'ws://localhost:8080';
-const mock = createMockServer(url);
+const server = createMockServer(url);
 
 afterEach(() => {
-  mock.reset();
+  server.reset();
 });
 
 test('open() 完了後に setup() が呼ばれる', async () => {
-  const detector = new ManualDropDetector();
+  const detector = new TestDropDetector();
   const unipls = new Unipls({ url, dropDetectors: [detector] });
 
   await unipls.open();
-  await mock.sockets.dequeue();
+  await server.sockets.dequeue();
 
-  // open() 完了時点で setup() は既に呼ばれているので即 resolve する
-  await expect(detector.setups.dequeue()).resolves.toBeDefined();
+  expect(detector.setupCount).toBe(1);
 
   await unipls.close();
 });
 
 test('ctx.drop() を呼ぶと dropped イベントが発生する', async () => {
-  const detector = new ManualDropDetector();
+  const detector = new TestDropDetector();
   const drops = new AwaitableQueue<void>();
   const unipls = new Unipls({ url, dropDetectors: [detector] });
 
   unipls.on('dropped', () => drops.enqueue());
 
   await unipls.open();
-  await mock.sockets.dequeue();
+  await server.sockets.dequeue();
 
-  const ctx = await detector.setups.dequeue();
-  ctx.drop();
+  detector.drop();
 
   await expect(drops.dequeue()).resolves.toBeUndefined();
 
@@ -46,37 +44,35 @@ test('ctx.drop() を呼ぶと dropped イベントが発生する', async () => 
 });
 
 test('切断時に dispose が呼ばれる', async () => {
-  const detector = new ManualDropDetector();
+  const detector = new TestDropDetector();
   const unipls = new Unipls({ url, dropDetectors: [detector] });
 
   await unipls.open();
-  const server = await mock.sockets.dequeue();
+  const socket = await server.sockets.dequeue();
 
-  await detector.setups.dequeue();
+  socket.close(3001);
 
-  server.close(3001);
-
-  await expect(detector.disposes.dequeue()).resolves.toBeUndefined();
+  await vi.waitFor(() => {
+    expect(detector.cleanupCount).toBe(1);
+  });
 
   await unipls.close();
 });
 
 test('close() 時に dispose が呼ばれる', async () => {
-  const detector = new ManualDropDetector();
+  const detector = new TestDropDetector();
   const unipls = new Unipls({ url, dropDetectors: [detector] });
 
   await unipls.open();
-  await mock.sockets.dequeue();
-
-  await detector.setups.dequeue();
+  await server.sockets.dequeue();
 
   await unipls.close();
 
-  await expect(detector.disposes.dequeue()).resolves.toBeUndefined();
+  expect(detector.cleanupCount).toBe(1);
 });
 
 test('再接続後に setup() が再度呼ばれる', async () => {
-  const detector = new ManualDropDetector();
+  const detector = new TestDropDetector();
   const unipls = new Unipls({
     url,
     reconnector: immediateReconnector,
@@ -84,15 +80,15 @@ test('再接続後に setup() が再度呼ばれる', async () => {
   });
 
   await unipls.open();
-  const server = await mock.sockets.dequeue();
+  const socket = await server.sockets.dequeue();
 
-  await detector.setups.dequeue(); // 1 回目の setup
+  socket.close(3001);
 
-  server.close(3001);
+  await server.sockets.dequeue();
 
-  await mock.sockets.dequeue(); // 再接続後のソケット
-
-  await expect(detector.setups.dequeue()).resolves.toBeDefined(); // 2 回目の setup
+  await vi.waitFor(() => {
+    expect(detector.setupCount).toBe(2);
+  });
 
   await unipls.close();
 });

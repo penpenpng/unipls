@@ -1,26 +1,40 @@
 import type {
-  DropDetector,
   DropDetectorContext,
+  UniplsDropDetector,
 } from '../../drop-detector/index.ts';
-import { AwaitableQueue } from './awaitable-queue.ts';
+import { AwaitableQueue } from './awaitable-queue';
 
 /**
- * テスト用の手動 {@link DropDetector} です。
+ * テスト用の手動 {@link UniplsDropDetector} です。
  * `setups` キューから取得した {@link DropDetectorContext} を使って任意のタイミングで drop を発生させられます。
  */
-export class ManualDropDetector<TInput = unknown, TOutput = unknown>
-  implements DropDetector<TInput, TOutput>
+export class TestDropDetector<TInput = unknown, TOutput = unknown>
+  implements UniplsDropDetector<TInput, TOutput>
 {
-  /** setup() が呼ばれるたびにコンテキストがエンキューされます。 */
-  readonly setups = new AwaitableQueue<DropDetectorContext<TInput, TOutput>>();
+  readonly contexts = new AwaitableQueue<
+    DropDetectorContext<TInput, TOutput>
+  >();
 
-  /** dispose 関数が呼ばれるたびにエンキューされます。 */
-  readonly disposes = new AwaitableQueue<void>();
+  private ctx?: DropDetectorContext<TInput, TOutput>;
+  setupCount = 0;
+  cleanupCount = 0;
 
   setup(ctx: DropDetectorContext<TInput, TOutput>): () => void {
-    this.setups.enqueue(ctx);
+    this.ctx = ctx;
+    this.contexts.enqueue(ctx);
+
+    this.setupCount++;
+
     return () => {
-      this.disposes.enqueue();
+      this.cleanupCount++;
     };
+  }
+
+  drop() {
+    this.ctx?.drop();
+  }
+
+  dequeueContext() {
+    return this.contexts.dequeue();
   }
 }

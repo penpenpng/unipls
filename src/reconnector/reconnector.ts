@@ -1,4 +1,8 @@
-import type { SessionId } from './types.ts';
+import type { SessionId } from '../types.ts';
+
+export interface UniplsReconnector {
+  reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
+}
 
 export interface ReconnectionContext {
   /** 現在のセッションを表します。 */
@@ -32,8 +36,4 @@ export interface UniplsReconnectEvent {
 
   /** このセッションで行われた再接続の試行履歴を表します。 */
   sessionAttempts: readonly ReconnectionAttempt[];
-}
-
-export interface UniplsReconnector {
-  reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
 }
