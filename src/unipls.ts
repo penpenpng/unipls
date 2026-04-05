@@ -292,8 +292,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         .then(() => {
           activeRequest = query;
           activeSelector = selector;
-          // TODO: listening が true のときだけ resolve するオプションがあってもいい
-          // listening = true;
         })
         .catch((err) => {
           if (err instanceof UniplsClosedError) {
@@ -351,11 +349,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       retryRegistered = true;
 
       const setupRetry = Unipls.getRetrySetupFunction(params.retry);
-      setupRetry({
-        onReconnected,
-        data: activeRequest,
-        selector: activeSelector,
-      });
+
+      try {
+        setupRetry({
+          onReconnected,
+          data: activeRequest,
+          selector: activeSelector,
+        });
+      } catch (err) {
+        result.reject(err ?? new UniplsDroppedError());
+      }
+    });
+
+    events.once('closed', () => {
+      result.reject(new UniplsClosedError());
     });
 
     return result.promise;
