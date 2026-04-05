@@ -64,15 +64,15 @@ test('close() 時に UniplsClosedError で reject する', async () => {
   await expect(promise).rejects.toThrow(UniplsClosedError);
 });
 
-test(
-  'reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する',
-);
+test('reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する', async () => {
+  // TODO
+});
 
 // TODO: request などにあわせて、stopOnDropped の代わりに `retry: 'keep-listening' | 'never'` とする
-test(
-  'reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する',
-);
+test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する', async () => {
+  // TODO
+});
 
-test(
-  'reconnector が与えられている場合、next() は再接続後もメッセージを待機し続ける',
-);
+test('reconnector が与えられている場合、next() は再接続後もメッセージを待機し続ける', async () => {
+  // TODO
+});

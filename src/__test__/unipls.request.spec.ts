@@ -75,13 +75,13 @@ test('close() 時に UniplsClosedError で reject する', async () => {
   await expect(promise).rejects.toThrow(UniplsClosedError);
 });
 
-test(
-  'reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する',
-);
+test('reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する', async () => {
+  // TODO
+});
 
-test(
-  'reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する',
-);
+test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する', async () => {
+  // TODO
+});
 
 test('reconnector が与えられていて、リトライ戦略に keep-listening が指定されている場合、再接続後に query の再送は行われないが、レスポンスの待機は継続する', async () => {
   const reconnector = new ImmediateReconnector();

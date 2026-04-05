@@ -12,7 +12,7 @@ import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import { UniplsSessionManager } from './unipls-session.ts';
 import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
 import type {
-  UniplsCastOptions,
+  UniplsCastParams,
   UniplsListenOptions,
   UniplsMessageFactory,
   UniplsNextParams,
@@ -223,15 +223,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @throws {UniplsClosedError}
    */
-  cast(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
-    return this.#cast(data, options, false);
+  cast(params: UniplsCastParams<TInput>): Promise<void> {
+    return this.#cast(params, false);
   }
 
   /**
    * {@link Unipls.cast|unipls.cast()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
    */
-  castForce(data: TInput, options?: UniplsCastOptions<TInput>): Promise<void> {
-    return this.#cast(data, options, true);
+  castForce(params: UniplsCastParams<TInput>): Promise<void> {
+    return this.#cast(params, true);
   }
 
   /**
@@ -275,14 +275,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let activeSelector = params.selector;
 
     const request = (
-      payload: UniplsMessageFactory<TInput>,
+      query: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
       if (result.resulted) {
         return;
       }
 
-      const evaluatedPayload = Unipls.#evaluatePayload(payload);
+      const evaluatedPayload = Unipls.#evaluateQuery(query);
 
       this.#socket
         .enqueue(evaluatedPayload, {
@@ -290,7 +290,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           signal: result.signal,
         })
         .then(() => {
-          activeRequest = payload;
+          activeRequest = query;
           activeSelector = selector;
           // TODO: listening が true のときだけ resolve するオプションがあってもいい
           // listening = true;
@@ -361,16 +361,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
-  #cast(
-    data: TInput,
-    options: UniplsCastOptions<TInput> | undefined,
-    force: boolean,
-  ): Promise<void> {
+  #cast(params: UniplsCastParams<TInput>, force: boolean): Promise<void> {
     if (this.state === 'closed') {
       throw new UniplsClosedError();
     }
-    if (options?.signal?.aborted) {
-      throw options.signal.reason;
+    if (params.signal?.aborted) {
+      throw params.signal.reason;
     }
 
     const events = this.events.spawnEventBusView();
@@ -378,7 +374,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       finally: () => {
         events.dispose();
       },
-      signal: options?.signal,
+      signal: params.signal,
     });
 
     const sendOnce = (payload: TInput) => {
@@ -396,7 +392,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.state === 'provisioning' ||
       this.state === 'open'
     ) {
-      sendOnce(data);
+      sendOnce(Unipls.#evaluateQuery(params.query));
     }
 
     events.on('dropped', () => {
@@ -543,14 +539,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let activeSelector = params.selector;
 
     const request = (
-      payload: UniplsMessageFactory<TInput>,
+      query: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
       if (results.resulted) {
         return;
       }
 
-      const evaluatedPayload = Unipls.#evaluatePayload(payload);
+      const evaluatedPayload = Unipls.#evaluateQuery(query);
 
       this.#socket
         .enqueue(evaluatedPayload, {
@@ -558,7 +554,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           signal: results.signal,
         })
         .then(() => {
-          activeRequest = payload;
+          activeRequest = query;
           activeSelector = selector;
         })
         .catch((err) => {
@@ -677,13 +673,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return retry;
   }
 
-  static #evaluatePayload<TInput>(
-    payload: UniplsMessageFactory<TInput>,
-  ): TInput {
-    if (typeof payload === 'function') {
-      return (payload as () => TInput)();
+  static #evaluateQuery<TInput>(query: UniplsMessageFactory<TInput>): TInput {
+    if (typeof query === 'function') {
+      return (query as () => TInput)();
     }
-    return payload;
+    return query;
   }
 
   static #processMessage<TOutput>({

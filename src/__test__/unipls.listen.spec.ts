@@ -118,14 +118,14 @@ test('Unipls を close() すると onFatalError がトリガーされる', async
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test(
-  'reconnector が与えられていない場合、drop 時に onFatalError がトリガーされる',
-);
+test('reconnector が与えられていない場合、drop 時に onFatalError がトリガーされる', async () => {
+  // TODO
+});
 
-test(
-  'reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に onFatalError がトリガーされる',
-);
+test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に onFatalError がトリガーされる', async () => {
+  // TODO
+});
 
-test(
-  'reconnector が与えられている場合、listen() は再接続後もメッセージを監視し続ける',
-);
+test('reconnector が与えられている場合、listen() は再接続後もメッセージを監視し続ける', async () => {
+  // TODO
+});

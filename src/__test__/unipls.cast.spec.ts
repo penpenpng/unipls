@@ -4,7 +4,7 @@ import { createMockServer } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const server = createMockServer(url);
-const query = 'ping';
+const query = { query: 'ping' };
 
 afterEach(() => {
   server.reset();

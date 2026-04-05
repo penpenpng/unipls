@@ -1,11 +1,9 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { Unipls, type WebSocketData } from '..';
 import { createMockServer, TestSubscriber } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const mock = createMockServer(url);
-
-beforeEach(async () => {});
 
 afterEach(async () => {
   mock.reset();

@@ -19,7 +19,9 @@ test('Unipls が open() され、provisioning が完了したとき、DropDetect
   expect(detector.setupCount).toBe(1);
 });
 
-test('Unipls が close() されたとき、DropDetector が cleanup される');
+test('Unipls が close() されたとき、DropDetector が cleanup される', async () => {
+  // TODO
+});
 
 test('再接続され、provisioning が完了したとき、DropDetector が setup される', async () => {
   const detector = new TestDropDetector();
@@ -31,8 +33,10 @@ test('再接続され、provisioning が完了したとき、DropDetector が se
   expect(detector.setupCount).toBe(1);
 });
 
-test('DropDetector が drop を検出したとき、dropped イベントが発火する');
+test('DropDetector が drop を検出したとき、dropped イベントが発火する', async () => {
+  // TODO
+});
 
-test(
-  '同一の接続に対して複数の DropDetector が drop を検出したとしても、dropped イベントは一度だけ発火する',
-);
+test('同一の接続に対して複数の DropDetector が drop を検出したとしても、dropped イベントは一度だけ発火する', async () => {
+  // TODO
+});
