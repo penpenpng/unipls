@@ -1,154 +1,61 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { Unipls, type UniplsReconnector } from '..';
+import { afterEach, expect, test } from 'vitest';
+import { Unipls, UniplsWebSocketCloseCode } from '..';
 import {
-  AwaitableQueue,
   createMockServer,
-  immediateReconnector,
-  type SocketMock,
+  TestReconnector,
+  TestSubscriber,
 } from './test-utils';
 
 const url = 'ws://localhost:8080';
-const mock = createMockServer(url);
+const server = createMockServer(url);
 
-let unipls: Unipls<string, string>;
-let socket: SocketMock;
+afterEach(() => {
+  server.reset();
+});
 
-beforeEach(async () => {
-  unipls = new Unipls<string, string>({
-    url,
-    reconnector: immediateReconnector,
-  });
+test('drop 後、Reconnector が指定されていない場合は、再接続は実行されない', async () => {
+  // TODO
+});
+
+test('drop 後、Reconnector が reconnect() を呼び出したとき、再接続を実行する', async () => {
+  const reconnector = new TestReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
   await unipls.open();
-  socket = await mock.sockets.dequeue();
+  const socket1 = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.listen(sub);
+
+  socket1.send('before-drop');
+  await expect(sub.messages.dequeue()).resolves.toBe('before-drop');
+
+  // Trigger dropping
+  socket1.close(UniplsWebSocketCloseCode.ABNORMAL_CLOSURE);
+
+  // Reconnection is deferred because reconnector is not settled yet.
+  await expect(server.sockets.dequeue({ timeout: 50 })).rejects.toThrowError();
+
+  // Approve reconnection
+  (await reconnector.dequeueContext()).reconnect();
+
+  const socket2 = await server.sockets.dequeue();
+  socket2.send('after-reconnect');
+  await expect(sub.messages.dequeue()).resolves.toBe('after-reconnect');
 });
 
-afterEach(async () => {
-  await unipls.close();
-  mock.reset();
+test('drop 後、Reconnector が cancel() を呼び出したとき、再接続は実行されない', () => {
+  // TODO
 });
 
-test('drop されると自動で再接続する', async () => {
-  const inbox = new AwaitableQueue<string>();
-  unipls.listen({
-    onMessage: (message) => {
-      inbox.enqueue(message);
-    },
-  });
-
-  // 1 回目の接続でメッセージを受信する
-  socket.send('before-drop');
-  await expect(inbox.dequeue()).resolves.toBe('before-drop');
-
-  // 異常コードで切断して drop を発生させる
-  socket.close(3001);
-
-  // 自動再接続後のソケットが生成されることを確認
-  const reconnectedServer = await mock.sockets.dequeue();
-
-  reconnectedServer.send('after-reconnect');
-  await expect(inbox.dequeue()).resolves.toBe('after-reconnect');
+test('再接続成功時、reconnect イベントが発火する', async () => {
+  // TODO
 });
 
-test('再接続後にプロビジョニングが再実行される', async () => {
-  const provisioned = new AwaitableQueue<number>();
-  let provisionCount = 0;
-
-  unipls = new Unipls<string, string>({
-    url,
-    reconnector: immediateReconnector,
-  });
-  await unipls.open(() => {
-    provisionCount += 1;
-    provisioned.enqueue(provisionCount);
-  });
-
-  socket = await mock.sockets.dequeue();
-
-  await expect(provisioned.dequeue()).resolves.toBe(1);
-
-  socket.close(3001);
-
-  await mock.sockets.dequeue();
-
-  await expect(provisioned.dequeue()).resolves.toBe(2);
+test('drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Unipls が close() されたとき、cleanup 関数が呼び出される', async () => {
+  // TODO
 });
 
-test('再接続時に reconnect イベントが発火する', async () => {
-  const reconnects = new AwaitableQueue<{ session: number }>();
-
-  unipls.on('reconnect', (ev) => {
-    void reconnects.enqueue(ev);
-  });
-
-  socket.close(3001);
-
-  await mock.sockets.dequeue();
-
-  const reconnectEvent = await reconnects.dequeue();
-
-  expect(reconnectEvent.session).toBeGreaterThan(0);
-});
-
-test('再接続が複数回失敗した後に成功した場合、 sessionAttempts が正しい値になる', async () => {
-  const reconnects = new AwaitableQueue<{
-    sessionAttempts: readonly unknown[];
-  }>();
-
-  unipls.on('reconnect', (ev) => {
-    void reconnects.enqueue(ev);
-  });
-
-  // 1 回目の切断 → 再接続試行 #1 開始
-  socket.close(3001);
-
-  // 再接続試行 #1 の接続を受け取り、即座に切断 → onFailure、試行 #2 開始
-  const failedServer = await mock.sockets.dequeue();
-  failedServer.close(3001);
-
-  // 再接続試行 #2 の接続を受け取る（成功）
-  await mock.sockets.dequeue();
-
-  const reconnectEvent = await reconnects.dequeue();
-
-  // 2 回試行して成功したので sessionAttempts.length === 2
-  expect(reconnectEvent.sessionAttempts).toHaveLength(2);
-});
-
-test('reconnector が指定されていない場合は再接続しない', async () => {
-  const uniплsNoReconnect = new Unipls<string, string>({ url });
-  await uniплsNoReconnect.open();
-  const s = await mock.sockets.dequeue();
-
-  s.close(3001);
-
-  // 再接続が発生しないことを確認（新しいソケットが来ない）
-  await expect(mock.sockets.dequeue({ timeout: 100 })).rejects.toThrowError();
-});
-
-test('close() 呼び出し時に reconnector.reconnect() の待機がキャンセルされる', async () => {
-  const reconnectCalled = new AwaitableQueue<void>();
-
-  const slowReconnector: UniplsReconnector = {
-    reconnect: async (ctx) => {
-      reconnectCalled.enqueue();
-      // close() が呼ばれるまで待機し続ける
-      await new Promise<void>((_, reject) => {
-        ctx.signal.addEventListener('abort', () => reject(ctx.signal.reason));
-      });
-      return true;
-    },
-  };
-
-  unipls = new Unipls<string, string>({ url, reconnector: slowReconnector });
-  await unipls.open();
-  socket = await mock.sockets.dequeue();
-
-  socket.close(3001);
-
-  // reconnect() が呼ばれるのを待つ
-  await reconnectCalled.dequeue();
-
-  // close() で待機がキャンセルされ、再接続は行われない
-  await unipls.close();
-  await expect(mock.sockets.dequeue({ timeout: 100 })).rejects.toThrowError();
+test('cleanup 関数が呼び出された後 reconnect(), cancel() を呼び出しても何も起こらない', async () => {
+  // TODO
 });

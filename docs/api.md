@@ -96,7 +96,7 @@ WebSocket 接続を異常終了コードで強制切断します。`close()` と
 | `selector` | `(data: TOutput) => boolean` | 購読対象のメッセージを選別する述語関数。省略時はすべてのメッセージが対象 |
 | `terminator` | `(data: TOutput) => boolean` | 購読の終端となるメッセージを識別する述語関数。条件を満たした最初のメッセージで購読が終了する |
 | `signal` | `AbortSignal` | 購読を中断するための `AbortSignal` |
-| `stopListeningOnDropped` | `boolean` | drop 発生時に購読を終了するかどうか。`false`（デフォルト）の場合、再接続後も購読を継続する |
+| `stopOnDropped` | `boolean` | drop 発生時に購読を終了するかどうか。`false`（デフォルト）の場合、再接続後も購読を継続する |
 
 ##### `UniplsSubscriber<TOutput>`
 
@@ -123,7 +123,7 @@ WebSocket 接続を異常終了コードで強制切断します。`close()` と
 | `'terminated'` | `terminator` 条件を満たすメッセージを受信した |
 | `'unsubscribed'` | `unsubscribe()` が呼ばれた |
 | `'closed'` | `close()` で切断された |
-| `'dropped'` | drop が発生した（`stopListeningOnDropped: true` の場合） |
+| `'dropped'` | drop が発生した（`stopOnDropped: true` の場合） |
 | `'fatal-error'` | その他の致命的なエラー |
 
 ---

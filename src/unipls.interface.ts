@@ -35,7 +35,21 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
 export type UniplsProvisioner<
   TInput = WebSocketData,
   TOutput = WebSocketData,
+> =
+  | UniplsProvisionerFunction<TInput, TOutput>
+  | UniplsProvisionerObject<TInput, TOutput>;
+
+export type UniplsProvisionerFunction<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
 > = (ctx: UniplsProvisioningContext<TInput, TOutput>) => Promise<void> | void;
+
+export interface UniplsProvisionerObject<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> {
+  setup: UniplsProvisionerFunction<TInput, TOutput>;
+}
 
 /**
  * {@link UniplsProvisioner} の引数で、{@link Unipls} の初期化を行うためのコンテキストを表します。
@@ -101,7 +115,7 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
   signal?: AbortSignal;
 
   /** レスポンス待機中に予期しない切断が発生した場合、再接続後もレスポンスを待機するかを指定します。 */
-  stopListeningOnDisconnected?: boolean;
+  stopOnDropped?: boolean;
 }
 
 /** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
@@ -116,7 +130,7 @@ export interface UniplsListenOptions<TOutput = WebSocketData> {
   signal?: AbortSignal;
 
   /** 購読中に予期しない切断が発生した場合、再接続後も購読を継続するかを指定します。 */
-  stopListeningOnDropped?: boolean;
+  stopOnDropped?: boolean;
 }
 
 /**

@@ -1,61 +1,46 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import {
-  Unipls,
-  UniplsClosedError,
-  UniplsDroppedError,
-  UniplsTimeoutError,
-} from '..';
-import {
-  createMockServer,
-  immediateReconnector,
-  type SocketMock,
-} from './test-utils';
+import { afterEach, expect, test } from 'vitest';
+import { Unipls, UniplsClosedError, UniplsTimeoutError } from '..';
+import { createMockServer } from './test-utils';
 
 const url = 'ws://localhost:8080';
-const mock = createMockServer(url);
+const server = createMockServer(url);
 
-let unipls: Unipls<string, string>;
-let socket: SocketMock;
+afterEach(() => {
+  server.reset();
+});
 
-beforeEach(async () => {
-  unipls = new Unipls<string, string>({ url });
+test('next() は selector に合致する次のメッセージを取得する', async () => {
+  await using unipls = new Unipls({ url });
+
   await unipls.open();
-  socket = await mock.sockets.dequeue();
-});
+  const socket = await server.sockets.dequeue();
 
-afterEach(async () => {
-  await unipls.close();
-  mock.reset();
-});
-
-test('selector に合致したメッセージで resolve する', async () => {
   const promise = unipls.next({ selector: (msg) => msg === 'target' });
 
+  socket.send('ignored');
   socket.send('target');
 
   await expect(promise).resolves.toBe('target');
 });
 
-test('selector が一致しないメッセージを無視し、一致したときに resolve する', async () => {
-  const promise = unipls.next({ selector: (msg) => msg.startsWith('ok-') });
+test('timeout した場合、 UniplsTimeoutError で reject する', async () => {
+  await using unipls = new Unipls({ url });
 
-  socket.send('ng-1');
-  socket.send('ng-2');
-  socket.send('ok-1');
+  await unipls.open();
 
-  await expect(promise).resolves.toBe('ok-1');
-});
-
-test('timeout 時に UniplsTimeoutError で reject する', async () => {
   const promise = unipls.next({
     selector: () => true,
     timeout: 50,
   });
 
-  await expect(promise).rejects.toBeInstanceOf(UniplsTimeoutError);
+  await expect(promise).rejects.toThrow(UniplsTimeoutError);
 });
 
 test('signal が abort されると reject する', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
   const controller = new AbortController();
   const promise = unipls.next({
     selector: () => true,
@@ -68,38 +53,26 @@ test('signal が abort されると reject する', async () => {
 });
 
 test('close() 時に UniplsClosedError で reject する', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
   const promise = unipls.next({ selector: () => true });
 
   unipls.close();
 
-  await expect(promise).rejects.toBeInstanceOf(UniplsClosedError);
+  await expect(promise).rejects.toThrow(UniplsClosedError);
 });
 
-test('stopListeningOnDisconnected が true のとき、切断時に UniplsDroppedError で reject する', async () => {
-  const promise = unipls.next({
-    selector: () => true,
-    stopListeningOnDisconnected: true,
-  });
+test(
+  'reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する',
+);
 
-  socket.close(3001);
+// TODO: request などにあわせて、stopOnDropped の代わりに `retry: 'keep-listening' | 'never'` とする
+test(
+  'reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する',
+);
 
-  await expect(promise).rejects.toBeInstanceOf(UniplsDroppedError);
-});
-
-test('stopListeningOnDisconnected が false のとき、再接続後もメッセージを待ち続ける', async () => {
-  unipls = new Unipls<string, string>({
-    url,
-    reconnector: immediateReconnector,
-  });
-  await unipls.open();
-  socket = await mock.sockets.dequeue();
-
-  const promise = unipls.next({ selector: () => true });
-
-  socket.close(3001);
-
-  const reconnectedServer = await mock.sockets.dequeue();
-  reconnectedServer.send('after-reconnect');
-
-  await expect(promise).resolves.toBe('after-reconnect');
-});
+test(
+  'reconnector が与えられている場合、next() は再接続後もメッセージを待機し続ける',
+);

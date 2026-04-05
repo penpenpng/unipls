@@ -146,4 +146,5 @@ export type SubscriptionEndReason =
   | 'dropped'
   | 'unsubscribed'
   | 'terminated'
+  | 'aborted'
   | 'fatal-error';

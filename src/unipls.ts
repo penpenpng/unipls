@@ -95,6 +95,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return this.#socket.close();
   }
 
+  async [Symbol.asyncDispose]() {
+    await this.close();
+  }
+
   drop(): void {
     return this.#socket.drop();
   }
@@ -135,7 +139,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      if (params.stopListeningOnDisconnected) {
+      if (params.stopOnDropped) {
         result.reject(new UniplsDroppedError());
       }
     });
@@ -201,7 +205,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      if (params.stopListeningOnDropped) {
+      if (params.stopOnDropped) {
         results.raiseFatalError(new UniplsDroppedError());
       }
     });
@@ -423,7 +427,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     };
 
     try {
-      await this.#provisioner?.(ctx);
+      if (!this.#provisioner) {
+        // do nothing
+      } else if ('setup' in this.#provisioner) {
+        await this.#provisioner.setup(ctx);
+      } else {
+        await this.#provisioner(ctx);
+      }
+
       result.resolve();
     } catch (err) {
       result.reject(err);
@@ -440,46 +451,50 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   async #handleDropped(sessionId: number): Promise<void> {
-    if (this.intent === 'close') {
+    if (
+      this.intent === 'close' ||
+      sessionId !== this.#socket.sessionId ||
+      !this.#reconnector
+    ) {
       return;
     }
 
-    if (sessionId !== this.#socket.sessionId) {
-      return;
-    }
+    const reconnect = async () => {
+      if (this.intent === 'close') {
+        return;
+      }
 
-    if (!this.#reconnector) {
-      return;
-    }
+      this.#session.recordAttempt();
 
-    const ctx = this.#session.buildContext();
+      try {
+        await this.#socket.open(async () => {
+          await this.#runProvisioner();
+          this.#detectorManager.start(this.#createDropDetectorContext());
+        });
 
-    let shouldReconnect: boolean;
+        const event = this.#session.onSuccess();
+        this.events.emit('reconnect', event);
+      } catch (err) {
+        this.#session.onFailure(err);
+      }
+    };
+
     try {
-      shouldReconnect = await this.#reconnector.reconnect(ctx);
+      const cleanup = this.#reconnector.setup(
+        {
+          reconnect,
+          cancel: () => {
+            // TODO
+          },
+        },
+        this.#session.buildContext(),
+      );
+
+      // TODO:
+      // cleanup?.();
     } catch {
       return;
     }
-
-    if (!shouldReconnect || this.intent === 'close') {
-      return;
-    }
-
-    this.#session.recordAttempt();
-
-    this.#socket
-      .open(async () => {
-        await this.#runProvisioner();
-        this.#detectorManager.start(this.#createDropDetectorContext());
-      })
-      .then(() => {
-        const event = this.#session.onSuccess();
-        this.events.emit('reconnect', event);
-      })
-      .catch((err) => {
-        this.#session.onFailure(err);
-        // dropped が再発火して次の #handleDropped につながる
-      });
   }
 
   /**

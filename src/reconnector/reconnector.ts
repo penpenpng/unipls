@@ -1,7 +1,15 @@
 import type { SessionId } from '../types.ts';
 
 export interface UniplsReconnector {
-  reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
+  setup(
+    actions: UniplsReconnectorActions,
+    ctx: ReconnectionContext,
+  ): void | (() => void);
+}
+
+export interface UniplsReconnectorActions {
+  reconnect(): void;
+  cancel(): void;
 }
 
 export interface ReconnectionContext {

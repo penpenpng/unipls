@@ -1,21 +1,25 @@
-import type { UniplsProvisioner, WebSocketData } from '../..';
+import type { WebSocketData } from '../..';
+import type {
+  UniplsProvisionerObject,
+  UniplsProvisioningContext,
+} from '../../unipls.interface';
 import { AwaitableQueue } from './awaitable-queue';
 
-export const createTestProvisioner = <
-  TInput = WebSocketData,
-  TOutput = WebSocketData,
->() => {
-  const queue = new AwaitableQueue<PromiseWithResolvers<void>>();
+export class TestProvisioner<TInput = WebSocketData, TOutput = WebSocketData>
+  implements UniplsProvisionerObject<TInput, TOutput>
+{
+  #queue = new AwaitableQueue<
+    PromiseWithResolvers<void> & UniplsProvisioningContext<TInput, TOutput>
+  >();
 
-  const provisioner: UniplsProvisioner<TInput, TOutput> = async () => {
+  async setup(ctx: UniplsProvisioningContext<TInput, TOutput>) {
     const provision = Promise.withResolvers<void>();
-    queue.enqueue(provision);
+    this.#queue.enqueue({ ...provision, ...ctx });
 
     await provision.promise;
-  };
+  }
 
-  // FIXME: クラス形式の provisioner もサポートすればこういうことしなくてよくなるかも
-  return Object.assign(provisioner, {
-    dequeueProvisioner: () => queue.dequeue(),
-  });
-};
+  dequeueContext() {
+    return this.#queue.dequeue();
+  }
+}

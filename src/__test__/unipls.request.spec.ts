@@ -1,85 +1,174 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { Unipls } from '..';
+import { afterEach, expect, test } from 'vitest';
 import {
-  createMockServer,
-  immediateReconnector,
-  type SocketMock,
-} from './test-utils';
+  ImmediateReconnector,
+  Unipls,
+  UniplsClosedError,
+  UniplsDroppedError,
+  UniplsTimeoutError,
+  type WebSocketData,
+} from '..';
+import { createMockServer } from './test-utils';
 
 const url = 'ws://localhost:8080';
-const mock = createMockServer(url);
+const server = createMockServer(url);
+const query = {
+  query: 'ping',
+  selector: (msg: WebSocketData) => typeof msg === 'string' && msg === 'pong',
+};
 
-let unipls: Unipls<string, string>;
-let socket: SocketMock;
+afterEach(() => {
+  server.reset();
+});
 
-beforeEach(async () => {
-  unipls = new Unipls<string, string>({
-    url,
-    reconnector: immediateReconnector,
-  });
+test('request() は query を送信した後、selector に合致する次にメッセージを取得する', async () => {
+  await using unipls = new Unipls<string, string>({ url });
+
   await unipls.open();
-  socket = await mock.sockets.dequeue();
-});
+  const socket = await server.sockets.dequeue();
 
-afterEach(async () => {
-  await unipls.close();
-  mock.reset();
-});
-
-test('request はセレクタに合致したレスポンスで resolve する', async () => {
-  const promise = unipls.request({
-    query: 'ping',
-    selector: (msg) => msg === 'pong',
-  });
-
-  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
-
+  const promise = unipls.request(query);
+  socket.send('ignored');
   socket.send('pong');
 
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
   await expect(promise).resolves.toBe('pong');
 });
 
-test('selector が一致しないレスポンスを無視し、一致したときに resolve する', async () => {
+test('timeout した場合、 UniplsTimeoutError で reject する', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
   const promise = unipls.request({
-    query: 'ping',
-    selector: (msg) => msg.startsWith('pong-ok'),
+    ...query,
+    timeout: 50,
   });
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
-
-  socket.send('pong-ng');
-  socket.send('pong-ok-1');
-
-  await expect(promise).resolves.toBe('pong-ok-1');
+  await expect(promise).rejects.toThrow(UniplsTimeoutError);
 });
 
-test('request を再接続時に再送し、ペイロードを再評価する', async () => {
-  let counter = 0;
-  let expectedResponse = '';
-  const payloadFactory = () => {
-    const id = ++counter;
-    expectedResponse = `pong-${id}`;
-    return `ping-${id}`;
-  };
+test('signal が abort されると reject する', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
+  const controller = new AbortController();
+  const promise = unipls.request({
+    ...query,
+    signal: controller.signal,
+  });
+
+  controller.abort(new Error('cancelled'));
+
+  await expect(promise).rejects.toThrow('cancelled');
+});
+
+test('close() 時に UniplsClosedError で reject する', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
+  const promise = unipls.request(query);
+
+  unipls.close();
+
+  await expect(promise).rejects.toThrow(UniplsClosedError);
+});
+
+test(
+  'reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する',
+);
+
+test(
+  'reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する',
+);
+
+test('reconnector が与えられていて、リトライ戦略に keep-listening が指定されている場合、再接続後に query の再送は行われないが、レスポンスの待機は継続する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
 
   const promise = unipls.request({
-    query: payloadFactory,
-    selector: (msg) => msg === expectedResponse,
+    ...query,
+    retry: 'keep-listening',
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  socket2.send('pong');
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
+  await expect(promise).resolves.toBe('pong');
+});
+
+test('reconnector が与えられていて、リトライ戦略に re-request が指定されている場合、再接続後に query の再送が行われ、レスポンスの待機も継続する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  const promise = unipls.request({
+    ...query,
     retry: 're-request',
   });
 
-  // 1 回目の送信を確認するがレスポンスは返さない
-  await expect(socket.inbox.dequeue()).resolves.toBe('ping-1');
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
 
-  // ドロップさせて再接続させる
-  socket.close(3001);
+  socket2.send('pong');
 
-  const reconnected = await mock.sockets.dequeue();
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket2.inbox.dequeue()).resolves.toBe('ping');
+  await expect(promise).resolves.toBe('pong');
+});
 
-  // 再接続後にペイロードが再評価され、2 回目が送信される
-  await expect(reconnected.inbox.dequeue()).resolves.toBe('ping-2');
+test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に UniplsDroppedError で reject する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
 
-  reconnected.send('pong-2');
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
 
-  await expect(promise).resolves.toBe('pong-2');
+  const promise = unipls.request({
+    ...query,
+    retry: 'never',
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  socket2.send('pong');
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
+  await expect(promise).rejects.toThrow(UniplsDroppedError);
+});
+
+test('query が関数形式の場合、再送時にペイロードは再評価される', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  let counter = 0;
+  const promise = unipls.request({
+    query: () => `ping-${++counter}`,
+    selector: (msg) => msg === 'pong',
+    retry: 're-request',
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  socket2.send('pong');
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping-1');
+  await expect(socket2.inbox.dequeue()).resolves.toBe('ping-2');
+  await expect(promise).resolves.toBe('pong');
 });

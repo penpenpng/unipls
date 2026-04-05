@@ -1,7 +1,10 @@
-import type { UniplsReconnector } from './reconnector';
+import type {
+  UniplsReconnector,
+  UniplsReconnectorActions,
+} from './reconnector';
 
 export class ImmediateReconnector implements UniplsReconnector {
-  reconnect() {
-    return true;
+  setup({ reconnect }: UniplsReconnectorActions) {
+    reconnect();
   }
 }

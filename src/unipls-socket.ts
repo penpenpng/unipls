@@ -84,7 +84,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     this.#events.on('raw-close', ({ session, code }) => {
-      if (code === WebSocketCloseCode.NORMAL_CLOSURE) {
+      if (code === UniplsWebSocketCloseCode.NORMAL_CLOSURE) {
         session.conn.state = 'closed';
         this.#events.emit('closed', { session });
       } else {
@@ -153,7 +153,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       result.reject(new UniplsTimeoutError());
       session.conn.state = 'dropped';
       timeoutTimer = undefined;
-      socket.close(WebSocketCloseCode.MARKED_AS_TIMED_OUT);
+      socket.close(UniplsWebSocketCloseCode.MARKED_AS_TIMED_OUT);
     }, this.timeout);
 
     return result.promise;
@@ -215,13 +215,13 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       result.resolve();
     });
 
-    this.#socket.close(WebSocketCloseCode.NORMAL_CLOSURE);
+    this.#socket.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
 
     return result.promise;
   }
 
   drop(): void {
-    this.#socket?.close(WebSocketCloseCode.ABNORMAL_CLOSURE);
+    this.#socket?.close(UniplsWebSocketCloseCode.ABNORMAL_CLOSURE);
   }
 
   /**
@@ -355,7 +355,7 @@ class UniplsConnection {
   constructor(public sessionId: number) {}
 }
 
-const WebSocketCloseCode = {
+export const UniplsWebSocketCloseCode = {
   /**
    * 1000 indicates a normal closure, meaning that the purpose for
    * which the connection was established has been fulfilled.

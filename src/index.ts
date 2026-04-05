@@ -5,12 +5,13 @@ export {
   UniplsError,
   UniplsTimeoutError,
 } from './errors';
-export type {
+export {
   ImmediateReconnector,
-  ReconnectionAttempt,
-  ReconnectionContext,
-  UniplsReconnectEvent,
-  UniplsReconnector,
+  type ReconnectionAttempt,
+  type ReconnectionContext,
+  type UniplsReconnectEvent,
+  type UniplsReconnector,
+  type UniplsReconnectorActions,
 } from './reconnector';
 export type {
   UniplsConnectionIntent,
@@ -18,5 +19,5 @@ export type {
   WebSocketData,
 } from './types';
 export { Unipls } from './unipls';
-export { UniplsSocket } from './unipls-socket';
+export { UniplsSocket, UniplsWebSocketCloseCode } from './unipls-socket';
 export type { UniplsProvisioner } from './unipls.interface';

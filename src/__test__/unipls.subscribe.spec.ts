@@ -1,174 +1,244 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { Unipls, UniplsClosedError, UniplsDroppedError } from '..';
+import { afterEach, expect, test } from 'vitest';
 import {
-  AwaitableQueue,
-  createMockServer,
-  immediateReconnector,
-  type SocketMock,
-} from './test-utils';
+  ImmediateReconnector,
+  Unipls,
+  UniplsClosedError,
+  UniplsDroppedError,
+  type WebSocketData,
+} from '..';
+import { createMockServer, TestSubscriber } from './test-utils';
 
 const url = 'ws://localhost:8080';
-const mock = createMockServer(url);
+const server = createMockServer(url);
+const query = {
+  query: 'ping',
+  selector: (msg: WebSocketData) =>
+    typeof msg === 'string' && msg.startsWith('pong-'),
+};
 
-let unipls: Unipls<string, string>;
-let socket: SocketMock;
+afterEach(() => {
+  server.reset();
+});
 
-beforeEach(async () => {
-  unipls = new Unipls<string, string>({
-    url,
-    reconnector: immediateReconnector,
-  });
+test('subscribe() は query を送信した後、selector に合致するメッセージを監視する', async () => {
+  await using unipls = new Unipls({ url });
+
   await unipls.open();
-  socket = await mock.sockets.dequeue();
-});
+  const socket = await server.sockets.dequeue();
 
-afterEach(async () => {
-  await unipls.close();
-  mock.reset();
-});
-
-test('クエリを送信し、selector に合致した複数のメッセージを受信する', async () => {
-  const inbox = new AwaitableQueue<string>();
+  const sub = new TestSubscriber();
   unipls.subscribe({
-    query: 'subscribe-cmd',
-    selector: (msg) => msg.startsWith('item-'),
-    onMessage: (msg) => inbox.enqueue(msg),
+    ...sub,
+    ...query,
+  });
+  socket.send('pong-1');
+  socket.send('ignored');
+  socket.send('pong-2');
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
+});
+
+test('terminator オプションがメッセージの終端を定義する', async () => {
+  await using unipls = new Unipls<string, string>({ url });
+
+  await unipls.open();
+  const socket = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.subscribe({
+    ...sub,
+    ...query,
+    terminator: (msg) => msg === 'stop',
   });
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('subscribe-cmd');
-
-  socket.send('item-1');
+  socket.send('pong-1');
+  socket.send('pong-2');
+  socket.send('stop');
   socket.send('ignored');
-  socket.send('item-2');
 
-  await expect(inbox.dequeue()).resolves.toBe('item-1');
-  await expect(inbox.dequeue()).resolves.toBe('item-2');
-});
-
-test('terminator に合致したメッセージで購読が終了し、onTerminated が呼ばれる', async () => {
-  const inbox = new AwaitableQueue<unknown>();
-  unipls.subscribe({
-    query: 'subscribe-cmd',
-    selector: (msg) => msg.startsWith('item-'),
-    terminator: (msg) => msg === 'done',
-    onMessage: (msg) => inbox.enqueue(msg),
-    onTerminated: (msg) => inbox.enqueue(`terminated:${msg}`),
-    finally: () => inbox.enqueue('finally'),
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
+  await expect(sub.termination).resolves.toBe('stop');
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'terminated',
   });
-
-  await socket.inbox.dequeue();
-
-  socket.send('item-1');
-  socket.send('done');
-  socket.send('ignored');
-
-  await expect(inbox.dequeue()).resolves.toBe('item-1');
-  await expect(inbox.dequeue()).resolves.toBe('terminated:done');
-  await expect(inbox.dequeue()).resolves.toBe('finally');
-  await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('unsubscribe で購読が解除され onUnsubscribed が呼ばれる', async () => {
-  const inbox = new AwaitableQueue<unknown>();
+test('unsubscribe によって onUnsubscribed と finally がトリガーされる', async () => {
+  await using unipls = new Unipls<string, string>({ url });
+
+  await unipls.open();
+  const socket = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
   const unsubscribe = unipls.subscribe({
-    query: 'subscribe-cmd',
-    selector: () => true,
-    onMessage: (msg) => inbox.enqueue(msg),
-    onUnsubscribed: () => inbox.enqueue('unsubscribed'),
-    finally: () => inbox.enqueue('finally'),
+    ...sub,
+    ...query,
   });
 
-  await socket.inbox.dequeue();
+  socket.send('pong-1');
+  socket.send('pong-2');
 
-  socket.send('msg1');
-  await expect(inbox.dequeue()).resolves.toBe('msg1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
 
   unsubscribe();
-  await expect(inbox.dequeue()).resolves.toBe('unsubscribed');
-  await expect(inbox.dequeue()).resolves.toBe('finally');
+  socket.send('pong-3');
 
-  socket.send('ignored');
-  await expect(inbox.dequeue({ timeout: 50 })).rejects.toThrowError();
+  await expect(sub.unsubscription).resolves.toBeUndefined();
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'unsubscribed',
+  });
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('close() 時に onFatalError が UniplsClosedError で呼ばれる', async () => {
-  const inbox = new AwaitableQueue<unknown>();
+test('Unipls を close() すると onFatalError がトリガーされる', async () => {
+  await using unipls = new Unipls<string, string>({ url });
+
+  await unipls.open();
+  const socket = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
   unipls.subscribe({
-    query: 'subscribe-cmd',
-    selector: () => true,
-    onMessage: (msg) => inbox.enqueue(msg),
-    onFatalError: (err) => inbox.enqueue(err),
-    finally: () => inbox.enqueue('finally'),
+    ...sub,
+    ...query,
   });
 
-  await socket.inbox.dequeue();
+  socket.send('pong-1');
+  socket.send('pong-2');
 
-  socket.send('msg1');
-  await expect(inbox.dequeue()).resolves.toBe('msg1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
 
   unipls.close();
-  await expect(inbox.dequeue()).resolves.toBeInstanceOf(UniplsClosedError);
-  await expect(inbox.dequeue()).resolves.toBe('finally');
+  socket.send('pong-3');
+
+  await expect(sub.termination).rejects.toThrow(UniplsClosedError);
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'closed',
+  });
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('retry が未指定のとき、切断時に onFatalError が UniplsDroppedError で呼ばれる', async () => {
-  const inbox = new AwaitableQueue<unknown>();
-  unipls.subscribe({
-    query: 'subscribe-cmd',
-    selector: () => true,
-    onMessage: (msg) => inbox.enqueue(msg),
-    onFatalError: (err) => inbox.enqueue(err),
+test('signal が abort されると reject する', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+
+  const sub = new TestSubscriber();
+  const controller = new AbortController();
+  const promise = unipls.subscribe({
+    ...sub,
+    ...query,
+    signal: controller.signal,
   });
 
-  await socket.inbox.dequeue();
+  controller.abort(new Error('cancelled'));
 
-  socket.close(3001);
-  await expect(inbox.dequeue()).resolves.toBeInstanceOf(UniplsDroppedError);
+  await expect(promise).rejects.toThrow('cancelled');
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'aborted',
+  });
 });
 
-test('retry が re-request のとき、再接続後にクエリを再送してメッセージを受信する', async () => {
-  let counter = 0;
-  const inbox = new AwaitableQueue<string>();
+test('close() 時に UniplsClosedError で reject する', async () => {
+  await using unipls = new Unipls({ url });
 
-  unipls.subscribe({
-    query: () => `subscribe-cmd-${++counter}`,
-    selector: (msg) => msg.startsWith('item-'),
-    retry: 're-request',
-    onMessage: (msg) => inbox.enqueue(msg),
+  await unipls.open();
+
+  const sub = new TestSubscriber();
+  const promise = unipls.request({
+    ...sub,
+    ...query,
   });
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('subscribe-cmd-1');
+  unipls.close();
 
-  socket.close(3001);
-
-  const reconnected = await mock.sockets.dequeue();
-  await expect(reconnected.inbox.dequeue()).resolves.toBe('subscribe-cmd-2');
-
-  reconnected.send('item-after-reconnect');
-  await expect(inbox.dequeue()).resolves.toBe('item-after-reconnect');
+  await expect(promise).rejects.toThrow(UniplsClosedError);
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'closed',
+  });
 });
 
-test('retry が keep-listening のとき、再接続後もクエリを再送せずメッセージを受信する', async () => {
-  const inbox = new AwaitableQueue<string>();
+test(
+  'reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する',
+);
 
+test(
+  'reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する',
+);
+
+test('reconnector が与えられていて、リトライ戦略に keep-listening が指定されている場合、再接続後に query の再送は行われないが、レスポンスの待機は継続する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
   unipls.subscribe({
-    query: 'subscribe-cmd',
-    selector: (msg) => msg.startsWith('item-'),
+    ...sub,
+    ...query,
     retry: 'keep-listening',
-    onMessage: (msg) => inbox.enqueue(msg),
   });
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('subscribe-cmd');
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
 
-  socket.close(3001);
+  socket2.send('pong');
 
-  const reconnected = await mock.sockets.dequeue();
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
+  await expect(sub.messages.dequeue()).resolves.toBe('pong');
+});
 
-  // クエリは再送されない
-  await expect(
-    reconnected.inbox.dequeue({ timeout: 50 }),
-  ).rejects.toThrowError();
+test('reconnector が与えられていて、リトライ戦略に re-request が指定されている場合、再接続後に query の再送が行われ、レスポンスの待機も継続する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
 
-  reconnected.send('item-after-reconnect');
-  await expect(inbox.dequeue()).resolves.toBe('item-after-reconnect');
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.subscribe({
+    ...sub,
+    ...query,
+    retry: 're-request',
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  socket2.send('pong');
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket2.inbox.dequeue()).resolves.toBe('ping');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong');
+});
+
+test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に UniplsDroppedError で reject する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.subscribe({
+    ...sub,
+    ...query,
+    retry: 're-request',
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  socket2.send('pong');
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
+  await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
 });
