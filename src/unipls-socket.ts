@@ -97,12 +97,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * WebSocket 接続が未確立ならば新規の接続を試みて、接続とプロビジョニングに成功したときに解決する Promise を返します。
    *
-   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。省略した場合は `({ done }) => done()` と同等になります。
+   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。
    *
    * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
-   *
-   * @remarks
-   * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
    */
   open(provisioner?: () => Promise<void>): Promise<void> {
     if (this.intent === 'open' && this.state !== 'dropped') {

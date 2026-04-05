@@ -44,7 +44,7 @@ unipls は JavaScript ランタイムのための高レベル WebSocket クラ�
 
 `open()` の引数に渡す関数を **プロビジョナー** と呼びます。プロビジョナーは WebSocket 接続の確立直後（初回接続・再接続の両方）に実行されます。
 
-プロビジョナーは `ctx.done()` を呼ぶことで初期化完了を通知しなければなりません。`done()` が呼ばれるまで、通常のメッセージングメソッド（`cast` / `request` / `subscribe`）はキューに保持され、完了後に順次送信されます。
+プロビジョナーの実行が完了するまで、通常のメッセージングメソッド（`cast` / `request` / `subscribe`）はキューに保持され、完了後に順次送信されます。
 
 ### メッセージングメソッド
 
@@ -71,9 +71,8 @@ import { Unipls } from 'unipls';
 const unipls = new Unipls<string, string>({ url: 'wss://example.com/socket' });
 
 // プロビジョニング付きで接続
-await unipls.open((ctx) => {
-  ctx.cast('<auth-token>');
-  ctx.done();
+await unipls.open(async (ctx) => {
+  await ctx.cast('<auth-token>');
 });
 
 // 1-1 通信: リクエスト送信 → レスポンス受信

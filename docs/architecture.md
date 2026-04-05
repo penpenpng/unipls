@@ -41,7 +41,6 @@
 
 #### 責務
 
-- `#ensureProvisioner()`: プロビジョナーが未設定の場合にデフォルト（`({ done }) => done()`）をセットする
 - `#runProvisioner()`: プロビジョナーを実行し `AsyncResult<void>` でラップする
 - `#handleDropped()`: drop イベントをフックして自動再接続を起動する
 - `#request()`: `request()` / `requestForce()` の共通実装。`AsyncResult` + `EventBusView` で受信を管理する
@@ -77,7 +76,7 @@ dead (初期)
 connecting
   ↓ WebSocket の onopen 発火
 provisioning
-  ↓ provisioner が done() を呼び出す
+  ↓ provisioner の実行が完了する
 open
   ↓ 正常切断 (close code 1000)
 closed

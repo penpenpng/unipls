@@ -5,9 +5,12 @@ import type {
   WebSocketConstructor,
   WebSocketData,
 } from './types.ts';
+import type {
+  UniplsReconnectEvent,
+  UniplsReconnector,
+} from './unipls-reconnector.ts';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
 import type { Unipls } from './unipls.ts';
-import type { UniplsReconnector } from './unipls-reconnector.ts';
 
 /** 送信するメッセージを値または評価関数として受け取ります。 */
 export type UniplsMessageFactory<TInput = WebSocketData> =
@@ -28,14 +31,11 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
 
 /**
  * {@link Unipls.open|unipls.connect()} の任意の引数で、{@link UniplsReconnector} による再接続を含む WebSocket 接続の成功直後に実行されます。
- *
- * @remarks
- * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
  */
 export type UniplsProvisioner<
   TInput = WebSocketData,
   TOutput = WebSocketData,
-> = (ctx: UniplsProvisioningContext<TInput, TOutput>) => void;
+> = (ctx: UniplsProvisioningContext<TInput, TOutput>) => Promise<void> | void;
 
 /**
  * {@link UniplsProvisioner} の引数で、{@link Unipls} の初期化を行うためのコンテキストを表します。
@@ -82,9 +82,6 @@ export interface UniplsProvisioningContext<
     params: UniplsSubscriber<TOutput> &
       Omit<UniplsSubscribeParams<TInput, TOutput>, 'signal' | 'retry'>,
   ): () => void;
-
-  /** 初期化が完了したことを {@link Unipls} に通知します。この関数は初期化完了時に必ず呼び出されなければなりません。 */
-  done(): void;
 
   /** 現在のセッションを表します。 */
   session: SessionId;
@@ -233,10 +230,7 @@ export interface UniplsRetryContext<
     params: { selector: (data: TOutput) => boolean },
   ) => void;
   done?: () => void;
-  reconnection: {
-    previousSessionId: SessionId;
-    sessionId: SessionId;
-  };
+  reconnection: UniplsReconnectEvent;
 }
 
 /** {@link UniplsRetrySetupFunction} の引数で、再送の方法を制御するためのコンテキストを表します。 */

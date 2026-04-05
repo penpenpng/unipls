@@ -57,10 +57,9 @@ test('再接続後にプロビジョニングが再実行される', async () =>
     url,
     reconnector: immediateReconnector,
   });
-  await unipls.open(({ done }) => {
+  await unipls.open(() => {
     provisionCount += 1;
     provisioned.enqueue(provisionCount);
-    done();
   });
 
   socket = await mock.sockets.dequeue();

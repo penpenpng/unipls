@@ -1,8 +1,4 @@
-import type { UniplsSubscriber } from '../async-results.ts';
-import type {
-  UniplsListenOptions,
-  UniplsMessageFactory,
-} from '../unipls.interface.ts';
+import type { UniplsMessageFactory } from '../unipls.interface.ts';
 
 export interface DropDetectorRequestParams<
   TInput = unknown,
@@ -20,11 +16,6 @@ export interface DropDetectorContext<TInput = unknown, TOutput = unknown> {
 
   /** メッセージを送信してレスポンスを待ちます。 */
   request(params: DropDetectorRequestParams<TInput, TOutput>): Promise<TOutput>;
-
-  /** メッセージを受信し続けます。 */
-  listen(
-    params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>,
-  ): () => void;
 }
 
 export interface DropDetector<TInput = unknown, TOutput = unknown> {

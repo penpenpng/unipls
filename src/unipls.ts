@@ -1,8 +1,8 @@
 import { AsyncResult } from './async-result.ts';
 import { AsyncResults, type UniplsSubscriber } from './async-results.ts';
-import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
 import type { DropDetectorContext } from './drop-detector';
 import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
+import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
 import type { EventBus } from './event-bus';
 import type { UniplsConnectionState, WebSocketData } from './types.ts';
 import type {
@@ -22,6 +22,7 @@ import type {
   UniplsRecastFunction,
   UniplsRecastStrategy,
   UniplsRequestParams,
+  UniplsRetrySetupContext,
   UniplsRetrySetupFunction,
   UniplsRetryStrategy,
   UniplsSubscribeParams,
@@ -71,16 +72,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * WebSocket 接続を確立します。
    *
-   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。省略した場合は `({ done }) => done()` と同等になります。
+   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。
    * @returns {Promise<void>} WebSocket 接続と初期化が完了したことを表す Promise を返します。
    *
    * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
-   *
-   * @remarks
-   * 初期化が終了したら必ず {@link UniplsProvisioningContext.done|done()} を呼び出さなければなりません。
    */
   open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
-    this.#ensureProvisioner(provisioner);
+    this.#provisioner = provisioner;
     this.#session.new();
 
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
@@ -443,9 +441,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
-  #runProvisioner(): Promise<void> {
+  async #runProvisioner(): Promise<void> {
     const result = new AsyncResult<void>();
-    const provision = this.#provisioner ?? (({ done }) => done());
     const sessionId = this.#socket.sessionId;
     const isSessionBeginning = !this.#provisionedSessions.has(sessionId);
 
@@ -456,13 +453,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       request: (params) => this.requestForce(params),
       listen: (params) => this.listen(params),
       subscribe: (params) => this.subscribeForce(params),
-      done: result.resolve,
       session: sessionId,
       isSessionBeginning,
     };
 
     try {
-      provision(ctx);
+      await this.#provisioner?.(ctx);
+      result.resolve();
     } catch (err) {
       result.reject(err);
     }
@@ -474,18 +471,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return {
       drop: () => this.drop(),
       request: (params) => this.request(params),
-      listen: (params) => this.listen(params),
     };
-  }
-
-  #ensureProvisioner(provisioner?: UniplsProvisioner<TInput, TOutput>): void {
-    if (provisioner) {
-      this.#provisioner = provisioner;
-    }
-
-    if (!this.#provisioner) {
-      this.#provisioner = ({ done }) => done();
-    }
   }
 
   async #handleDropped(sessionId: number): Promise<void> {
@@ -515,8 +501,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.#session.recordAttempt();
-
-    this.#ensureProvisioner();
 
     this.#socket
       .open(async () => {

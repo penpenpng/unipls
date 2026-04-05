@@ -51,16 +51,14 @@ new Unipls<TInput, TOutput>(params: UniplsParams<TInput, TOutput>)
 
 WebSocket 接続を確立します。
 
-- `provisioner` を渡した場合、接続成功直後にそれを実行します。省略した場合は `({ done }) => done()` と同等です。
+- `provisioner` を渡した場合、接続成功直後にそれを実行します。
 - 返り値の Promise は接続とプロビジョニングが両方完了したときに resolve します。
 - すでに接続中または接続を試行中の場合、`UniplsDuplicatedConnectionError` を throw します。
 
-**注意**: プロビジョナー内では必ず `ctx.done()` を呼び出さなければなりません。
 
 ```typescript
 await unipls.open(async (ctx) => {
   await ctx.request({ query: 'auth', selector: (msg) => msg === 'ok' });
-  ctx.done();
 });
 ```
 
@@ -259,7 +257,6 @@ type UniplsProvisioner<TInput, TOutput> = (ctx: UniplsProvisioningContext<TInput
 | `request(params)` | `(params) => Promise<TOutput>` | `requestForce()` と同様。`signal` / `retry` は指定不可 |
 | `listen(params)` | `(params) => void` | `listen()` と同様。`signal` / `retry` は指定不可 |
 | `subscribe(params)` | `(params) => () => void` | `subscribeForce()` と同様。`signal` / `retry` は指定不可 |
-| `done()` | `() => void` | 初期化完了を通知する（必須） |
 | `session` | `SessionId` | 現在のセッション ID |
 | `isSessionBeginning` | `boolean` | このセッション内で初めてのプロビジョニングなら `true`。再接続時のみ `false` になりえる |
 

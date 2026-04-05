@@ -72,14 +72,16 @@ test('recast が never のとき、送信前に drop が発生すると UniplsDr
 });
 
 test('recast が always（デフォルト）のとき、drop 後に再接続されてメッセージが再送される', async () => {
-  let provisionDone = () => {};
   const u = new Unipls<string, string>({
     url,
     reconnector: immediateReconnector,
   });
+
+  const provision = Promise.withResolvers<void>();
+
   void u
-    .open(({ done }) => {
-      provisionDone = done;
+    .open(async () => {
+      await provision.promise;
     })
     .catch(() => {});
   const s = await mock.sockets.dequeue();
@@ -93,21 +95,22 @@ test('recast が always（デフォルト）のとき、drop 後に再接続さ�
 
   // 再接続後にプロビジョニングが完了すると 'open' イベントが発火し、メッセージが再送される
   const reconnectedServer = await mock.sockets.dequeue();
-  provisionDone(); // 再接続後のプロビジョニングを完了させる
+  provision.resolve(); // 再接続後のプロビジョニングを完了させる
   await expect(reconnectedServer.inbox.dequeue()).resolves.toBe('hello');
 
   await u.close();
 });
 
 test('カスタム recast 関数で異なるデータを再送できる', async () => {
-  let provisionDone = () => {};
   const u = new Unipls<string, string>({
     url,
     reconnector: immediateReconnector,
   });
+
+  const provision = Promise.withResolvers<void>();
   void u
-    .open(({ done }) => {
-      provisionDone = done;
+    .open(async () => {
+      await provision.promise;
     })
     .catch(() => {});
   const s = await mock.sockets.dequeue();
@@ -123,7 +126,7 @@ test('カスタム recast 関数で異なるデータを再送できる', async 
   await expect(promise).resolves.toBeUndefined();
 
   const reconnectedServer = await mock.sockets.dequeue();
-  provisionDone();
+  provision.resolve();
   await expect(reconnectedServer.inbox.dequeue()).resolves.toBe('replaced');
 
   await u.close();
