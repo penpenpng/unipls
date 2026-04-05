@@ -164,11 +164,22 @@ test('close() 時に UniplsClosedError で reason: closed で onFatalError が�
 });
 
 test('reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
-  // TODO
-});
+  await using unipls = new Unipls({ url });
 
-test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に reason: dropped で onFatalError がトリガーする', async () => {
-  // TODO
+  await unipls.open();
+
+  const sub = new TestSubscriber();
+  unipls.subscribe({
+    ...sub,
+    ...query,
+  });
+
+  unipls.drop();
+
+  await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'dropped',
+  });
 });
 
 test('reconnector が与えられていて、リトライ戦略に keep-listening が指定されている場合、再接続後に query の再送は行われないが、レスポンスの待機は継続する', async () => {

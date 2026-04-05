@@ -1,5 +1,10 @@
 import { afterEach, expect, test } from 'vitest';
-import { Unipls, UniplsClosedError } from '..';
+import {
+  ImmediateReconnector,
+  Unipls,
+  UniplsClosedError,
+  UniplsDroppedError,
+} from '..';
 import { createMockServer, TestSubscriber } from './test-utils';
 
 const url = 'ws://localhost:8080';
@@ -34,7 +39,7 @@ test('selector オプションはメッセージをフィルタリングする',
   const socket = await server.sockets.dequeue();
 
   const sub = new TestSubscriber();
-  unipls.listen({ ...sub, selector: (msg) => msg.startsWith('msg') });
+  unipls.listen({ ...sub, selector: (msg) => msg.startsWith('msg-') });
 
   socket.send('msg-1');
   socket.send('msg-2');
@@ -77,14 +82,8 @@ test('unsubscribe によって onUnsubscribed と finally がトリガーされ�
   const sub = new TestSubscriber();
   const unsubscribe = unipls.listen(sub);
 
-  socket.send('msg-1');
-  socket.send('msg-2');
-
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
-
   unsubscribe();
-  socket.send('msg-3');
+  socket.send('ignored');
 
   await expect(sub.unsubscription).resolves.toBeUndefined();
   await expect(sub.finalization).resolves.toMatchObject({
@@ -93,7 +92,7 @@ test('unsubscribe によって onUnsubscribed と finally がトリガーされ�
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('Unipls を close() すると onFatalError がトリガーされる', async () => {
+test('Unipls を close() すると reason: closed で onFatalError がトリガーされる', async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
@@ -102,14 +101,8 @@ test('Unipls を close() すると onFatalError がトリガーされる', async
   const sub = new TestSubscriber();
   unipls.listen(sub);
 
-  socket.send('msg-1');
-  socket.send('msg-2');
-
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
-
   unipls.close();
-  socket.send('msg-3');
+  socket.send('ignored');
 
   await expect(sub.termination).rejects.toThrow(UniplsClosedError);
   await expect(sub.finalization).resolves.toMatchObject({
@@ -118,14 +111,41 @@ test('Unipls を close() すると onFatalError がトリガーされる', async
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('reconnector が与えられていない場合、drop 時に onFatalError がトリガーされる', async () => {
-  // TODO
-});
+test('reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーされる', async () => {
+  await using unipls = new Unipls<string, string>({ url });
 
-test('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に onFatalError がトリガーされる', async () => {
-  // TODO
+  await unipls.open();
+  const socket = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.listen(sub);
+
+  unipls.drop();
+  socket.send('ignored');
+
+  await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'dropped',
+  });
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
 test('reconnector が与えられている場合、listen() は再接続後もメッセージを監視し続ける', async () => {
-  // TODO
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.listen(sub);
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  socket2.send('msg-1');
+  socket2.send('msg-2');
+
+  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
+  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
 });

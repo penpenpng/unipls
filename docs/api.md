@@ -122,7 +122,6 @@ WebSocket 接続を異常終了コードで強制切断します。`close()` と
 | `'terminated'` | `terminator` 条件を満たすメッセージを受信した |
 | `'unsubscribed'` | `unsubscribe()` が呼ばれた |
 | `'closed'` | `close()` で切断された |
-| `'dropped'` | drop が発生した（`stopOnDropped: true` の場合） |
 | `'fatal-error'` | その他の致命的なエラー |
 
 ---

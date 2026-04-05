@@ -1,4 +1,4 @@
-import { u } from '../../libs/utils.ts';
+import { TimeoutError, timeout } from './promise-timeout';
 
 export class AwaitableQueue<T> {
   private queue: Array<{ value: T; resolve: () => void }> = [];
@@ -16,7 +16,7 @@ export class AwaitableQueue<T> {
       this.queue.push({ value, resolve });
 
       if (options?.timeout) {
-        return u.Promise.timeout(promise, options.timeout);
+        return timeout(promise, options.timeout);
       } else {
         return promise;
       }
@@ -36,7 +36,7 @@ export class AwaitableQueue<T> {
     this.resolvers.push(resolve);
 
     if (options?.timeout) {
-      return u.Promise.timeout(promise, options.timeout).finally(() => {
+      return timeout(promise, options.timeout).finally(() => {
         this.resolvers = this.resolvers.filter((r) => r !== resolve);
       });
     } else {

@@ -139,9 +139,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      if (params.stopOnDropped) {
-        result.reject(new UniplsDroppedError());
-      }
+      result.reject(new UniplsDroppedError());
     });
 
     events.once('closed', () => {
@@ -205,9 +203,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      if (params.stopOnDropped) {
-        results.raiseFatalError(new UniplsDroppedError());
-      }
+      results.raiseFatalError(new UniplsDroppedError());
     });
     events.once('closed', () => {
       results.raiseFatalError(new UniplsClosedError());
@@ -401,10 +397,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     ) {
       sendOnce(Unipls.#evaluateQuery(params.query));
     }
-
-    events.on('dropped', () => {
-      // TODO
-    });
 
     events.once('closed', () => {
       result.reject(new UniplsClosedError());
