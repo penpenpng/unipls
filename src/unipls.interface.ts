@@ -61,8 +61,8 @@ export interface UniplsProvisioningContext<
   /**
    * {@link Unipls.cast|unipls.cast()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
-   * - {@link UniplsCastOptions.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
-   * - {@link UniplsCastOptions.recast|recast} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
+   * - {@link UniplsCastParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
+   * - {@link UniplsCastParams.recast|recast} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
    */
   cast(data: TInput): Promise<void>;
 
@@ -136,27 +136,15 @@ export interface UniplsListenOptions<TOutput = WebSocketData> {
 /**
  * {@link Unipls.cast|unipls.cast()} の任意の第2引数で、`cast()` の挙動を制御します。
  */
-export interface UniplsCastOptions<TInput = WebSocketData> {
-  /**
-   * 再接続処理中に {@link Unipls.cast|unipls.cast()} が実行された場合の再送戦略を指定します。
-   *
-   * @default "always"
-   */
-  recast?: UniplsRecastStrategy<TInput>;
-
+export interface UniplsCastParams<TInput = WebSocketData> {
+  query: UniplsMessageFactory<TInput>;
+  /** Provisioning 終了を待つ最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
+  timeout?: number;
   /**
    * 再送を中断するための {@link AbortSignal} を指定します。
    */
   signal?: AbortSignal;
 }
-
-/**
- * {@link Unipls.cast|unipls.cast()} の再送戦略を表します。
- *
- * - `never`: 再送しません。`({ abort }) => { abort(); }` と同等です。
- * - `always`: 同内容を再送します。`({ data, cast, done }) => { cast(data); done(); }` と同等です。
- * - `RecastFunction`: 再送の方法を {@link UniplsRecastFunction} によって細かく制御します。
- */
 
 /**
  * {@link UniplsRecastFunction} の引数で、再送の方法を制御するためのコンテキストを表します。
