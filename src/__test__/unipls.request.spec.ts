@@ -123,7 +123,7 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
   await expect(socket2.inbox.dequeue()).resolves.toBe('ping');
 
-  // We must check twice pings before sending 'pong' because receiving 'pong' stops `request()` retry.
+  // We must check twice 'ping's before sending 'pong' because 'pong' stops `request()` retry.
   socket2.send('pong');
 
   await expect(promise).resolves.toBe('pong');
@@ -171,7 +171,7 @@ test('query が関数形式の場合、再送時にペイロードは再評価�
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping-1');
   await expect(socket2.inbox.dequeue()).resolves.toBe('ping-2');
 
-  // We must check twice pings before sending 'pong' because receiving 'pong' stops `request()` retry.
+  // We must check twice 'ping's before sending 'pong' because 'pong' stops `request()` retry.
   socket2.send('pong');
 
   await expect(promise).resolves.toBe('pong');

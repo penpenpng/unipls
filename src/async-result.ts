@@ -45,22 +45,22 @@ export class AsyncResult<T> {
       }, options.timeout);
     }
 
-    const cleanup = () => {
-      this.#signal.removeEventListener('abort', cleanup);
+    this.#signal.addEventListener(
+      'abort',
+      () => {
+        if (timer !== null) {
+          clearTimeout(timer);
+        }
 
-      if (timer !== null) {
-        clearTimeout(timer);
-      }
+        if (!this.#resulted) {
+          this.#reject(this.#signal.reason);
+        }
+        this.#resulted = true;
 
-      if (!this.#resulted) {
-        this.#reject(this.#signal.reason);
-      }
-      this.#resulted = true;
-
-      options.finally?.();
-    };
-
-    this.#signal.addEventListener('abort', cleanup);
+        options.finally?.();
+      },
+      { once: true },
+    );
   }
 
   resolve = (value: T) => {

@@ -7,12 +7,11 @@ export class AsyncResults<T> {
   #resulted = false;
   #reason: SubscriptionEndReason = 'fatal-error';
   #error: unknown = null;
-  #signal: AbortSignal;
   #controller = new AbortController();
   #subscriber: UniplsSubscriber<T>;
 
   get signal(): AbortSignal {
-    return this.#signal;
+    return this.#controller.signal;
   }
 
   get resulted(): boolean {
@@ -26,38 +25,44 @@ export class AsyncResults<T> {
   }) {
     this.#subscriber = params.subscriber;
 
-    const signals = [this.#controller.signal];
     if (params.signal) {
-      signals.push(params.signal);
+      const signal = params.signal;
+
+      signal.addEventListener(
+        'abort',
+        () => {
+          this.abort(signal.reason);
+        },
+        { once: true },
+      );
     }
-    this.#signal = AbortSignal.any(signals);
 
-    const cleanup = () => {
-      this.#signal.removeEventListener('abort', cleanup);
+    this.signal.addEventListener(
+      'abort',
+      () => {
+        if (!this.#resulted) {
+          this.#error = this.signal.reason;
+          this.#reason = 'fatal-error';
+          this.#subscriber.onFatalError?.(this.#error);
+        }
+        this.#resulted = true;
 
-      if (!this.#resulted) {
-        this.#error = this.#signal.reason;
-        this.#reason = 'fatal-error';
-        this.#subscriber.onFatalError?.(this.#error);
-      }
-      this.#resulted = true;
+        try {
+          this.#subscriber.finally?.({
+            reason: this.#reason,
+            error: this.#error,
+          });
+        } catch (err) {
+          console.warn(
+            'An error occurred while processing finally callback:',
+            err,
+          );
+        }
 
-      try {
-        this.#subscriber.finally?.({
-          reason: this.#reason,
-          error: this.#error,
-        });
-      } catch (err) {
-        console.warn(
-          'An error occurred while processing finally callback:',
-          err,
-        );
-      }
-
-      params.finally();
-    };
-
-    this.#signal.addEventListener('abort', cleanup);
+        params.finally();
+      },
+      { once: true },
+    );
   }
 
   handleMessage = (message: T): void => {
@@ -102,6 +107,18 @@ export class AsyncResults<T> {
     this.#subscriber.onFatalError?.(error);
     this.#controller.abort();
   };
+
+  abort(reason: unknown) {
+    if (this.#resulted) {
+      return;
+    }
+
+    this.#resulted = true;
+    this.#error = reason;
+    this.#reason = 'aborted';
+    this.#subscriber.onFatalError?.(reason);
+    this.#controller.abort();
+  }
 
   unsubscribe = (): void => {
     if (this.#resulted) {
