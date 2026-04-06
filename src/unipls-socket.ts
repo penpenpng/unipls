@@ -33,7 +33,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   #WebSocket: WebSocketConstructor;
   #session: UniplsSessionState = UniplsSessionState.dead();
   #events = new EventBus<
-    UniplsSocketPublicEvents<TOutput> & UniplsSocketRawEvents
+    UniplsSocketPublicEvents<TOutput> & UniplsSocketInternalEvents
   >();
   get events(): EventBus<UniplsSocketPublicEvents<TOutput>> {
     return this.#events as EventBus<UniplsSocketPublicEvents<TOutput>>;
@@ -70,9 +70,17 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     this.#events.on('raw-open', async ({ session }) => {
       session.conn.state = 'provisioning';
-      await session.provisioner?.();
-      session.conn.state = 'open';
-      this.#events.emit('open', { session });
+
+      try {
+        await session.provisioner?.();
+        session.conn.state = 'open';
+        this.#events.emit('open', { session });
+      } catch (error) {
+        session.intent = 'close';
+        session.conn.state = 'closed';
+        this.#events.emit('failed', { session, error });
+        session.conn.socket?.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
+      }
     });
 
     this.#events.on('raw-message', ({ data, session }) => {
@@ -143,6 +151,12 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
         return;
       }
       result.reject(new UniplsDroppedError());
+    });
+    events.on('failed', (ev) => {
+      if (ev.session.id !== session.id) {
+        return;
+      }
+      result.reject(ev.error);
     });
 
     timeoutTimer = setTimeout(() => {
@@ -292,6 +306,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     events.once('dropped', () => {
       result.reject();
     });
+    events.once('failed', ({ error }) => {
+      result.reject(error);
+    });
 
     return result.promise;
   }
@@ -305,10 +322,11 @@ export interface UniplsSocketPublicEvents<TOutput> {
   dropped: { session: UniplsSessionState };
 }
 
-interface UniplsSocketRawEvents {
+interface UniplsSocketInternalEvents {
   'raw-open': { session: UniplsSessionState };
   'raw-message': { session: UniplsSessionState; data: WebSocketData };
   'raw-close': { session: UniplsSessionState; socket: WebSocket; code: number };
+  failed: { session: UniplsSessionState; error: unknown };
 }
 
 type UniplsProvisioner = () => Promise<void>;
