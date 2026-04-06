@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'vitest';
-import { Unipls } from '..';
-import { createMockServer } from './test-utils';
+import { Unipls, UniplsTimeoutError } from '..';
+import { createMockServer, TestProvisioner } from './test-utils';
 
 const url = 'ws://localhost:8080';
 const server = createMockServer(url);
@@ -21,14 +21,59 @@ test('cast() は query を送信する', async () => {
   await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 });
 
-test.skip('timeout した場合 reject される', async () => {
-  // TODO
+test('timeout した場合 reject される', async () => {
+  const provisioner = new TestProvisioner<string, string>();
+  await using unipls = new Unipls<string, string>({ url });
+
+  unipls.open(provisioner);
+  await server.sockets.dequeue();
+  await provisioner.dequeueContext();
+
+  const promise = unipls.cast({
+    query: 'ping',
+    timeout: 50,
+  });
+
+  await expect(promise).rejects.toThrow(UniplsTimeoutError);
 });
 
-test.skip('signal が abort されると reject される', async () => {
-  // TODO
+test('signal が abort されると reject される', async () => {
+  const provisioner = new TestProvisioner<string, string>();
+  await using unipls = new Unipls<string, string>({ url });
+
+  unipls.open(provisioner);
+  await server.sockets.dequeue();
+  await provisioner.dequeueContext();
+
+  const controller = new AbortController();
+  const promise = unipls.cast({
+    query: 'ping',
+    signal: controller.signal,
+  });
+
+  controller.abort(new Error('cancelled'));
+
+  await expect(promise).rejects.toThrow('cancelled');
 });
 
-test.skip('query が関数形式の場合、再送時に query は再評価される', async () => {
-  // TODO
+test('query が関数形式の場合、送信時に query は評価される', async () => {
+  const provisioner = new TestProvisioner<string, string>();
+  await using unipls = new Unipls<string, string>({ url });
+
+  unipls.open(provisioner);
+  const socket = await server.sockets.dequeue();
+  const provisioning = await provisioner.dequeueContext();
+
+  let counter = 0;
+  const promise = unipls.cast({
+    query: () => `ping-${++counter}`,
+  });
+
+  expect(counter).toBe(0);
+
+  provisioning.resolve();
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping-1');
+  await expect(promise).resolves.toBeUndefined();
+  expect(counter).toBe(1);
 });

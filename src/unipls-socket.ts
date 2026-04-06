@@ -84,11 +84,18 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     this.#events.on('raw-message', ({ data, session }) => {
-      const message = this.deserialize(data);
-      this.#events.emit('message', {
-        session,
-        message,
-      });
+      try {
+        const message = this.deserialize(data);
+        this.#events.emit('message', {
+          session,
+          message,
+        });
+      } catch (error) {
+        this.#events.emit('error', {
+          session,
+          error,
+        });
+      }
     });
 
     this.#events.on('raw-close', ({ session, code }) => {
@@ -318,6 +325,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 export interface UniplsSocketPublicEvents<TOutput> {
   open: { session: UniplsSessionState };
   message: { session: UniplsSessionState; message: TOutput };
+  error: { session: UniplsSessionState; error: unknown };
   closed: { session: UniplsSessionState };
   dropped: { session: UniplsSessionState };
 }

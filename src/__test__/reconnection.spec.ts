@@ -1,5 +1,10 @@
 import { afterEach, expect, test } from 'vitest';
 import { Unipls } from '..';
+import type {
+  ReconnectionContext,
+  UniplsReconnector,
+  UniplsReconnectorActions,
+} from '../reconnector';
 import {
   createMockServer,
   TestReconnector,
@@ -8,6 +13,18 @@ import {
 
 const url = 'ws://localhost:8080';
 const server = createMockServer(url);
+
+class CleanupTrackingReconnector implements UniplsReconnector {
+  contexts: Array<UniplsReconnectorActions & ReconnectionContext> = [];
+  cleanupCalls = 0;
+
+  setup(actions: UniplsReconnectorActions, ctx: ReconnectionContext) {
+    this.contexts.push({ ...actions, ...ctx });
+    return () => {
+      this.cleanupCalls += 1;
+    };
+  }
+}
 
 afterEach(() => {
   server.reset();
@@ -159,10 +176,41 @@ test('再接続成功時、reconnect イベントが発火する', async () => {
   off();
 });
 
-test.skip('drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Unipls が close() されたとき、cleanup 関数が呼び出される', async () => {
-  // TODO
+test('drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Unipls が close() されたとき、cleanup 関数が呼び出される', async () => {
+  const reconnector = new CleanupTrackingReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  unipls.drop();
+
+  await expect.poll(() => reconnector.contexts.length).toBe(1);
+
+  await unipls.close();
+
+  expect(reconnector.cleanupCalls).toBe(1);
 });
 
-test.skip('cleanup 関数が呼び出された後 reconnect(), cancel() を呼び出しても何も起こらない', async () => {
-  // TODO
+test('cleanup 関数が呼び出された後 reconnect(), cancel() を呼び出しても何も起こらない', async () => {
+  const reconnector = new CleanupTrackingReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  unipls.drop();
+
+  await expect.poll(() => reconnector.contexts.length).toBe(1);
+  const ctx = reconnector.contexts[0]!;
+
+  await unipls.close();
+
+  expect(reconnector.cleanupCalls).toBe(1);
+
+  ctx.reconnect();
+  ctx.cancel();
+
+  await expect(server.sockets.dequeue({ timeout: 50 })).rejects.toThrow();
+  expect(reconnector.cleanupCalls).toBe(1);
 });

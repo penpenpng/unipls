@@ -236,6 +236,9 @@ export interface UniplsSubscribeParams<
   /** どのメッセージを購読の終端とみなすかを決定する述語関数です。この条件を最初に満たしたメッセージが購読の終端になります。 */
   terminator?: (data: TOutput) => boolean;
 
+  /** 購読の終端を待つ最大時間をミリ秒単位で指定します。 */
+  timeout?: number;
+
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 

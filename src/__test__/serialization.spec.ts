@@ -30,34 +30,170 @@ test('deserializer が指定されたとき、受信したメッセージはデ�
   await expect(sub.messages.dequeue()).resolves.toBe(3);
 });
 
-test.skip('serializer が指定されたとき、送信するメッセージはシリアライズされる', async () => {
-  // TODO
+test('serializer が指定されたとき、送信するメッセージはシリアライズされる', async () => {
+  await using unipls = new Unipls<number, string>({
+    url,
+    serializer: (data) => String(data),
+  });
+
+  await unipls.open();
+  const socket = await mock.sockets.dequeue();
+
+  await unipls.cast({
+    query: 123,
+  });
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('123');
 });
 
-test.skip('デシリアライズに失敗したとき、next() は reject される', async () => {
-  // TODO
+test('デシリアライズに失敗したとき、next() は reject される', async () => {
+  await using unipls = new Unipls<string, number>({
+    url,
+    deserializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  const socket = await mock.sockets.dequeue();
+
+  const promise = unipls.next({
+    selector: () => true,
+  });
+
+  socket.send('broken');
+
+  await expect(promise).rejects.toThrow('invalid payload');
 });
 
-test.skip('デシリアライズに失敗したとき、listen() は onError をトリガーする', async () => {
-  // TODO
+test('デシリアライズに失敗したとき、listen() は onError をトリガーする', async () => {
+  await using unipls = new Unipls<string, number>({
+    url,
+    deserializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  const socket = await mock.sockets.dequeue();
+
+  const sub = new TestSubscriber<number>();
+  unipls.listen(sub);
+
+  socket.send('broken');
+
+  await expect(sub.errors.dequeue()).resolves.toMatchObject({
+    message: 'invalid payload',
+  });
 });
 
-test.skip('デシリアライズに失敗したとき、request() は reject される', async () => {
-  // TODO
+test('デシリアライズに失敗したとき、request() は reject される', async () => {
+  await using unipls = new Unipls<string, number>({
+    url,
+    deserializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  const socket = await mock.sockets.dequeue();
+
+  const promise = unipls.request({
+    query: 'ping',
+    selector: () => true,
+  });
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+
+  socket.send('broken');
+
+  await expect(promise).rejects.toThrow('invalid payload');
 });
 
-test.skip('デシリアライズに失敗したとき、subscribe() は onError をトリガーする', async () => {
-  // TODO
+test('デシリアライズに失敗したとき、subscribe() は onError をトリガーする', async () => {
+  await using unipls = new Unipls<string, number>({
+    url,
+    deserializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  const socket = await mock.sockets.dequeue();
+
+  const sub = new TestSubscriber<number>();
+  unipls.subscribe({
+    ...sub,
+    query: 'ping',
+    selector: () => true,
+  });
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+
+  socket.send('broken');
+
+  await expect(sub.errors.dequeue()).resolves.toMatchObject({
+    message: 'invalid payload',
+  });
 });
 
-test.skip('シリアライズに失敗したとき、cast() は reject される', async () => {
-  // TODO
+test('シリアライズに失敗したとき、cast() は reject される', async () => {
+  await using unipls = new Unipls<number, string>({
+    url,
+    serializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  await mock.sockets.dequeue();
+
+  await expect(
+    unipls.cast({
+      query: 1,
+    }),
+  ).rejects.toThrow('invalid payload');
 });
 
-test.skip('シリアライズに失敗したとき、request() は reject される', async () => {
-  // TODO
+test('シリアライズに失敗したとき、request() は reject される', async () => {
+  await using unipls = new Unipls<number, string>({
+    url,
+    serializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  await mock.sockets.dequeue();
+
+  await expect(
+    unipls.request({
+      query: 1,
+      selector: () => true,
+    }),
+  ).rejects.toThrow('invalid payload');
 });
 
-test.skip('デシリアライズに失敗したとき、subscribe() は onFatalError をトリガーする', async () => {
-  // TODO
+test('シリアライズに失敗したとき、subscribe() は onFatalError をトリガーする', async () => {
+  await using unipls = new Unipls<number, string>({
+    url,
+    serializer: () => {
+      throw new Error('invalid payload');
+    },
+  });
+
+  await unipls.open();
+  await mock.sockets.dequeue();
+
+  const sub = new TestSubscriber<string>();
+  unipls.subscribe({
+    ...sub,
+    query: 1,
+    selector: () => true,
+  });
+
+  await expect(sub.termination).rejects.toThrow('invalid payload');
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'fatal-error',
+  });
 });

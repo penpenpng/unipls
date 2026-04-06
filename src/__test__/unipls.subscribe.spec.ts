@@ -4,9 +4,14 @@ import {
   Unipls,
   UniplsClosedError,
   UniplsDroppedError,
+  UniplsTimeoutError,
   type WebSocketData,
 } from '..';
-import { createMockServer, TestSubscriber } from './test-utils';
+import {
+  createMockServer,
+  TestProvisioner,
+  TestSubscriber,
+} from './test-utils';
 
 const url = 'ws://localhost:8080';
 const server = createMockServer(url);
@@ -40,8 +45,30 @@ test('subscribe() は query を送信した後、selector に合致するメッ�
   await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
 });
 
-test.skip('query を送信するよりも前に受け取ったメッセージは無視される', async () => {
-  // TODO
+test('query を送信するよりも前に受け取ったメッセージは無視される', async () => {
+  const provisioner = new TestProvisioner<string, string>();
+  await using unipls = new Unipls<string, string>({ url });
+
+  unipls.open(provisioner);
+  const socket = await server.sockets.dequeue();
+  const provisioning = await provisioner.dequeueContext();
+
+  const sub = new TestSubscriber<string>();
+  unipls.subscribe({
+    ...sub,
+    ...query,
+  });
+
+  socket.send('pong-1');
+
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
+
+  provisioning.resolve();
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+
+  socket.send('pong-1');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
 });
 
 test('terminator オプションがメッセージの終端を定義する', async () => {
@@ -127,8 +154,24 @@ test('Unipls を close() すると onFatalError がトリガーされる', async
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test.skip('timeout した場合、onFatalError がトリガーされる', async () => {
-  // TODO
+test('timeout した場合、onFatalError がトリガーされる', async () => {
+  await using unipls = new Unipls({ url });
+
+  await unipls.open();
+  const socket = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.subscribe({
+    ...sub,
+    ...query,
+    timeout: 50,
+  });
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+  await expect(sub.termination).rejects.toThrow(UniplsTimeoutError);
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'fatal-error',
+  });
 });
 
 test('signal が abort されると reason: aborted で onFatalError がトリガーされる', async () => {
@@ -262,6 +305,29 @@ test('reconnector が与えられていて、リトライ戦略に never が指�
   await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
 });
 
-test.skip('query が関数形式の場合、再送時に query は再評価される', async () => {
-  // TODO
+test('query が関数形式の場合、再送時に query は再評価される', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  let counter = 0;
+  const sub = new TestSubscriber<string>();
+  unipls.subscribe({
+    ...sub,
+    query: () => `ping-${++counter}`,
+    selector: (msg) => msg.startsWith('pong-'),
+    retry: 're-request',
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping-1');
+  await expect(socket2.inbox.dequeue()).resolves.toBe('ping-2');
+
+  socket2.send('pong-1');
+
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
 });

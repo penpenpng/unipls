@@ -7,7 +7,12 @@ import {
   UniplsTimeoutError,
   type WebSocketData,
 } from '..';
-import { createMockServer } from './test-utils';
+import {
+  createMockServer,
+  TestProvisioner,
+  timeout,
+  TimeoutError,
+} from './test-utils';
 
 const url = 'ws://localhost:8080';
 const server = createMockServer(url);
@@ -34,8 +39,25 @@ test('request() は query を送信した後、selector に合致する次にメ
   await expect(promise).resolves.toBe('pong');
 });
 
-test.skip('query を送信するよりも前に受け取ったメッセージは無視される', async () => {
-  // TODO
+test('query を送信するよりも前に受け取ったメッセージは無視される', async () => {
+  const provisioner = new TestProvisioner<string, string>();
+  await using unipls = new Unipls<string, string>({ url });
+
+  unipls.open(provisioner);
+  const socket = await server.sockets.dequeue();
+  const provisioning = await provisioner.dequeueContext();
+
+  const promise = unipls.request(query);
+
+  socket.send('pong');
+  await expect(timeout(promise, 50)).rejects.toThrow(TimeoutError);
+
+  provisioning.resolve();
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+
+  socket.send('pong');
+  await expect(promise).resolves.toBe('pong');
 });
 
 test('timeout した場合、 UniplsTimeoutError で reject する', async () => {

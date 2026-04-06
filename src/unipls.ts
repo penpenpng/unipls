@@ -2,7 +2,11 @@ import { AsyncResult } from './async-result.ts';
 import { AsyncResults, type UniplsSubscriber } from './async-results.ts';
 import type { DropDetectorContext } from './drop-detector';
 import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
-import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
+import {
+  UniplsClosedError,
+  UniplsDroppedError,
+  UniplsTimeoutError,
+} from './errors.ts';
 import type { EventBus } from './event-bus';
 import type {
   UniplsReconnectEvent,
@@ -140,6 +144,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         },
       });
     });
+    events.on('error', ({ error }) => {
+      result.reject(error);
+    });
 
     events.on('dropped', () => {
       if (!this.#reconnector) {
@@ -176,9 +183,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       subscriber: params,
       signal: params.signal,
       finally: () => {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+        }
         events.dispose();
       },
     });
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
     events.on('message', ({ message }) => {
       Unipls.#processMessage({
@@ -205,6 +216,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           );
         },
       });
+    });
+    events.on('error', ({ error }) => {
+      results.handleError(error);
     });
 
     events.on('dropped', () => {
@@ -276,6 +290,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
     let activeRequest = params.query;
     let activeSelector = params.selector;
+    let requestSent = false;
 
     const request = (
       query: UniplsMessageFactory<TInput>,
@@ -293,13 +308,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           signal: result.signal,
         })
         .then(() => {
+          requestSent = true;
           activeRequest = query;
           activeSelector = selector;
         })
         .catch((err) => {
-          if (err instanceof UniplsClosedError) {
-            result.reject(err);
-          }
+          result.reject(err);
         });
     };
 
@@ -312,6 +326,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.on('message', ({ message }) => {
+      if (!requestSent) {
+        return;
+      }
+
       Unipls.#processMessage({
         message,
         selector: activeSelector,
@@ -321,6 +339,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           // ignore because `result.resolve` never throws
         },
       });
+    });
+    events.on('error', ({ error }) => {
+      result.reject(error);
     });
 
     let retryRegistered = false;
@@ -333,6 +354,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         if (result.resulted) {
           return;
         }
+
+        requestSent = false;
 
         try {
           await callback({
@@ -390,16 +413,32 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         events.dispose();
       },
       signal: params.signal,
+      timeout: params.timeout,
     });
 
-    const sendOnce = (payload: TInput) => {
+    const sendOnce = (query: UniplsMessageFactory<TInput>) => {
       if (result.resulted) return;
-      this.#socket
+
+      const enqueueEvaluatedPayload = () => {
+        const payload = Unipls.#evaluateQuery(query);
+        this.#socket
         .enqueue(payload, { force, signal: result.signal })
         .then(() => result.resolve())
-        .catch(() => {
-          // Handled by event listeners below
+        .catch((err) => {
+          result.reject(err);
         });
+      };
+
+      if (this.state === 'open' || (this.state === 'provisioning' && force)) {
+        enqueueEvaluatedPayload();
+        return;
+      }
+
+      if (force) {
+        events.once('open', enqueueEvaluatedPayload);
+      } else {
+        events.once('open', enqueueEvaluatedPayload);
+      }
     };
 
     if (
@@ -407,7 +446,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.state === 'provisioning' ||
       this.state === 'open'
     ) {
-      sendOnce(Unipls.#evaluateQuery(params.query));
+      sendOnce(params.query);
     }
 
     events.once('closed', () => {
@@ -425,7 +464,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#provisionedSessions.add(sessionId);
 
     const ctx: UniplsProvisioningContext<TInput, TOutput> = {
-      cast: (data) => this.castForce(data),
+      cast: (data) => this.castForce({ query: data }),
       request: (params) => this.requestForce(params),
       listen: (params) => this.listen(params),
       subscribe: (params) => this.subscribeForce(params),
@@ -559,12 +598,17 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       subscriber: params,
       signal: params.signal,
       finally: () => {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+        }
         events.dispose();
       },
     });
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
     let activeRequest = params.query;
     let activeSelector = params.selector;
+    let requestSent = false;
 
     const request = (
       query: UniplsMessageFactory<TInput>,
@@ -582,13 +626,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           signal: results.signal,
         })
         .then(() => {
+          requestSent = true;
           activeRequest = query;
           activeSelector = selector;
         })
         .catch((err) => {
-          if (err instanceof UniplsClosedError) {
-            results.raiseFatalError(err);
-          }
+          results.raiseFatalError(err);
         });
     };
 
@@ -600,7 +643,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       request(params.query, params);
     }
 
+    if (typeof params.timeout === 'number' && params.timeout > 0) {
+      timeoutTimer = setTimeout(() => {
+        results.raiseFatalError(new UniplsTimeoutError());
+        timeoutTimer = undefined;
+      }, params.timeout);
+    }
+
     events.on('message', ({ message }) => {
+      if (!requestSent) {
+        return;
+      }
+
       Unipls.#processMessage({
         message,
         selector: params.terminator ?? (() => false),
@@ -626,6 +680,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         },
       });
     });
+    events.on('error', ({ error }) => {
+      results.handleError(error);
+    });
 
     const onReconnected: UniplsRetrySetupContext<
       TInput,
@@ -635,6 +692,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         if (results.resulted) {
           return;
         }
+
+        requestSent = false;
 
         try {
           await callback({

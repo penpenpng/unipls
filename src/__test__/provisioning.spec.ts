@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
-import { Unipls, UniplsClosedError } from '..';
+import { ImmediateReconnector, Unipls, UniplsClosedError } from '..';
 import {
   createMockServer,
   TestProvisioner,
@@ -122,10 +122,59 @@ test('初回接続後、Provisioning が完了するまで subscribe() の送信
   await expect(socket.inbox.dequeue()).resolves.toBe('ping');
 });
 
-test.skip('再接続後、Provisioning が完了するまで request() の送信は保留される', () => {
-  // TODO
+test('再接続後、Provisioning が完了するまで request() の送信は保留される', async () => {
+  const provisioner = new TestProvisioner<string, string>();
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls<string, string>({ url, reconnector });
+
+  const openPromise = unipls.open(provisioner);
+  await server.sockets.dequeue();
+
+  const firstProvisioning = await provisioner.dequeueContext();
+  firstProvisioning.resolve();
+  await openPromise;
+
+  const socket1 = await server.sockets.dequeue({ timeout: 50 }).catch(() => null);
+  if (socket1) {
+    throw new Error('unexpected extra socket');
+  }
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  const response = unipls.request({
+    query: 'ping',
+    selector: (msg) => msg === 'pong',
+  });
+
+  await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
+  await expect(timeout(response, 50)).rejects.toThrow(TimeoutError);
+
+  const secondProvisioning = await provisioner.dequeueContext();
+  secondProvisioning.resolve();
+
+  await expect(socket2.inbox.dequeue()).resolves.toBe('ping');
 });
 
-test.skip('Provisioning の中で通信関数を呼び出すことができる', async () => {
-  // TODO
+test('Provisioning の中で通信関数を呼び出すことができる', async () => {
+  await using unipls = new Unipls<string, string>({ url });
+
+  const openPromise = unipls.open(async (ctx) => {
+    await ctx.cast('auth');
+    await expect(
+      ctx.request({
+        query: 'ping',
+        selector: (msg) => msg === 'pong',
+      }),
+    ).resolves.toBe('pong');
+  });
+
+  const socket = await server.sockets.dequeue();
+
+  await expect(socket.inbox.dequeue()).resolves.toBe('auth');
+  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+
+  socket.send('pong');
+
+  await expect(openPromise).resolves.toBeUndefined();
 });
