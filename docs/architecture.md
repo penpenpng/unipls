@@ -1,265 +1,69 @@
-# unipls 全体設計
-
-## コンポーネント構成
-
-```
-┌────────────────────────────────────────┐
-│              Unipls                    │  ← 開発者が直接利用するエントリポイント
-│  ・プロビジョニング管理                    │
-│  ・メッセージングメソッド (listen, request │
-│    cast, subscribe, next)              │
-│  ・自動再接続ロジック                      │
-│  ・再送/再cast 戦略の解釈                  │
-└────────────┬───────────────────────────┘
-             │ 利用
-┌────────────▼───────────────────────────┐
-│           UniplsSocket                 │  ← 基礎的な WebSocket ラッパー
-│  ・WebSocket ライフサイクル管理             │
-│  ・セッション管理 (UniplsSessionState)     │
-│  ・シリアライズ/デシリアライズ               │
-│  ・drop vs. normal close の判別           │
-│  ・enqueue() による送信キュー               │
-└────────────┬───────────────────────────┘
-             │ 利用
-┌────────────▼───────────────────────────┐
-│         EventBus / EventBusView        │  ← 型安全なイベントエミッター
-└────────────────────────────────────────┘
+# unipls Architecture
 
-その他の内部クラス:
-・AsyncResult    — 単一の非同期結果 (request 等の戻り値)
-・AsyncResults   — 複数の非同期結果ストリーム (listen 等の内部状態)
-・AwaitableQueue — 非同期デキュー付きキュー (テストユーティリティ)
-```
+## 層構造
 
----
+`unipls` は大きく 2 層です。
 
-## 各コンポーネントの詳細
+1. `UniplsSocket`
+   WebSocket の接続管理、シリアライズ、イベント化、送信待機を担当する低レベル層
+2. `Unipls`
+   provisioning、再接続、retry 戦略、購読 API を提供する高レベル層
 
-### `Unipls` クラス (`src/unipls.ts`)
+補助クラスとして `EventBus`、`AsyncResult`、`AsyncResults`、`UniplsSessionManager`、`DropDetectorManager` があります。
 
-開発者が直接操作するパブリック API です。`UniplsSocket` を内包し、その上に高レベルロジックを構築しています。
+## `UniplsSocket`
 
-#### 責務
+責務:
 
-- `#runProvisioner()`: プロビジョナーを実行し `AsyncResult<void>` でラップする
-- `#handleDropped()`: drop イベントをフックして自動再接続を起動する
-- `#request()`: `request()` / `requestForce()` の共通実装。`AsyncResult` + `EventBusView` で受信を管理する
-- `getRetrySetupFunction()` (static): `UniplsRetryStrategy` 文字列を `UniplsRetrySetupFunction` に正規化するファクトリ
-- `#processMessage()` (static): セレクタ評価 → コールバック呼び出しの安全なラッパー
+- `WebSocket` の生成と `url` / `timeout` / serializer / deserializer の適用
+- `raw-open` / `raw-message` / `raw-close` を公開イベントへ変換
+- close code 1000 を `closed`、それ以外を `dropped` として扱う
+- `enqueue()` により、接続状態に応じて送信を待機または失敗させる
 
-#### 自動再接続フロー
+重要な設計判断:
 
-```
-dropped イベント発火
-  → intent === 'open' かつ 同一セッション かつ 再接続中でない
-  → #socket.open() を再呼び出し（プロビジョナーを再実行）
-  → 成功時に 'reconnect' イベントを emit
-```
+- `open()` ごとに内部セッション (`UniplsSessionState`) を新規作成する
+- `raw-open` の時点で state を `provisioning` にし、provisioner 完了後に `open` を emit する
+- `force: true` の送信は `provisioning` 中でも `raw-open` 後なら許可する
 
-再接続中は `#reconnectPromise` に Promise を保持し、多重起動を防ぎます。
+## `Unipls`
 
----
+責務:
 
-### `UniplsSocket` クラス (`src/unipls-socket.ts`)
+- `open()` 時にセッション管理を開始する
+- provisioning を `#runProvisioner()` で統一実行する
+- `next` / `listen` / `cast` / `request` / `subscribe` を提供する
+- `dropped` を受けて `reconnector` を起動する
+- 再接続成功後に `reconnect` イベントを emit する
 
-WebSocket の低レベルラッパーです。プロビジョニング、シリアライズ、イベントエミッターを備えます。
+設計の要点:
 
-#### セッション管理
+- `UniplsSocket` のイベントを元に、各操作は `EventBusView` を作って局所的に購読する
+- 単発応答は `AsyncResult`、購読型は `AsyncResults` でライフサイクルを管理する
+- `request` / `subscribe` は `retry` 戦略により再接続後の挙動を切り替える
 
-各 `open()` 呼び出しで `UniplsSessionState` が作成され、インクリメントされる整数 `sessionId` が割り当てられます。セッション状態はイベントハンドラで参照され、旧セッションのイベントを無視するために使われます。
+## セッション管理
 
-`UniplsSessionState` の状態遷移:
+`UniplsSessionManager` は、`UniplsSocket` が持つ接続セッションとは別に、`open()` 呼び出し単位の論理セッションを管理します。
 
-```
-dead (初期)
-  ↓ open() 呼び出し
-connecting
-  ↓ WebSocket の onopen 発火
-provisioning
-  ↓ provisioner の実行が完了する
-open
-  ↓ 正常切断 (close code 1000)
-closed
-```
+- `new()`: 新しい論理セッション開始
+- `abort()`: `close()` 時にセッション全体の `AbortSignal` を中断
+- `recordAttempt()`: 再接続試行を履歴へ追加
+- `onSuccess()`: 再接続成功時のイベントを構築
+- `onFailure(err)`: 次回再接続コンテキスト用にエラーを保存
 
-または:
+この設計により、1 回の `open()` の間に複数回の物理接続が発生しても、再接続文脈をまとめて扱えます。
 
-```
-open (または provisioning / connecting)
-  ↓ 異常切断 (close code ≠ 1000) またはタイムアウト
-dropped
-```
+## EventBus と操作スコープ
 
-#### close code の扱い
+各 API 呼び出しは `spawnEventBusView()` で独立ビューを作り、完了時に必ず `dispose()` されます。これにより:
 
-| コード | 定数名                | 意味                                   |
-| ------ | --------------------- | -------------------------------------- |
-| 1000   | `NORMAL_CLOSURE`      | 正常切断 → `'closed'` 状態へ           |
-| 3000   | `IRRECOVERABLE_DROP`  | 回復不能な drop（将来利用予定）        |
-| 3001   | `ABNORMAL_CLOSURE`    | `drop()` による強制切断（1006 の代替） |
-| 3002   | `MARKED_AS_TIMED_OUT` | タイムアウトによる強制切断             |
-| その他 | —                     | 異常切断 → `'dropped'` 状態へ          |
+- 個別操作が他の操作の listener を汚染しない
+- timeout / abort / success / error のどれでも後片付けができる
 
-#### `enqueue()` メソッド
+## 現時点で見えている設計ギャップ
 
-`state === 'open'`（または `force: true` かつ `state === 'provisioning'`）になるまで送信を遅延します。drop/close が発生した場合は reject します。`Unipls` レベルの `request()` などはこのメソッドを通じて送信します。
-
----
-
-### `EventBus<TEvents>` クラス (`src/event-bus.ts`)
-
-ジェネリクスで型安全なイベントエミッターです。
-
-```typescript
-const bus = new EventBus<{ message: { text: string }; close: void }>();
-bus.on('message', ({ text }) => console.log(text));
-bus.emit('message', { text: 'hello' });
-```
-
-#### `EventBusView`
-
-`spawnEventBusView()` で作成するスコープ付きビューです。ビューを通じて登録したすべてのリスナーを `dispose()` 一発で解除できます。
-
-各メッセージング操作（`request()`, `listen()` など）はそれぞれ独立した `EventBusView` を生成し、操作完了時に `dispose()` することでリスナーのリークを防いでいます。
-
-`Symbol.dispose` を実装しており、`using` 構文にも対応しています。
-
----
-
-### `AsyncResult<T>` クラス (`src/async-result.ts`)
-
-単一の非同期結果（成功/失敗）を表現するクラスです。
-
-- `promise`: 外部から await できる Promise
-- `resolve(value)` / `reject(reason)`: 結果を確定させる（べき等）
-- `resulted`: 結果が確定済みかどうか
-- `signal`: 外部 `AbortSignal` と内部コントローラーを合成した `AbortSignal`
-- `timeout` オプション: 指定時間後に `UniplsTimeoutError` で自動 reject
-- `finally` コールバック: 結果確定時（中断含む）に必ず呼ばれるクリーンアップ
-
-内部で `AbortController` を使い、`resolve`/`reject` 後にクリーンアップを自動実行します。
-
----
-
-### `AsyncResults<T>` クラス (`src/async-results.ts`)
-
-複数の非同期結果（ストリーム）を管理するクラスです。`listen()` の内部実装に使われます。
-
-- `handleMessage(message)`: `onMessage` コールバックを呼び出す
-- `handleTerminator(message)`: `onTerminated` を呼び出してストリームを終了させる
-- `handleError(error)`: `onError` を呼び出す（致命的でないエラー）
-- `raiseFatalError(error)`: `onFatalError` を呼び出してストリームを終了させる
-- `unsubscribe()`: `onUnsubscribed` を呼び出してストリームを終了させる
-
-終了理由 (`SubscriptionEndReason`) は終了後に `finally` コールバックへ渡されます。
-
----
-
-### `UniplsReconnector` インターフェース (`src/unipls-reconnector.ts`)
-
-再接続の可否・タイミングを制御するカスタム戦略インターフェースです（現在 `Unipls` からは利用されていませんが、将来の拡張を見越して定義されています）。
-
-```typescript
-interface UniplsReconnector {
-  reconnect(ctx: ReconnectionContext): boolean | Promise<boolean>;
-}
-```
-
-`ReconnectionContext` には以下が含まれます:
-
-- `session`: 現在のセッション ID
-- `lastAttemptedAt`: 前回の試行時刻
-- `sessionAttempts` / `allAttempts`: 試行履歴
-
----
-
-### `AwaitableQueue<T>` クラス (`src/libs/awaitable-queue.ts`)
-
-非同期デキューをサポートするキューです。テストコードで活用されています（`mock-server` の受信 inbox など）。
-
-- `enqueue(value, options?)`: 値をキューに積む。値が即デキューされない場合、デキューされるまで Promise をブロックする
-- `dequeue(options?)`: キューから値を取り出す。キューが空なら次の `enqueue` まで待機する
-- `dequeueSync()`: 同期的に取り出す。空なら `AwaitableQueueEmptyError` を throw する
-- `clear()`: キューをクリアする
-
----
-
-## ファイル構成
-
-```
-src/
-├── index.ts                  # (現在は placeholder)
-├── types.ts                  # 基本型定義 (WebSocketData, SessionId 等)
-├── errors.ts                 # エラークラス定義
-├── unipls.ts                 # Unipls クラス (メインエントリポイント)
-├── unipls.interface.ts       # Unipls の公開 API に関わる型定義
-├── unipls-socket.ts          # UniplsSocket クラス
-├── unipls-reconnector.ts     # UniplsReconnector インターフェース
-├── event-bus.ts              # EventBus / EventBusView クラス
-├── async-result.ts           # AsyncResult クラス
-├── async-results.ts          # AsyncResults クラス、UniplsSubscriber 型
-├── libs/
-│   ├── index.ts              # libs の re-export
-│   ├── awaitable-queue.ts    # AwaitableQueue クラス
-│   └── utils.ts              # u ユーティリティ (Promise.timeout 等)
-└── __test__/
-    ├── mock-server.ts        # テスト用 WebSocket サーバーモック (msw ベース)
-    ├── listen.spec.ts        # listen() のテスト
-    ├── request.spec.ts       # request() のテスト
-    ├── reconnection.spec.ts  # 自動再接続のテスト
-    ├── provisioning.spec.ts  # プロビジョニングのテスト
-    └── serialization.spec.ts # シリアライズ/デシリアライズのテスト
-```
-
----
-
-## データフロー
-
-### メッセージ受信フロー (listen の例)
-
-```
-WebSocket.onmessage
-  → EventBus.emit('raw-message', { session, data })
-  → EventBus.emit('message', { session, message: deserialize(data) })
-  → EventBusView(listen 用) の 'message' ハンドラ
-    → #processMessage(): selector で絞り込み
-      → AsyncResults.handleTerminator() または handleMessage()
-        → onTerminated() または onMessage() コールバック
-```
-
-### メッセージ送信フロー (request の例)
-
-```
-unipls.request({ query, selector })
-  → AsyncResult<TOutput> を生成
-  → EventBusView を生成し 'message' / 'dropped' を購読
-  → UniplsSocket.enqueue(query)
-    → state === 'open' になるまで待機
-    → WebSocket.send(serialize(query))
-  → 'message' イベントで selector を評価
-    → 一致したら AsyncResult.resolve(message)
-  → AsyncResult の promise を返す
-```
-
-### 自動再接続フロー
-
-```
-WebSocket.onclose (code !== 1000)
-  → EventBus.emit('raw-close', { code })
-  → EventBus.emit('dropped', { session })
-  → Unipls の 'dropped' ハンドラ
-    → intent === 'open' かつ 再接続未着手ならば
-    → UniplsSocket.open() を再呼び出し
-      → provisioner を再実行
-      → 成功したら EventBus.emit('reconnect', ...)
-```
-
----
-
-## 設計上の注意点・既知の課題
-
-- `index.ts` はまだ placeholder であり、外部向けエクスポートは未整備です。
-- `cast()` / `subscribe()` / `next()` / `subscribeForce()` / `castForce()` は `NotImplementedError` を throw します。
-- `UniplsReconnector` インターフェースは定義済みですが、`Unipls` の再接続ロジックにはまだ組み込まれていません（現在は drop 時に無条件で即再接続）。
-- `UniplsSessionState` が `events` から外部参照可能な状態になっており、将来的に隠蔽する予定です（`FIXME` コメントあり）。
-- プロビジョニング完了前の `request()` の送信タイミングに関するテスト (`provisioning.spec.ts`) が現在スキップされています。
+- `next()` / `listen()` は drop 時に即失敗しており、`reconnector` がある場合の待機継続設計と一致していない
+- `#handleDropped()` は `cancel()` と cleanup をまだ処理していない
+- provisioning 失敗時のソケット状態遷移と `open()` の reject 伝播が不十分
+- `AsyncResults.raiseFatalError()` はコールバック例外をそのまま未処理 rejection にしやすい

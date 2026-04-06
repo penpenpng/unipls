@@ -1,96 +1,61 @@
-# unipls 概要
+# unipls Overview
 
-## 目的
+## このライブラリが解決したい課題
 
-unipls は JavaScript ランタイムのための高レベル WebSocket クライアントライブラリです。
+`unipls` は素の `WebSocket` が持たない、アプリケーション層の通信制御をまとめて扱うためのクライアントライブラリです。現状の実装とテストから読み取れる主目的は次のとおりです。
 
-多くのランタイムが提供するビルトインの `WebSocket` クラスはソケットレベルの API（接続・送信・受信・切断）を提供するにとどまります。一方 unipls は、それらの上位に位置する以下の機能を提供することを目指しています。
+- 送受信データの型変換を接続単位で一元化する
+- メッセージを `cast` / `next` / `request` / `listen` / `subscribe` という通信パターンに分けて扱う
+- 接続直後の初期化処理を provisioning として明示化する
+- 想定外切断 (`drop`) を検知し、再接続と再購読を制御可能にする
+- ブラウザ標準 `WebSocket` に依存しつつ、テストしやすい差し替え可能な API にする
 
-- **メッセージのシリアライズ/デシリアライズ**: 任意の型への変換ロジックをコンストラクタで一元定義できます。
-- **リクエスト/レスポンスのペアリング**: `request()` を用いることで、送信したクエリに対するレスポンスを Promise として受け取れます。
-- **複数レスポンスの購読**: `subscribe()` / `listen()` を用いることで、条件を満たす複数のメッセージをストリームとして扱えます。
-- **接続プロビジョニング**: `open()` にプロビジョニング関数を渡すことで、接続確立直後に行うべき初期化処理（認証メッセージの送信など）を宣言的に記述できます。
-- **自動再接続**: 予期しない切断（drop）が発生した場合に自動的に再接続を試み、プロビジョニングを再実行します。
-- **再送戦略**: 再接続後にリクエストを再送するかどうかを `retry` / `recast` オプションで制御できます。
+`docs` や JSDoc には未実装と書かれている箇所がありますが、現状のコードベースでは `next` / `cast` / `subscribe` も実装済みです。仕様判断はテストを優先します。
 
-## コアコンセプト
+## 現在の主要概念
 
 ### セッション
 
-`open()` が呼ばれてから `close()` が呼ばれるまでの期間を **セッション** と呼びます。各セッションには一意な `SessionId`（正の整数）が割り当てられます。drop による自動再接続ではセッション ID が変わりません。
+- 1 回の `open()` 呼び出しから、その後の `close()` までが 1 セッション
+- `drop` 後の自動再接続でもセッション ID は維持される
+- 再接続の試行履歴はセッション単位と全セッション単位の両方で保持する
 
-### 接続状態 (`UniplsConnectionState`)
+### 接続状態
 
-| 状態 | 説明 |
-|---|---|
-| `'connecting'` | WebSocket が接続を試みている |
-| `'provisioning'` | WebSocket 接続済み。プロビジョニング関数の実行中 |
-| `'open'` | プロビジョニング完了。メッセージングメソッドが利用可能 |
-| `'closed'` | 明示的に `close()` されて切断された |
-| `'dropped'` | 予期しない切断が発生した |
+- `connecting`: WebSocket 接続中
+- `provisioning`: ソケットは開いたが provisioning 未完了
+- `open`: provisioning 済みで通常通信可能
+- `closed`: 明示的 close 済み
+- `dropped`: 異常切断またはタイムアウトで切断された
 
-### 接続インテント (`UniplsConnectionIntent`)
+### provisioning
 
-`intent` は「接続したいか・切断したいか」という意図を表します。
+- `open(provisioner)` の引数として与える
+- 初回接続と再接続の両方で実行される
+- 通常の `cast` / `request` / `subscribe` は provisioning 完了まで送信を待機する
+- provisioning 内では `castForce` / `requestForce` / `subscribeForce` 相当の API が `ctx` から使える
 
-| 値 | 説明 |
-|---|---|
-| `'open'` | 接続を維持したい（`open()` を呼んだ後） |
-| `'close'` | 切断したい（`close()` を呼んだ後） |
+### 想定する切断
 
-`intent === 'open'` かつ drop が発生した場合に自動再接続が行われます。
+- `close()`: 利用者の明示的終了。再接続しない
+- `drop()`: 異常終了として扱う。`reconnector` があれば再接続対象
+- drop detector: 接続上の異常を外部から検知して `drop()` させる仕組み
 
-### プロビジョニング
+## 通信 API の整理
 
-`open()` の引数に渡す関数を **プロビジョナー** と呼びます。プロビジョナーは WebSocket 接続の確立直後（初回接続・再接続の両方）に実行されます。
+- `cast`: 1-input 0-output
+- `next`: 0-input 1-output
+- `request`: 1-input 1-output
+- `listen`: 0-input N-output
+- `subscribe`: 1-input N-output
 
-プロビジョナーの実行が完了するまで、通常のメッセージングメソッド（`cast` / `request` / `subscribe`）はキューに保持され、完了後に順次送信されます。
+`request` と `subscribe` は `retry` 戦略を持ち、再接続後に待機継続だけ行うか、同じ query を再送するかを選べます。`listen` と `next` は query を持たないため、再接続後は待機継続が基本方針としてテストで要求されています。
 
-### メッセージングメソッド
+## 2026-04-06 時点の既知の不整合
 
-入出力の数に応じた 4 種類のメソッドがあります（一部は未実装）。
+テストから見ると未完了の実装が残っています。
 
-| メソッド | 通信種別 | 実装状況 |
-|---|---|---|
-| `cast()` | 1-0（送信のみ） | 未実装 |
-| `listen()` | 0-N（受信のみ） | 実装済み |
-| `request()` | 1-1（リクエスト/レスポンス） | 実装済み |
-| `subscribe()` | 1-N（クエリ送信 + 複数レスポンス受信） | 未実装 |
-| `next()` | 0-1（次の1件受信） | 未実装 |
-
-### Force バリアント
-
-`cast` / `request` / `subscribe` には `Force` サフィックスを持つバリアントがあります（例: `requestForce()`）。通常バリアントはプロビジョニング完了後まで送信を遅延させますが、Force バリアントはプロビジョニング中でも接続さえ完了していればただちに送信を試みます。プロビジョナー内から呼び出す場合はこのバリアントを使います。
-
-## 基本的な使い方
-
-```typescript
-import { Unipls } from 'unipls';
-
-// ジェネリクスパラメータ: <送信型, 受信型>
-const unipls = new Unipls<string, string>({ url: 'wss://example.com/socket' });
-
-// プロビジョニング付きで接続
-await unipls.open(async (ctx) => {
-  await ctx.cast('<auth-token>');
-});
-
-// 1-1 通信: リクエスト送信 → レスポンス受信
-const response = await unipls.request({
-  query: 'ping',
-  selector: (msg) => msg === 'pong',
-});
-
-// 0-N 通信: メッセージ購読
-const unsubscribe = unipls.listen({
-  selector: (msg) => msg.startsWith('event:'),
-  onMessage: (msg) => console.log(msg),
-  onFatalError: (err) => console.error(err),
-});
-
-// 購読解除
-unsubscribe();
-
-// 切断
-await unipls.close();
-```
+- `next()` が `reconnector` 存在時でも drop 直後に失敗してしまう
+- `listen()` / `subscribe()` の再接続継続が壊れている
+- provisioning 失敗が `open()` に正しく伝播しない
+- 再接続の `cancel()` / cleanup まわりは未実装 TODO が残っている

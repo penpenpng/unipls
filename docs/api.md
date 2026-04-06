@@ -1,284 +1,112 @@
-# unipls API 仕様
+# unipls API
 
-## `Unipls<TInput, TOutput>` クラス
+## `new Unipls(params)`
 
-メインエントリポイントとなるクラスです。
+主要オプション:
 
-- `TInput`: 送信メッセージの型
-- `TOutput`: 受信メッセージの型
+- `url`: 接続先 URL
+- `serializer`: `TInput -> WebSocketData`
+- `deserializer`: `WebSocketData -> TOutput`
+- `WebSocket`: テストや非ブラウザ環境向け差し替え口
+- `timeout`: 接続確立タイムアウト。既定値は `5000`
+- `reconnector`: drop 後に再接続判断を行う戦略
+- `dropDetectors`: provisioning 完了後に起動する切断検知プラグイン
 
-デフォルトはどちらも `WebSocketData`（= `string | ArrayBufferLike | Blob | ArrayBufferView`）です。
+## 接続 API
 
----
+### `open(provisioner?)`
 
-### コンストラクタ
+- WebSocket 接続を開始する
+- ソケット open 後、provisioner があれば完了まで待つ
+- 完了後に state は `open` になる
+- 既に接続中または接続試行中なら `UniplsDuplicatedConnectionError`
 
-```typescript
-new Unipls<TInput, TOutput>(params: UniplsParams<TInput, TOutput>)
-```
+### `close()`
 
-#### `UniplsParams`
+- 明示切断
+- 現在セッションの再接続待機も中断対象
+- 既に閉じていれば何もしない
 
-| プロパティ | 型 | 必須 | デフォルト | 説明 |
-|---|---|---|---|---|
-| `url` | `string` | ✓ | — | WebSocket 接続先 URL |
-| `serializer` | `(data: TInput) => WebSocketData` | — | 恒等変換 | 送信前に `TInput` を `WebSocketData` へ変換する関数 |
-| `deserializer` | `(data: WebSocketData) => TOutput` | — | 恒等変換 | 受信後に `WebSocketData` を `TOutput` へ変換する関数 |
-| `WebSocket` | `WebSocketConstructor` | — | `globalThis.WebSocket` | 利用する WebSocket コンストラクタ。ランタイムに標準 WebSocket がない場合に指定する |
-| `timeout` | `number` | — | `5000` | 接続タイムアウト（ミリ秒） |
+### `drop()`
 
----
+- 異常切断として扱う強制 close
+- `reconnector` があれば再接続フローへ入る
 
-### プロパティ
+## 通信 API
 
-#### `url: string`
+### `next({ selector, timeout?, signal? })`
 
-接続先 URL を返します。
+- selector に一致する次の 1 件を待つ
+- `close()` では `UniplsClosedError`
+- `drop` 時の扱いは未整理で、テスト上は `reconnector` なしなら `UniplsDroppedError`、ありなら待機継続が期待値
 
-#### `state: UniplsConnectionState`
+### `listen(subscriber & { selector?, terminator?, signal? })`
 
-現在の接続状態を返します。値は `'connecting'` / `'provisioning'` / `'open'` / `'closed'` / `'dropped'` のいずれかです。
+- メッセージ受信専用の継続購読
+- `terminator` 一致で終了
+- `unsubscribe()` を返す
 
-#### `intent: UniplsConnectionIntent`
+### `cast({ query, timeout?, signal? })`
 
-現在の接続インテントを返します。値は `'open'` / `'close'` のいずれかです。
+- メッセージ 1 件を送信
+- provisioning 完了前なら待機
 
----
+### `castForce(...)`
 
-### メソッド
+- provisioning 完了を待たず、接続直後に送信可能
 
-#### `open(provisioner?: UniplsProvisioner): Promise<void>`
+### `request({ query, selector, timeout?, signal?, retry? })`
 
-WebSocket 接続を確立します。
+- query を送り、selector 一致の最初のレスポンスを返す
+- `retry` は `never` / `re-request` / `keep-listening` / カスタム関数
 
-- `provisioner` を渡した場合、接続成功直後にそれを実行します。
-- 返り値の Promise は接続とプロビジョニングが両方完了したときに resolve します。
-- すでに接続中または接続を試行中の場合、`UniplsDuplicatedConnectionError` を throw します。
+### `requestForce(...)`
 
+- provisioning 中でも送信する `request`
 
-```typescript
-await unipls.open(async (ctx) => {
-  await ctx.request({ query: 'auth', selector: (msg) => msg === 'ok' });
-});
-```
+### `subscribe(subscriber & { query, selector, terminator?, signal?, retry? })`
 
----
+- query を送ってから継続購読する
+- `retry` の意味は `request` と同じ
+- `unsubscribe()` を返す
 
-#### `close(): Promise<void>`
+### `subscribeForce(...)`
 
-WebSocket 接続を切断します。
+- provisioning 中でも送信する `subscribe`
 
-- この切断に伴う自動再接続は行われません。
-- すでに切断済みの場合は何もしません。
-- 返り値の Promise は切断完了時に resolve します。
+## Provisioning Context
 
----
+`open(provisioner)` に渡す provisioning は次の context を受け取る:
 
-#### `drop(): void`
+- `cast(data)`
+- `request(params)`
+- `listen(params)`
+- `subscribe(params)`
+- `session`
+- `isSessionBeginning`
 
-WebSocket 接続を異常終了コードで強制切断します。`close()` と異なり、`intent === 'open'` であれば自動再接続が発生します。主にテスト用途です。
+ここでの `cast` / `request` / `subscribe` は force 系で動作し、初期化中でも送信可能です。
 
----
+## 購読コールバック
 
-#### `listen(params): () => void`
+`listen` / `subscribe` の subscriber で使う主なコールバック:
 
-0-input N-output 通信を行います。メッセージを受信するだけで送信は行いません。
+- `onMessage`
+- `onTerminated`
+- `onError`
+- `onUnsubscribed`
+- `onFatalError`
+- `finally({ reason, error? })`
 
-- 返り値は購読を解除する関数（`unsubscribe`）です。
-- `state === 'closed'` の場合は `UniplsClosedError` を throw します。
+`reason` は `closed` / `dropped` / `unsubscribed` / `terminated` / `aborted` / `fatal-error` のいずれかです。
 
-**引数**: `UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>`
+## エラー
 
-##### `UniplsListenOptions<TOutput>`
+- `UniplsClosedError`
+- `UniplsDroppedError`
+- `UniplsTimeoutError`
+- `UniplsDuplicatedConnectionError`
 
-| プロパティ | 型 | 説明 |
-|---|---|---|
-| `selector` | `(data: TOutput) => boolean` | 購読対象のメッセージを選別する述語関数。省略時はすべてのメッセージが対象 |
-| `terminator` | `(data: TOutput) => boolean` | 購読の終端となるメッセージを識別する述語関数。条件を満たした最初のメッセージで購読が終了する |
-| `signal` | `AbortSignal` | 購読を中断するための `AbortSignal` |
+## 実装とテストの差分メモ
 
-##### `UniplsSubscriber<TOutput>`
-
-| プロパティ | 型 | 説明 |
-|---|---|---|
-| `onMessage` | `(data: TOutput) => void` | 購読対象メッセージを受信したときのコールバック |
-| `onTerminated` | `(data: TOutput) => void` | `terminator` 条件を満たすメッセージを受信したときのコールバック |
-| `onError` | `(error: unknown) => void` | セレクタまたはデシリアライザでエラーが発生したときのコールバック |
-| `onUnsubscribed` | `() => void` | `unsubscribe()` が呼ばれたときのコールバック |
-| `onFatalError` | `(error: unknown) => void` | 致命的なエラー（`UniplsClosedError` など）が発生したときのコールバック |
-| `finally` | `(ctx: SubscriptionFinalizationContext) => void` | 購読が何らかの理由で終了したときに必ず呼ばれるコールバック |
-
-##### `SubscriptionFinalizationContext`
-
-| プロパティ | 型 | 説明 |
-|---|---|---|
-| `reason` | `SubscriptionEndReason` | 購読終了の理由 |
-| `error` | `unknown` | `reason === 'fatal-error'` の場合のみ設定されるエラー |
-
-##### `SubscriptionEndReason`
-
-| 値 | 説明 |
-|---|---|
-| `'terminated'` | `terminator` 条件を満たすメッセージを受信した |
-| `'unsubscribed'` | `unsubscribe()` が呼ばれた |
-| `'closed'` | `close()` で切断された |
-| `'fatal-error'` | その他の致命的なエラー |
-
----
-
-#### `request(params): Promise<TOutput>`
-
-1-input 1-output 通信を行います。クエリを送信し、セレクタ条件を最初に満たしたレスポンスを Promise で受け取ります。
-
-- プロビジョニングが完了していない場合、完了まで送信を遅延します。
-- `state === 'closed'` の場合は `UniplsClosedError` を throw します。
-
-**引数**: `UniplsRequestParams<TInput, TOutput>`
-
-##### `UniplsRequestParams<TInput, TOutput>`
-
-| プロパティ | 型 | 必須 | 説明 |
-|---|---|---|---|
-| `query` | `TInput \| (() => TInput)` | ✓ | 送信するクエリ。関数を渡した場合、送信時（再送時を含む）に評価される |
-| `selector` | `(data: TOutput) => boolean` | ✓ | レスポンスを識別する述語関数 |
-| `timeout` | `number` | — | レスポンス待機のタイムアウト（ミリ秒） |
-| `signal` | `AbortSignal` | — | 待機を中断するための `AbortSignal` |
-| `retry` | `UniplsRetryStrategy<TInput, TOutput>` | — | drop 発生時の再送戦略。デフォルトは `'never'` |
-
-#### `requestForce(params): Promise<TOutput>`
-
-`request()` と同様ですが、プロビジョニング中でも接続完了後ただちに送信します。プロビジョナー内から呼び出す場合に使用します。
-
----
-
-#### `cast(data, options?): Promise<void>` *(未実装)*
-
-1-input 0-output 通信を行います。メッセージを送信するだけで受信は行いません。
-
-#### `castForce(data, options?): Promise<void>` *(未実装)*
-
-プロビジョニング中でも送信を試みる `cast()` のバリアントです。
-
-#### `subscribe(params): () => void` *(未実装)*
-
-1-input N-output 通信を行います。クエリを送信し、複数のレスポンスを購読します。
-
-#### `subscribeForce(params): () => void` *(未実装)*
-
-プロビジョニング中でも送信を試みる `subscribe()` のバリアントです。
-
-#### `next(params): Promise<TOutput>` *(未実装)*
-
-0-input 1-output 通信を行います。次に受信する（セレクタ条件を満たす）メッセージを Promise で受け取ります。
-
----
-
-### イベント
-
-`on(event, listener)` / `off(event, listener)` でリッスンできます。
-
-| イベント名 | ペイロード | 説明 |
-|---|---|---|
-| `'open'` | `{ session: UniplsSessionState }` | プロビジョニング完了後に発火 |
-| `'message'` | `{ session: UniplsSessionState; message: TOutput }` | メッセージ受信時に発火 |
-| `'closed'` | `{ session: UniplsSessionState }` | 正常切断時に発火 |
-| `'dropped'` | `{ session: UniplsSessionState }` | 予期しない切断時に発火 |
-| `'reconnect'` | `{ previousSessionId: SessionId; sessionId: SessionId }` | 自動再接続成功時に発火 |
-
----
-
-## 再送戦略
-
-### `UniplsRetryStrategy<TInput, TOutput>`
-
-`request()` / `subscribe()` の `retry` オプションに指定します。
-
-| 値 | 説明 |
-|---|---|
-| `'never'` | 再送しません。drop 時に `UniplsDroppedError` で reject します |
-| `'re-request'` | 再接続後に同じクエリを再送します |
-| `'keep-listening'` | 再接続後にクエリは再送しませんが、レスポンスの待機を継続します |
-| `UniplsRetrySetupFunction` | カスタムの再送ロジックを関数で定義します |
-
-#### `UniplsRetrySetupFunction<TInput, TOutput>`
-
-```typescript
-type UniplsRetrySetupFunction<TInput, TOutput> = (ctx: UniplsRetrySetupContext<TInput, TOutput>) => void;
-```
-
-#### `UniplsRetrySetupContext<TInput, TOutput>`
-
-| プロパティ | 型 | 説明 |
-|---|---|---|
-| `onReconnected` | `(callback: (ctx: UniplsRetryContext) => void) => void` | 再接続後に呼ばれるコールバックを登録する |
-| `data` | `UniplsMessageFactory<TInput>` | 直前に送信を試みたクエリ |
-| `selector` | `(data: TOutput) => boolean` | 直前に指定したセレクタ |
-| `abort` | `(error?: unknown) => void` | 再送処理を中断する |
-
-#### `UniplsRetryContext<TInput, TOutput>`
-
-`onReconnected` のコールバック引数です。
-
-| プロパティ | 型 | 説明 |
-|---|---|---|
-| `request` | `(data, { selector }) => void` | 再送を試みる |
-| `done` | `() => void` | 再送処理が完了したことを通知する |
-| `reconnection` | `{ previousSessionId, sessionId }` | 再接続情報 |
-
----
-
-### `UniplsRecastStrategy<TInput>` *(cast 未実装のため参考)*
-
-`cast()` の `recast` オプションに指定します。
-
-| 値 | 説明 |
-|---|---|
-| `'never'` | 再送しません |
-| `'always'` | 同内容を再送します |
-| `UniplsRecastFunction` | カスタムの再送ロジックを関数で定義します |
-
----
-
-## プロビジョニング
-
-### `UniplsProvisioner<TInput, TOutput>`
-
-```typescript
-type UniplsProvisioner<TInput, TOutput> = (ctx: UniplsProvisioningContext<TInput, TOutput>) => void;
-```
-
-### `UniplsProvisioningContext<TInput, TOutput>`
-
-| メンバー | 型 | 説明 |
-|---|---|---|
-| `cast(data)` | `(data: TInput) => Promise<void>` | `castForce()` と同様。`signal` / `recast` は指定不可 |
-| `request(params)` | `(params) => Promise<TOutput>` | `requestForce()` と同様。`signal` / `retry` は指定不可 |
-| `listen(params)` | `(params) => void` | `listen()` と同様。`signal` / `retry` は指定不可 |
-| `subscribe(params)` | `(params) => () => void` | `subscribeForce()` と同様。`signal` / `retry` は指定不可 |
-| `session` | `SessionId` | 現在のセッション ID |
-| `isSessionBeginning` | `boolean` | このセッション内で初めてのプロビジョニングなら `true`。再接続時のみ `false` になりえる |
-
----
-
-## エラー型
-
-すべてのエラーは `UniplsError`（`Error` のサブクラス）を継承します。
-
-| クラス | 発生条件 |
-|---|---|
-| `UniplsClosedError` | 正常切断により操作が中断された |
-| `UniplsDroppedError` | 予期しない切断により操作が中断された |
-| `UniplsTimeoutError` | タイムアウトが発生した |
-| `UniplsDuplicatedConnectionError` | 既に接続中または接続試行中に `open()` が呼ばれた |
-
----
-
-## 型エイリアス
-
-| 型名 | 定義 | 説明 |
-|---|---|---|
-| `WebSocketData` | `string \| ArrayBufferLike \| Blob \| ArrayBufferView` | WebSocket で送受信可能なデータ型 |
-| `SessionId` | `number` | セッションの一意な識別子 |
-| `UniplsConnectionState` | `'connecting' \| 'provisioning' \| 'open' \| 'closed' \| 'dropped'` | 接続状態 |
-| `UniplsConnectionIntent` | `'open' \| 'close'` | 接続インテント |
-| `UniplsMessageFactory<TInput>` | `TInput \| (() => TInput)` | メッセージを値または評価関数として受け取るユニオン型 |
+2026-04-06 時点では、再接続継続と provisioning 失敗伝播に失敗テストがあり、この API 仕様の一部は未完成です。期待値はテストを正として修正を進めます。
