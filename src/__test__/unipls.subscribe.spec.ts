@@ -331,3 +331,37 @@ test('query が関数形式の場合、再送時に query は再評価される'
 
   await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
 });
+
+test('custom retry strategy は再接続後の query と selector を独自に切り替えられる', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber<string>();
+  unipls.subscribe({
+    ...sub,
+    query: 'ping-1',
+    selector: (msg) => msg === 'pong-1',
+    retry: ({ onReconnected }) => {
+      onReconnected(({ request }) => {
+        request('ping-2', {
+          selector: (msg) => msg === 'pong-2',
+        });
+      });
+    },
+  });
+
+  unipls.drop();
+  const socket2 = await server.sockets.dequeue();
+
+  await expect(socket1.inbox.dequeue()).resolves.toBe('ping-1');
+  await expect(socket2.inbox.dequeue()).resolves.toBe('ping-2');
+
+  socket2.send('pong-1');
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
+
+  socket2.send('pong-2');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-2');
+});
