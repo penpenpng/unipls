@@ -1,5 +1,13 @@
+.codex
+
 # astro
 .astro
+
+# vitepress
+.vitepress/cache
+.vitepress/dist
+packages/unipls-docs/docs/.vitepress/cache
+packages/unipls-docs/docs/.vitepress/dist
 
 # wrangler
 .wrangler

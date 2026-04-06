@@ -1,0 +1,41 @@
+{
+  "name": "unipls",
+  "version": "0.0.0",
+  "description": "",
+  "author": "penpenpng",
+  "keywords": [
+    "WebSocket"
+  ],
+  "bugs": {
+    "url": "https://github.com/penpenpng/unipls/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/penpenpng/unipls.git"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest --run",
+    "test:ui": "vitest --ui"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@vitest/ui": "3.2.4",
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0",
+    "msw": "^2.10.5",
+    "prettier": "^3.6.2",
+    "tsdown": "^0.14.2",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^3.2.4"
+  }
+}
