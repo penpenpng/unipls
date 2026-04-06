@@ -13,8 +13,58 @@ afterEach(() => {
   server.reset();
 });
 
-test.skip('drop 後、Reconnector は適切なコンテキストとともに呼び出される', async () => {
-  // TODO
+test('drop 後、Reconnector は適切な初期コンテキストとともに呼び出される', async () => {
+  const reconnector = new TestReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  unipls.drop();
+
+  const ctx = await reconnector.dequeueContext();
+
+  expect(ctx.session).toBeDefined();
+  expect(ctx.lastAttemptedAt).toBeUndefined();
+  expect(ctx.error).toBeUndefined();
+  expect(ctx.sessionAttempts).toEqual([]);
+  expect(ctx.allAttempts).toEqual([]);
+  expect(ctx.signal.aborted).toBe(false);
+  expect(ctx.reconnect).toBeTypeOf('function');
+  expect(ctx.cancel).toBeTypeOf('function');
+});
+
+test('再度 drop したとき、Reconnector は直前までの再接続試行履歴を含むコンテキストとともに呼び出される', async () => {
+  const reconnector = new TestReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  const socket1 = await server.sockets.dequeue();
+
+  unipls.drop();
+
+  const ctx1 = await reconnector.dequeueContext();
+  const session = ctx1.session;
+  ctx1.reconnect();
+
+  const socket2 = await server.sockets.dequeue();
+  socket2.send('after-first-reconnect');
+
+  // Ensure the old socket is no longer relevant and the new connection is established.
+  expect(socket1).not.toBe(socket2);
+
+  unipls.drop();
+
+  const ctx2 = await reconnector.dequeueContext();
+
+  expect(ctx2.session).toBe(session);
+  expect(ctx2.lastAttemptedAt).toBeTypeOf('number');
+  expect(ctx2.error).toBeUndefined();
+  expect(ctx2.sessionAttempts).toHaveLength(1);
+  expect(ctx2.allAttempts).toHaveLength(1);
+  expect(ctx2.sessionAttempts[0]?.session).toBe(session);
+  expect(ctx2.allAttempts[0]?.session).toBe(session);
+  expect(ctx2.signal.aborted).toBe(false);
 });
 
 test('drop 後、Reconnector が指定されていない場合は、再接続は実行されない', async () => {
