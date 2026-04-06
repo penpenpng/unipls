@@ -8,6 +8,7 @@ import {
   UniplsTimeoutError,
 } from './errors.ts';
 import type { EventBus } from './event-bus';
+import { QuerySession } from './operations/query-session.ts';
 import type {
   UniplsReconnectEvent,
   UniplsReconnector,
@@ -290,33 +291,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal: params.signal,
       timeout: params.timeout,
     });
-    let activeRequest = params.query;
-    let activeSelector = params.selector;
-    let requestSent = false;
+    const requestSession = new QuerySession<TInput, TOutput>({
+      query: params.query,
+      selector: params.selector,
+      evaluate: Unipls.#evaluateQuery,
+      sendPayload: (payload) =>
+        this.#socket.enqueue(payload, {
+          force: params.force,
+          signal: result.signal,
+        }),
+      onError: result.reject,
+    });
 
     const request = (
       query: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
-      if (result.resulted) {
-        return;
-      }
-
-      const evaluatedPayload = Unipls.#evaluateQuery(query);
-
-      this.#socket
-        .enqueue(evaluatedPayload, {
-          force: params.force,
-          signal: result.signal,
-        })
-        .then(() => {
-          requestSent = true;
-          activeRequest = query;
-          activeSelector = selector;
-        })
-        .catch((err) => {
-          result.reject(err);
-        });
+      requestSession.send(query, {
+        selector,
+        isDone: () => result.resulted,
+      });
     };
 
     if (
@@ -328,13 +322,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.on('message', ({ message }) => {
-      if (!requestSent) {
+      if (!requestSession.sent) {
         return;
       }
 
       Unipls.#processMessage({
         message,
-        selector: activeSelector,
+        selector: requestSession.currentSelector,
         onSelected: result.resolve,
         onSelectorError: result.reject,
         onProcessorError: () => {
@@ -357,7 +351,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           return;
         }
 
-        requestSent = false;
+        requestSession.resetForReconnect();
 
         try {
           await callback({
@@ -386,8 +380,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       try {
         setupRetry({
           onReconnected,
-          data: activeRequest,
-          selector: activeSelector,
+          data: requestSession.currentQuery,
+          selector: requestSession.currentSelector,
         });
       } catch (err) {
         result.reject(err ?? new UniplsDroppedError());
@@ -608,33 +602,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
-    let activeRequest = params.query;
-    let activeSelector = params.selector;
-    let requestSent = false;
+    const requestSession = new QuerySession<TInput, TOutput>({
+      query: params.query,
+      selector: params.selector,
+      evaluate: Unipls.#evaluateQuery,
+      sendPayload: (payload) =>
+        this.#socket.enqueue(payload, {
+          force,
+          signal: results.signal,
+        }),
+      onError: results.raiseFatalError,
+    });
 
     const request = (
       query: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
-      if (results.resulted) {
-        return;
-      }
-
-      const evaluatedPayload = Unipls.#evaluateQuery(query);
-
-      this.#socket
-        .enqueue(evaluatedPayload, {
-          force,
-          signal: results.signal,
-        })
-        .then(() => {
-          requestSent = true;
-          activeRequest = query;
-          activeSelector = selector;
-        })
-        .catch((err) => {
-          results.raiseFatalError(err);
-        });
+      requestSession.send(query, {
+        selector,
+        isDone: () => results.resulted,
+      });
     };
 
     if (
@@ -653,7 +640,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.on('message', ({ message }) => {
-      if (!requestSent) {
+      if (!requestSession.sent) {
         return;
       }
 
@@ -671,7 +658,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
       Unipls.#processMessage({
         message,
-        selector: activeSelector,
+        selector: requestSession.currentSelector,
         onSelected: results.handleMessage,
         onSelectorError: results.handleError,
         onProcessorError: (err) => {
@@ -695,7 +682,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           return;
         }
 
-        requestSent = false;
+        requestSession.resetForReconnect();
 
         try {
           await callback({
@@ -726,8 +713,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       try {
         setupRetry({
           onReconnected,
-          data: activeRequest,
-          selector: activeSelector,
+          data: requestSession.currentQuery,
+          selector: requestSession.currentSelector,
         });
       } catch (err) {
         results.raiseFatalError(err ?? new UniplsDroppedError());
