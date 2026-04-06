@@ -391,25 +391,23 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnEventBusView();
-    const result = new AsyncResult<void>({
-      finally: () => {
-        events.dispose();
-      },
+    const scope = new SingleOperationScope<void, UniplsEvents<TOutput>>({
+      events: this.events,
       signal: params.signal,
       timeout: params.timeout,
     });
+    const { events } = scope;
 
     const sendOnce = (query: UniplsMessageFactory<TInput>) => {
-      if (result.resulted) return;
+      if (scope.resulted) return;
 
       const enqueueEvaluatedPayload = () => {
         const payload = Unipls.#evaluateQuery(query);
         this.#socket
-        .enqueue(payload, { force, signal: result.signal })
-        .then(() => result.resolve())
+        .enqueue(payload, { force, signal: scope.signal })
+        .then(() => scope.resolve())
         .catch((err) => {
-          result.reject(err);
+          scope.reject(err);
         });
       };
 
@@ -434,10 +432,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.once('closed', () => {
-      result.reject(new UniplsClosedError());
+      scope.reject(new UniplsClosedError());
     });
 
-    return result.promise;
+    return scope.promise;
   }
 
   async #runProvisioner(): Promise<void> {
