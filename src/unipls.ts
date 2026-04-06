@@ -1,5 +1,5 @@
 import { AsyncResult } from './async-result.ts';
-import { AsyncResults, type UniplsSubscriber } from './async-results.ts';
+import type { UniplsSubscriber } from './async-results.ts';
 import type { DropDetectorContext } from './drop-detector';
 import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
 import {
@@ -8,6 +8,10 @@ import {
   UniplsTimeoutError,
 } from './errors.ts';
 import type { EventBus } from './event-bus';
+import {
+  SingleOperationScope,
+  StreamOperationScope,
+} from './operations/operation-scope.ts';
 import { QuerySession } from './operations/query-session.ts';
 import type {
   UniplsReconnectEvent,
@@ -125,42 +129,40 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnEventBusView();
-    const result = new AsyncResult<TOutput>({
-      finally: () => {
-        events.dispose();
-      },
+    const scope = new SingleOperationScope<TOutput, UniplsEvents<TOutput>>({
+      events: this.events,
       signal: params.signal,
       timeout: params.timeout,
     });
+    const { events } = scope;
 
     events.on('message', ({ message }) => {
       Unipls.#processMessage({
         message,
         selector: params.selector,
-        onSelected: result.resolve,
-        onSelectorError: result.reject,
+        onSelected: scope.resolve,
+        onSelectorError: scope.reject,
         onProcessorError: () => {
-          // ignore because `result.resolve` never throws
+          // ignore because `scope.resolve` never throws
         },
       });
     });
     events.on('error', ({ error }) => {
-      result.reject(error);
+      scope.reject(error);
     });
 
     events.on('dropped', () => {
       const retry = params.retry ?? 'keep-listening';
       if (!this.#reconnector || retry === 'never') {
-        result.reject(new UniplsDroppedError());
+        scope.reject(new UniplsDroppedError());
       }
     });
 
     events.once('closed', () => {
-      result.reject(new UniplsClosedError());
+      scope.reject(new UniplsClosedError());
     });
 
-    return result.promise;
+    return scope.promise;
   }
 
   /**
@@ -180,25 +182,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnEventBusView();
-    const results = new AsyncResults<TOutput>({
+    const scope = new StreamOperationScope<TOutput, UniplsEvents<TOutput>>({
+      events: this.events,
       subscriber: params,
       signal: params.signal,
-      finally: () => {
-        if (timeoutTimer) {
-          clearTimeout(timeoutTimer);
-        }
-        events.dispose();
-      },
     });
-    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const { events } = scope;
 
     events.on('message', ({ message }) => {
       Unipls.#processMessage({
         message,
         selector: params.terminator ?? (() => false),
-        onSelected: results.handleTerminator,
-        onSelectorError: results.handleError,
+        onSelected: scope.handleTerminator,
+        onSelectorError: scope.handleError,
         onProcessorError: (err) => {
           console.warn(
             'An error occurred while processing onTerminator callback:',
@@ -209,8 +205,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       Unipls.#processMessage({
         message,
         selector: params.selector ?? (() => true),
-        onSelected: results.handleMessage,
-        onSelectorError: results.handleError,
+        onSelected: scope.handleMessage,
+        onSelectorError: scope.handleError,
         onProcessorError: (err) => {
           console.warn(
             'An error occurred while processing onMessage callback:',
@@ -220,20 +216,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     });
     events.on('error', ({ error }) => {
-      results.handleError(error);
+      scope.handleError(error);
     });
 
     events.on('dropped', () => {
       const retry = params.retry ?? 'keep-listening';
       if (!this.#reconnector || retry === 'never') {
-        results.raiseFatalError(new UniplsDroppedError());
+        scope.raiseFatalError(new UniplsDroppedError());
       }
     });
     events.once('closed', () => {
-      results.raiseFatalError(new UniplsClosedError());
+      scope.raiseFatalError(new UniplsClosedError());
     });
 
-    return results.unsubscribe;
+    return scope.unsubscribe;
   }
 
   /**
@@ -283,14 +279,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnEventBusView();
-    const result = new AsyncResult<TOutput>({
-      finally: () => {
-        events.dispose();
-      },
+    const scope = new SingleOperationScope<TOutput, UniplsEvents<TOutput>>({
+      events: this.events,
       signal: params.signal,
       timeout: params.timeout,
     });
+    const { events } = scope;
     const requestSession = new QuerySession<TInput, TOutput>({
       query: params.query,
       selector: params.selector,
@@ -298,9 +292,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       sendPayload: (payload) =>
         this.#socket.enqueue(payload, {
           force: params.force,
-          signal: result.signal,
+          signal: scope.signal,
         }),
-      onError: result.reject,
+      onError: scope.reject,
     });
 
     const request = (
@@ -309,7 +303,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     ) => {
       requestSession.send(query, {
         selector,
-        isDone: () => result.resulted,
+        isDone: () => scope.resulted,
       });
     };
 
@@ -329,15 +323,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       Unipls.#processMessage({
         message,
         selector: requestSession.currentSelector,
-        onSelected: result.resolve,
-        onSelectorError: result.reject,
+        onSelected: scope.resolve,
+        onSelectorError: scope.reject,
         onProcessorError: () => {
-          // ignore because `result.resolve` never throws
+          // ignore because `scope.resolve` never throws
         },
       });
     });
     events.on('error', ({ error }) => {
-      result.reject(error);
+      scope.reject(error);
     });
 
     let retryRegistered = false;
@@ -347,7 +341,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       TOutput
     >['onReconnected'] = (callback) => {
       events.once('reconnect', async (reconnection) => {
-        if (result.resulted) {
+        if (scope.resulted) {
           return;
         }
 
@@ -359,19 +353,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             reconnection,
           });
         } catch (err) {
-          result.reject(err ?? new UniplsDroppedError());
+          scope.reject(err ?? new UniplsDroppedError());
         }
       });
     };
 
     events.on('dropped', () => {
-      if (result.resulted || retryRegistered) {
+      if (scope.resulted || retryRegistered) {
         return;
       }
       retryRegistered = true;
 
       if (params.retry === undefined || params.retry === 'never') {
-        result.reject(new UniplsDroppedError());
+        scope.reject(new UniplsDroppedError());
         return;
       }
 
@@ -384,15 +378,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           selector: requestSession.currentSelector,
         });
       } catch (err) {
-        result.reject(err ?? new UniplsDroppedError());
+        scope.reject(err ?? new UniplsDroppedError());
       }
     });
 
     events.once('closed', () => {
-      result.reject(new UniplsClosedError());
+      scope.reject(new UniplsClosedError());
     });
 
-    return result.promise;
+    return scope.promise;
   }
 
   #cast(params: UniplsCastParams<TInput>, force: boolean): Promise<void> {
@@ -589,18 +583,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       throw params.signal.reason;
     }
 
-    const events = this.events.spawnEventBusView();
-    const results = new AsyncResults<TOutput>({
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const scope = new StreamOperationScope<TOutput, UniplsEvents<TOutput>>({
+      events: this.events,
       subscriber: params,
       signal: params.signal,
       finally: () => {
         if (timeoutTimer) {
           clearTimeout(timeoutTimer);
         }
-        events.dispose();
       },
     });
-    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    const { events } = scope;
 
     const requestSession = new QuerySession<TInput, TOutput>({
       query: params.query,
@@ -609,9 +603,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       sendPayload: (payload) =>
         this.#socket.enqueue(payload, {
           force,
-          signal: results.signal,
+          signal: scope.signal,
         }),
-      onError: results.raiseFatalError,
+      onError: scope.raiseFatalError,
     });
 
     const request = (
@@ -620,7 +614,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     ) => {
       requestSession.send(query, {
         selector,
-        isDone: () => results.resulted,
+        isDone: () => scope.resulted,
       });
     };
 
@@ -634,7 +628,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     if (typeof params.timeout === 'number' && params.timeout > 0) {
       timeoutTimer = setTimeout(() => {
-        results.raiseFatalError(new UniplsTimeoutError());
+        scope.raiseFatalError(new UniplsTimeoutError());
         timeoutTimer = undefined;
       }, params.timeout);
     }
@@ -647,8 +641,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       Unipls.#processMessage({
         message,
         selector: params.terminator ?? (() => false),
-        onSelected: results.handleTerminator,
-        onSelectorError: results.handleError,
+        onSelected: scope.handleTerminator,
+        onSelectorError: scope.handleError,
         onProcessorError: (err) => {
           console.warn(
             'An error occurred while processing onTerminator callback:',
@@ -659,8 +653,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       Unipls.#processMessage({
         message,
         selector: requestSession.currentSelector,
-        onSelected: results.handleMessage,
-        onSelectorError: results.handleError,
+        onSelected: scope.handleMessage,
+        onSelectorError: scope.handleError,
         onProcessorError: (err) => {
           console.warn(
             'An error occurred while processing onMessage callback:',
@@ -670,7 +664,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     });
     events.on('error', ({ error }) => {
-      results.handleError(error);
+      scope.handleError(error);
     });
 
     const onReconnected: UniplsRetrySetupContext<
@@ -678,7 +672,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       TOutput
     >['onReconnected'] = (callback) => {
       events.once('reconnect', async (reconnection) => {
-        if (results.resulted) {
+        if (scope.resulted) {
           return;
         }
 
@@ -690,7 +684,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             reconnection,
           });
         } catch (err) {
-          results.raiseFatalError(err ?? new UniplsDroppedError());
+          scope.raiseFatalError(err ?? new UniplsDroppedError());
         }
       });
     };
@@ -698,13 +692,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let retryRegistered = false;
 
     events.on('dropped', () => {
-      if (results.resulted || retryRegistered) {
+      if (scope.resulted || retryRegistered) {
         return;
       }
       retryRegistered = true;
 
       if (params.retry === undefined || params.retry === 'never') {
-        results.raiseFatalError(new UniplsDroppedError());
+        scope.raiseFatalError(new UniplsDroppedError());
         return;
       }
 
@@ -717,15 +711,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           selector: requestSession.currentSelector,
         });
       } catch (err) {
-        results.raiseFatalError(err ?? new UniplsDroppedError());
+        scope.raiseFatalError(err ?? new UniplsDroppedError());
       }
     });
 
     events.once('closed', () => {
-      results.raiseFatalError(new UniplsClosedError());
+      scope.raiseFatalError(new UniplsClosedError());
     });
 
-    return results.unsubscribe;
+    return scope.unsubscribe;
   }
 
   protected static getRetrySetupFunction<TInput, TOutput>(
