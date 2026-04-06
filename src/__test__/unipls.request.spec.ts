@@ -113,7 +113,7 @@ test('reconnector が与えられていない場合、drop 時に UniplsDroppedE
   await expect(promise).rejects.toThrow(UniplsDroppedError);
 });
 
-test('reconnector が与えられていて、リトライ戦略に keep-listening が指定されている場合、再接続後に query の再送は行われないが、レスポンスの待機は継続する', async () => {
+test('reconnector が与えられていて、リトライ戦略に wait が指定されている場合、再接続後に query の再送は行われないが、レスポンスの待機は継続する', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -122,7 +122,7 @@ test('reconnector が与えられていて、リトライ戦略に keep-listenin
 
   const promise = unipls.request({
     ...query,
-    retry: 'keep-listening',
+    retry: 'wait',
   });
 
   unipls.drop();
@@ -135,7 +135,7 @@ test('reconnector が与えられていて、リトライ戦略に keep-listenin
   await expect(promise).resolves.toBe('pong');
 });
 
-test('reconnector が与えられていて、リトライ戦略に re-request が指定されている場合、再接続後に query の再送が行われ、レスポンスの待機も継続する', async () => {
+test('reconnector が与えられていて、リトライ戦略に resend が指定されている場合、再接続後に query の再送が行われ、レスポンスの待機も継続する', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -144,7 +144,7 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
 
   const promise = unipls.request({
     ...query,
-    retry: 're-request',
+    retry: 'resend',
   });
 
   unipls.drop();
@@ -159,7 +159,7 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
   await expect(promise).resolves.toBe('pong');
 });
 
-test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に UniplsDroppedError で reject する', async () => {
+test('reconnector が与えられていて、リトライ戦略に fail が指定されている場合、drop 時に UniplsDroppedError で reject する', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -168,7 +168,7 @@ test('reconnector が与えられていて、リトライ戦略に never が指�
 
   const promise = unipls.request({
     ...query,
-    retry: 'never',
+    retry: 'fail',
   });
 
   unipls.drop();
@@ -192,7 +192,7 @@ test('query が関数形式の場合、再送時に query は再評価される'
   const promise = unipls.request({
     query: () => `ping-${++counter}`,
     selector: (msg) => msg === 'pong',
-    retry: 're-request',
+    retry: 'resend',
   });
 
   unipls.drop();
@@ -207,7 +207,7 @@ test('query が関数形式の場合、再送時に query は再評価される'
   await expect(promise).resolves.toBe('pong');
 });
 
-test('custom retry strategy は再接続後の query と selector を独自に切り替えられる', async () => {
+test('custom retry strategy は recover() によって再接続後の query と selector を独自に切り替えられる', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -217,12 +217,11 @@ test('custom retry strategy は再接続後の query と selector を独自に�
   const promise = unipls.request({
     query: 'ping-1',
     selector: (msg) => msg === 'pong-1',
-    retry: ({ onReconnected }) => {
-      onReconnected(({ request }) => {
-        request('ping-2', {
-          selector: (msg) => msg === 'pong-2',
-        });
-      });
+    retry: {
+      recover: () => ({
+        query: 'ping-2',
+        selector: (msg) => msg === 'pong-2',
+      }),
     },
   });
 

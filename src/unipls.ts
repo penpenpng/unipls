@@ -353,11 +353,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on(
       'dropped',
       createRetryingDropHandler({
+        reconnectable: this.#reconnector !== undefined,
         retry: params.retry,
         isDone: () => scope.resulted,
         onFatal: scope.reject,
         onReconnected,
-        getData: () => requestSession.currentQuery,
+        getQuery: () => requestSession.currentQuery,
         getSelector: () => requestSession.currentSelector,
       }),
     );
@@ -390,11 +391,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       const enqueueEvaluatedPayload = () => {
         const payload = Unipls.#evaluateQuery(query);
         this.#socket
-        .enqueue(payload, { force, signal: scope.signal })
-        .then(() => scope.resolve())
-        .catch((err) => {
-          scope.reject(err);
-        });
+          .enqueue(payload, { force, signal: scope.signal })
+          .then(() => scope.resolve())
+          .catch((err) => {
+            scope.reject(err);
+          });
       };
 
       if (this.state === 'open' || (this.state === 'provisioning' && force)) {
@@ -656,11 +657,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on(
       'dropped',
       createRetryingDropHandler({
+        reconnectable: this.#reconnector !== undefined,
         retry: params.retry,
         isDone: () => scope.resulted,
         onFatal: scope.raiseFatalError,
         onReconnected,
-        getData: () => requestSession.currentQuery,
+        getQuery: () => requestSession.currentQuery,
         getSelector: () => requestSession.currentSelector,
       }),
     );

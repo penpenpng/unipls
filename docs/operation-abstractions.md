@@ -67,8 +67,8 @@ query を持つ API では:
 
 ### 6. 再接続フェーズ
 
-- `request` / `subscribe` は `never | re-request | keep-listening | custom`
-- `next` / `listen` は `never | keep-listening`
+- `request` / `subscribe` は `fail | wait | resend | { recover(...) }`
+- `next` / `listen` は `fail | wait`
 
 という drop 戦略を解釈する。
 
@@ -131,7 +131,7 @@ interface OperationScope<T> {
 - 送信時にだけ `query` を評価する
 - `requestSent` を管理して送信前メッセージを無視する
 - 再接続時に送信状態をリセットする
-- `re-request` 時の query 再評価を担う
+- `resend` 時の query 再評価を担う
 
 現状では次の重複を吸収できる:
 
@@ -172,10 +172,10 @@ interface QuerySession<TIn, TOut> {
 
 扱う戦略:
 
-- `never`
-- `keep-listening`
-- `re-request`
-- custom retry function
+- `fail`
+- `wait`
+- `resend`
+- custom `recover()` strategy
 
 概念モデル:
 
@@ -184,9 +184,7 @@ interface DropPolicyContext<TIn, TOut> {
   reconnectable: boolean;
   onFatal(error: unknown): void;
   onKeepListening(): void;
-  onReconnected(
-    callback: (ctx: { request?: QuerySession<TIn, TOut> }) => void | Promise<void>,
-  ): void;
+  recover?(ctx: { request?: QuerySession<TIn, TOut> }): void | Promise<void>;
   requestSession?: QuerySession<TIn, TOut>;
 }
 
@@ -207,25 +205,25 @@ interface DropPolicy<TIn, TOut> {
 
 - `OperationScope(single)`
 - query なし
-- `DropPolicy(never | keep-listening)`
+- `DropPolicy(fail | wait)`
 
 ### `listen`
 
 - `OperationScope(stream)`
 - query なし
-- `DropPolicy(never | keep-listening)`
+- `DropPolicy(fail | wait)`
 
 ### `request`
 
 - `OperationScope(single)`
 - `QuerySession`
-- `DropPolicy(never | re-request | keep-listening | custom)`
+- `DropPolicy(fail | resend | wait | recover)`
 
 ### `subscribe`
 
 - `OperationScope(stream)`
 - `QuerySession`
-- `DropPolicy(never | re-request | keep-listening | custom)`
+- `DropPolicy(fail | resend | wait | recover)`
 
 ### `cast`
 

@@ -34,16 +34,17 @@
 
 ## 通信 API
 
-### `next({ selector, timeout?, signal? })`
+### `next({ selector, timeout?, signal?, retry? })`
 
 - selector に一致する次の 1 件を待つ
 - `close()` では `UniplsClosedError`
-- `drop` 時の扱いは未整理で、テスト上は `reconnector` なしなら `UniplsDroppedError`、ありなら待機継続が期待値
+- `retry` は `fail` / `wait`
 
-### `listen(subscriber & { selector?, terminator?, signal? })`
+### `listen(subscriber & { selector?, terminator?, signal?, retry? })`
 
 - メッセージ受信専用の継続購読
 - `terminator` 一致で終了
+- `retry` は `fail` / `wait`
 - `unsubscribe()` を返す
 
 ### `cast({ query, timeout?, signal? })`
@@ -58,7 +59,7 @@
 ### `request({ query, selector, timeout?, signal?, retry? })`
 
 - query を送り、selector 一致の最初のレスポンスを返す
-- `retry` は `never` / `re-request` / `keep-listening` / カスタム関数
+- `retry` は `fail` / `wait` / `resend` / `{ recover(...) }`
 
 ### `requestForce(...)`
 
@@ -107,6 +108,4 @@
 - `UniplsTimeoutError`
 - `UniplsDuplicatedConnectionError`
 
-## 実装とテストの差分メモ
-
-2026-04-06 時点では、再接続継続と provisioning 失敗伝播に失敗テストがあり、この API 仕様の一部は未完成です。期待値はテストを正として修正を進めます。
+`recover(ctx)` は再接続成功後に呼ばれます。`ctx` には `query`、`selector`、`reconnection` が含まれ、返り値で `wait` / `resend` / 再送内容の差し替えを決定します。

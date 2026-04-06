@@ -86,7 +86,7 @@ test('reconnector が与えられていない場合、drop 時に UniplsDroppedE
   await expect(promise).rejects.toThrow(UniplsDroppedError);
 });
 
-test('reconnector が与えられていても、retry: never が指定されている場合は drop 時に UniplsDroppedError で reject する', async () => {
+test('reconnector が与えられていても、retry: fail が指定されている場合は drop 時に UniplsDroppedError で reject する', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -95,7 +95,7 @@ test('reconnector が与えられていても、retry: never が指定されて�
 
   const promise = unipls.next({
     ...query,
-    retry: 'never',
+    retry: 'fail',
   });
 
   unipls.drop();
@@ -112,7 +112,7 @@ test('reconnector が与えられている場合、next() は再接続後もメ�
 
   const promise = unipls.next({
     ...query,
-    retry: 'keep-listening',
+    retry: 'wait',
   });
 
   unipls.drop();
