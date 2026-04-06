@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: false
+  commands:
+    unipls-fmt:
+      root: packages/unipls
+      run: pnpm fmt
+    unipls-lint-fix:
+      root: packages/unipls
+      run: pnpm exec vp lint --fix src vite.config.ts
