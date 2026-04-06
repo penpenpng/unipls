@@ -35,6 +35,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #provisionedSessions = new Set<number>();
   #reconnector?: UniplsReconnector;
+  #reconnectorCleanup?: () => void;
   #session = new UniplsSessionManager();
   #detectorManager: DropDetectorManager<TInput, TOutput>;
   get url(): string {
@@ -92,6 +93,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   close(): Promise<void> {
     this.#session.abort();
     this.#detectorManager.stop();
+    this.#reconnectorCleanup?.();
+    this.#reconnectorCleanup = undefined;
     return this.#socket.close();
   }
 
@@ -139,7 +142,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      result.reject(new UniplsDroppedError());
+      if (!this.#reconnector) {
+        result.reject(new UniplsDroppedError());
+      }
     });
 
     events.once('closed', () => {
@@ -203,7 +208,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      results.raiseFatalError(new UniplsDroppedError());
+      if (!this.#reconnector) {
+        results.raiseFatalError(new UniplsDroppedError());
+      }
     });
     events.once('closed', () => {
       results.raiseFatalError(new UniplsClosedError());
@@ -454,10 +461,21 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       return;
     }
 
-    const reconnect = async () => {
-      if (this.intent === 'close') {
+    let settled = false;
+    const cleanup = () => {
+      if (settled) {
         return;
       }
+      settled = true;
+      this.#reconnectorCleanup = undefined;
+      registeredCleanup?.();
+    };
+
+    const reconnect = async () => {
+      if (settled || this.intent === 'close') {
+        return;
+      }
+      cleanup();
 
       this.#session.recordAttempt();
 
@@ -474,20 +492,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
     };
 
+    const cancel = () => {
+      if (settled) {
+        return;
+      }
+      cleanup();
+    };
+
+    let registeredCleanup: (() => void) | undefined;
+
     try {
-      const cleanup = this.#reconnector.setup(
+      registeredCleanup = this.#reconnector.setup(
         {
           reconnect,
-          cancel: () => {
-            // TODO
-          },
+          cancel,
         },
         this.#session.buildContext(),
       );
-
-      // TODO:
-      // cleanup?.();
+      this.#reconnectorCleanup = cleanup;
     } catch {
+      cleanup();
       return;
     }
   }

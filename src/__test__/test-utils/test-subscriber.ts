@@ -14,7 +14,9 @@ export class TestSubscriber<TOutput = WebSocketData>
   #unsubscription = Promise.withResolvers<void>();
   #finalization = Promise.withResolvers<SubscriptionFinalizationContext>();
 
-  constructor(private subscriber?: UniplsSubscriber<TOutput>) {}
+  constructor(private subscriber?: UniplsSubscriber<TOutput>) {
+    void this.#termination.promise.catch(() => {});
+  }
 
   get termination() {
     return this.#termination.promise;
