@@ -4,7 +4,6 @@ import type { DropDetectorContext } from './drop-detector';
 import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
 import {
   UniplsClosedError,
-  UniplsDroppedError,
   UniplsTimeoutError,
 } from './errors.ts';
 import type { EventBus } from './event-bus';
@@ -37,7 +36,8 @@ import type {
   UniplsSubscribeParams,
 } from './unipls.interface.ts';
 
-type UniplsEvents<TOutput> = UniplsSocketPublicEvents<TOutput> & {
+type UniplsEvents<TOutput> = Record<string, unknown> &
+  UniplsSocketPublicEvents<TOutput> & {
   reconnect: UniplsReconnectEvent;
 };
 
@@ -515,13 +515,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let registeredCleanup: (() => void) | undefined;
 
     try {
-      registeredCleanup = this.#reconnector.setup(
+      const cleanupCallback = this.#reconnector.setup(
         {
           reconnect,
           cancel,
         },
         this.#session.buildContext(),
       );
+      registeredCleanup = cleanupCallback ?? undefined;
       this.#reconnectorCleanup = cleanup;
     } catch {
       cleanup();

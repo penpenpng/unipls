@@ -1,4 +1,4 @@
-import { TimeoutError, timeout } from './promise-timeout';
+import { timeout } from './promise-timeout';
 
 export class AwaitableQueue<T> {
   private queue: Array<{ value: T; resolve: () => void }> = [];
