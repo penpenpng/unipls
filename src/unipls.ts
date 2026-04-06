@@ -9,6 +9,10 @@ import {
 } from './errors.ts';
 import type { EventBus } from './event-bus';
 import {
+  createDropWaitHandler,
+  createRetryingDropHandler,
+} from './operations/drop-policy.ts';
+import {
   SingleOperationScope,
   StreamOperationScope,
 } from './operations/operation-scope.ts';
@@ -30,8 +34,6 @@ import type {
   UniplsProvisioningContext,
   UniplsRequestParams,
   UniplsRetrySetupContext,
-  UniplsRetrySetupFunction,
-  UniplsRetryStrategy,
   UniplsSubscribeParams,
 } from './unipls.interface.ts';
 
@@ -151,12 +153,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       scope.reject(error);
     });
 
-    events.on('dropped', () => {
-      const retry = params.retry ?? 'keep-listening';
-      if (!this.#reconnector || retry === 'never') {
-        scope.reject(new UniplsDroppedError());
-      }
-    });
+    events.on(
+      'dropped',
+      createDropWaitHandler({
+        reconnectable: this.#reconnector !== undefined,
+        retry: params.retry,
+        isDone: () => scope.resulted,
+        onFatal: scope.reject,
+      }),
+    );
 
     events.once('closed', () => {
       scope.reject(new UniplsClosedError());
@@ -219,12 +224,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       scope.handleError(error);
     });
 
-    events.on('dropped', () => {
-      const retry = params.retry ?? 'keep-listening';
-      if (!this.#reconnector || retry === 'never') {
-        scope.raiseFatalError(new UniplsDroppedError());
-      }
-    });
+    events.on(
+      'dropped',
+      createDropWaitHandler({
+        reconnectable: this.#reconnector !== undefined,
+        retry: params.retry,
+        isDone: () => scope.resulted,
+        onFatal: scope.raiseFatalError,
+      }),
+    );
     events.once('closed', () => {
       scope.raiseFatalError(new UniplsClosedError());
     });
@@ -334,8 +342,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       scope.reject(error);
     });
 
-    let retryRegistered = false;
-
     const onReconnected: UniplsRetrySetupContext<
       TInput,
       TOutput
@@ -358,29 +364,17 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    events.on('dropped', () => {
-      if (scope.resulted || retryRegistered) {
-        return;
-      }
-      retryRegistered = true;
-
-      if (params.retry === undefined || params.retry === 'never') {
-        scope.reject(new UniplsDroppedError());
-        return;
-      }
-
-      const setupRetry = Unipls.getRetrySetupFunction(params.retry);
-
-      try {
-        setupRetry({
-          onReconnected,
-          data: requestSession.currentQuery,
-          selector: requestSession.currentSelector,
-        });
-      } catch (err) {
-        scope.reject(err ?? new UniplsDroppedError());
-      }
-    });
+    events.on(
+      'dropped',
+      createRetryingDropHandler({
+        retry: params.retry,
+        isDone: () => scope.resulted,
+        onFatal: scope.reject,
+        onReconnected,
+        getData: () => requestSession.currentQuery,
+        getSelector: () => requestSession.currentSelector,
+      }),
+    );
 
     events.once('closed', () => {
       scope.reject(new UniplsClosedError());
@@ -689,57 +683,23 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    let retryRegistered = false;
-
-    events.on('dropped', () => {
-      if (scope.resulted || retryRegistered) {
-        return;
-      }
-      retryRegistered = true;
-
-      if (params.retry === undefined || params.retry === 'never') {
-        scope.raiseFatalError(new UniplsDroppedError());
-        return;
-      }
-
-      const setupRetry = Unipls.getRetrySetupFunction(params.retry);
-
-      try {
-        setupRetry({
-          onReconnected,
-          data: requestSession.currentQuery,
-          selector: requestSession.currentSelector,
-        });
-      } catch (err) {
-        scope.raiseFatalError(err ?? new UniplsDroppedError());
-      }
-    });
+    events.on(
+      'dropped',
+      createRetryingDropHandler({
+        retry: params.retry,
+        isDone: () => scope.resulted,
+        onFatal: scope.raiseFatalError,
+        onReconnected,
+        getData: () => requestSession.currentQuery,
+        getSelector: () => requestSession.currentSelector,
+      }),
+    );
 
     events.once('closed', () => {
       scope.raiseFatalError(new UniplsClosedError());
     });
 
     return scope.unsubscribe;
-  }
-
-  protected static getRetrySetupFunction<TInput, TOutput>(
-    retry?: UniplsRetryStrategy<TInput, TOutput>,
-  ): UniplsRetrySetupFunction<TInput, TOutput> {
-    if (retry === 're-request') {
-      return ({ onReconnected, data, selector }) => {
-        onReconnected(async ({ request }) => {
-          await request(data, { selector });
-        });
-      };
-    }
-
-    if (retry === 'keep-listening') {
-      return ({ onReconnected }) => {
-        onReconnected(() => {});
-      };
-    }
-
-    return retry ?? (() => {});
   }
 
   static #evaluateQuery<TInput>(query: UniplsMessageFactory<TInput>): TInput {
