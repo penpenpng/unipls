@@ -1,6 +1,6 @@
-import { UniplsTimeoutError } from '../errors.ts';
-import type { UniplsMessageFactory } from '../unipls.interface.ts';
-import type { DropDetectorContext, UniplsDropDetector } from './drop-detector';
+import { UniplsTimeoutError } from "../errors.ts";
+import type { UniplsMessageFactory } from "../unipls.interface.ts";
+import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector";
 
 export interface HeartbeatOptions<TInput, TOutput> {
   /** ping 送信間隔 (ms) */
@@ -21,7 +21,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
     }
     const timer = setTimeout(resolve, ms);
     signal.addEventListener(
-      'abort',
+      "abort",
       () => {
         clearTimeout(timer);
         reject(signal.reason);
@@ -31,9 +31,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-export class HeartbeatDropDetector<TInput, TOutput>
-  implements UniplsDropDetector<TInput, TOutput>
-{
+export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetector<TInput, TOutput> {
   #options: HeartbeatOptions<TInput, TOutput>;
 
   constructor(options: HeartbeatOptions<TInput, TOutput>) {

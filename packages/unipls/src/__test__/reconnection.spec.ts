@@ -1,17 +1,13 @@
-import { afterEach, expect, test } from 'vitest';
-import { Unipls } from '..';
+import { afterEach, expect, test } from "vitest";
+import { Unipls } from "..";
 import type {
   ReconnectionContext,
   UniplsReconnector,
   UniplsReconnectorActions,
-} from '../reconnector';
-import {
-  createMockServer,
-  TestReconnector,
-  TestSubscriber,
-} from './test-utils';
+} from "../reconnector";
+import { createMockServer, TestReconnector, TestSubscriber } from "./test-utils";
 
-const url = 'ws://localhost:8080';
+const url = "ws://localhost:8080";
 const server = createMockServer(url);
 
 class CleanupTrackingReconnector implements UniplsReconnector {
@@ -30,7 +26,7 @@ afterEach(() => {
   server.reset();
 });
 
-test('drop 後、Reconnector は適切な初期コンテキストとともに呼び出される', async () => {
+test("drop 後、Reconnector は適切な初期コンテキストとともに呼び出される", async () => {
   const reconnector = new TestReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -47,11 +43,11 @@ test('drop 後、Reconnector は適切な初期コンテキストとともに呼
   expect(ctx.sessionAttempts).toEqual([]);
   expect(ctx.allAttempts).toEqual([]);
   expect(ctx.signal.aborted).toBe(false);
-  expect(ctx.reconnect).toBeTypeOf('function');
-  expect(ctx.cancel).toBeTypeOf('function');
+  expect(ctx.reconnect).toBeTypeOf("function");
+  expect(ctx.cancel).toBeTypeOf("function");
 });
 
-test('再度 drop したとき、Reconnector は直前までの再接続試行履歴を含むコンテキストとともに呼び出される', async () => {
+test("再度 drop したとき、Reconnector は直前までの再接続試行履歴を含むコンテキストとともに呼び出される", async () => {
   const reconnector = new TestReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -65,7 +61,7 @@ test('再度 drop したとき、Reconnector は直前までの再接続試行�
   ctx1.reconnect();
 
   const socket2 = await server.sockets.dequeue();
-  socket2.send('after-first-reconnect');
+  socket2.send("after-first-reconnect");
 
   // Ensure the old socket is no longer relevant and the new connection is established.
   expect(socket1).not.toBe(socket2);
@@ -75,7 +71,7 @@ test('再度 drop したとき、Reconnector は直前までの再接続試行�
   const ctx2 = await reconnector.dequeueContext();
 
   expect(ctx2.session).toBe(session);
-  expect(ctx2.lastAttemptedAt).toBeTypeOf('number');
+  expect(ctx2.lastAttemptedAt).toBeTypeOf("number");
   expect(ctx2.error).toBeUndefined();
   expect(ctx2.sessionAttempts).toHaveLength(1);
   expect(ctx2.allAttempts).toHaveLength(1);
@@ -84,7 +80,7 @@ test('再度 drop したとき、Reconnector は直前までの再接続試行�
   expect(ctx2.signal.aborted).toBe(false);
 });
 
-test('drop 後、Reconnector が指定されていない場合は、再接続は実行されない', async () => {
+test("drop 後、Reconnector が指定されていない場合は、再接続は実行されない", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -93,16 +89,16 @@ test('drop 後、Reconnector が指定されていない場合は、再接続は
   const sub = new TestSubscriber();
   unipls.listen(sub);
 
-  socket1.send('before-drop');
+  socket1.send("before-drop");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('before-drop');
+  await expect(sub.messages.dequeue()).resolves.toBe("before-drop");
 
   unipls.drop();
 
   await expect(server.sockets.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('drop 後、Reconnector が reconnect() を呼び出したとき、再接続を実行する', async () => {
+test("drop 後、Reconnector が reconnect() を呼び出したとき、再接続を実行する", async () => {
   const reconnector = new TestReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -112,9 +108,9 @@ test('drop 後、Reconnector が reconnect() を呼び出したとき、再接�
   const sub = new TestSubscriber();
   unipls.listen(sub);
 
-  socket1.send('before-drop');
+  socket1.send("before-drop");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('before-drop');
+  await expect(sub.messages.dequeue()).resolves.toBe("before-drop");
 
   unipls.drop();
 
@@ -125,12 +121,12 @@ test('drop 後、Reconnector が reconnect() を呼び出したとき、再接�
   (await reconnector.dequeueContext()).reconnect();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('after-reconnect');
+  socket2.send("after-reconnect");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('after-reconnect');
+  await expect(sub.messages.dequeue()).resolves.toBe("after-reconnect");
 });
 
-test('drop 後、Reconnector が cancel() を呼び出したとき、再接続は実行されない', async () => {
+test("drop 後、Reconnector が cancel() を呼び出したとき、再接続は実行されない", async () => {
   const reconnector = new TestReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -145,7 +141,7 @@ test('drop 後、Reconnector が cancel() を呼び出したとき、再接続�
   await expect(server.sockets.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('再接続成功時、reconnect イベントが発火する', async () => {
+test("再接続成功時、reconnect イベントが発火する", async () => {
   const reconnector = new TestReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -153,7 +149,7 @@ test('再接続成功時、reconnect イベントが発火する', async () => {
     session: number;
     sessionAttempts: readonly unknown[];
   }>();
-  const off = unipls.on('reconnect', (event) => {
+  const off = unipls.on("reconnect", (event) => {
     reconnectEvent.resolve(event);
   });
 
@@ -176,7 +172,7 @@ test('再接続成功時、reconnect イベントが発火する', async () => {
   off();
 });
 
-test('drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Unipls が close() されたとき、cleanup 関数が呼び出される', async () => {
+test("drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Unipls が close() されたとき、cleanup 関数が呼び出される", async () => {
   const reconnector = new CleanupTrackingReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -192,7 +188,7 @@ test('drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Uni
   expect(reconnector.cleanupCalls).toBe(1);
 });
 
-test('cleanup 関数が呼び出された後 reconnect(), cancel() を呼び出しても何も起こらない', async () => {
+test("cleanup 関数が呼び出された後 reconnect(), cancel() を呼び出しても何も起こらない", async () => {
   const reconnector = new CleanupTrackingReconnector();
   await using unipls = new Unipls({ url, reconnector });
 

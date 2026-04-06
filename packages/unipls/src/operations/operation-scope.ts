@@ -1,16 +1,12 @@
-import { AsyncResult } from '../async-result.ts';
-import { AsyncResults, type UniplsSubscriber } from '../async-results.ts';
-import type { EventBus } from '../event-bus.ts';
+import { AsyncResult } from "../async-result.ts";
+import { AsyncResults, type UniplsSubscriber } from "../async-results.ts";
+import type { EventBus } from "../event-bus.ts";
 
 export class SingleOperationScope<T, TEvents extends Record<string, unknown>> {
   readonly #events;
   readonly #result;
 
-  constructor(params: {
-    events: EventBus<TEvents>;
-    signal?: AbortSignal;
-    timeout?: number;
-  }) {
+  constructor(params: { events: EventBus<TEvents>; signal?: AbortSignal; timeout?: number }) {
     this.#events = params.events.spawnEventBusView();
     this.#result = new AsyncResult<T>({
       signal: params.signal,

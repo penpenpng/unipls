@@ -1,4 +1,4 @@
-import type { DropDetectorContext, UniplsDropDetector } from './index.ts';
+import type { DropDetectorContext, UniplsDropDetector } from "./index.ts";
 
 /**
  * ブラウザの offline イベントを検出して drop とみなす {@link UniplsDropDetector} です。
@@ -7,7 +7,7 @@ import type { DropDetectorContext, UniplsDropDetector } from './index.ts';
 export class NetworkDropDetector implements UniplsDropDetector<never, never> {
   setup(ctx: DropDetectorContext<never, never>): () => void {
     const handler = () => ctx.drop();
-    window.addEventListener('offline', handler);
-    return () => window.removeEventListener('offline', handler);
+    window.addEventListener("offline", handler);
+    return () => window.removeEventListener("offline", handler);
   }
 }

@@ -1,2 +1,2 @@
-export { ImmediateReconnector } from './immediate-reconnector';
-export type * from './reconnector';
+export { ImmediateReconnector } from "./immediate-reconnector";
+export type * from "./reconnector";

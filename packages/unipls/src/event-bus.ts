@@ -14,10 +14,7 @@ export class EventBus<TEvents extends Record<string, any>> {
     return (this.#listeners[event] ??= new Set());
   }
 
-  on<K extends keyof TEvents>(
-    event: K,
-    listener: EventListener<TEvents, K>,
-  ): () => void {
+  on<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
     const listeners = this.getListeners(event);
 
     listeners.add(listener);
@@ -27,10 +24,7 @@ export class EventBus<TEvents extends Record<string, any>> {
     };
   }
 
-  once<K extends keyof TEvents>(
-    event: K,
-    listener: EventListener<TEvents, K>,
-  ): () => void {
+  once<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
     const off = this.on(event, (args: TEvents[K]) => {
       off();
       listener(args);
@@ -39,10 +33,7 @@ export class EventBus<TEvents extends Record<string, any>> {
     return off;
   }
 
-  off<K extends keyof TEvents>(
-    event: K,
-    listener: EventListener<TEvents, K>,
-  ): void {
+  off<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): void {
     const listeners = this.getListeners(event);
 
     listeners.delete(listener);
@@ -73,10 +64,7 @@ class EventBusView<TEvents extends Record<string, any>> {
     this.#events = events;
   }
 
-  on<K extends keyof TEvents>(
-    event: K,
-    listener: EventListener<TEvents, K>,
-  ): () => void {
+  on<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
     const cleanup = this.#events.on(event, listener);
     this.#cleanups.add(cleanup);
 
@@ -86,10 +74,7 @@ class EventBusView<TEvents extends Record<string, any>> {
     };
   }
 
-  once<K extends keyof TEvents>(
-    event: K,
-    listener: EventListener<TEvents, K>,
-  ): () => void {
+  once<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
     const cleanup = this.#events.once(event, listener);
     this.#cleanups.add(cleanup);
 

@@ -1,4 +1,4 @@
-import type { DropDetectorContext, UniplsDropDetector } from './drop-detector';
+import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector";
 
 /** {@link UniplsDropDetector} のライフサイクルを管理するクラスです。 */
 export class DropDetectorManager<TInput, TOutput> {

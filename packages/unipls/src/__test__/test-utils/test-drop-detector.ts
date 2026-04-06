@@ -1,19 +1,15 @@
-import type {
-  DropDetectorContext,
-  UniplsDropDetector,
-} from '../../drop-detector/index.ts';
-import { AwaitableQueue } from './awaitable-queue';
+import type { DropDetectorContext, UniplsDropDetector } from "../../drop-detector/index.ts";
+import { AwaitableQueue } from "./awaitable-queue";
 
 /**
  * テスト用の手動 {@link UniplsDropDetector} です。
  * `setups` キューから取得した {@link DropDetectorContext} を使って任意のタイミングで drop を発生させられます。
  */
-export class TestDropDetector<TInput = unknown, TOutput = unknown>
-  implements UniplsDropDetector<TInput, TOutput>
-{
-  readonly contexts = new AwaitableQueue<
-    DropDetectorContext<TInput, TOutput>
-  >();
+export class TestDropDetector<TInput = unknown, TOutput = unknown> implements UniplsDropDetector<
+  TInput,
+  TOutput
+> {
+  readonly contexts = new AwaitableQueue<DropDetectorContext<TInput, TOutput>>();
 
   private ctx?: DropDetectorContext<TInput, TOutput>;
   setupCount = 0;

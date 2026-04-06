@@ -1,29 +1,17 @@
-import { AsyncResult } from './async-result.ts';
-import type { UniplsSubscriber } from './async-results.ts';
-import type { DropDetectorContext } from './drop-detector';
-import { DropDetectorManager } from './drop-detector/drop-detector-manager.ts';
-import {
-  UniplsClosedError,
-  UniplsTimeoutError,
-} from './errors.ts';
-import type { EventBus } from './event-bus';
-import {
-  createDropWaitHandler,
-  createRetryingDropHandler,
-} from './operations/drop-policy.ts';
-import {
-  SingleOperationScope,
-  StreamOperationScope,
-} from './operations/operation-scope.ts';
-import { QuerySession } from './operations/query-session.ts';
-import { createOnReconnectedHandler } from './operations/reconnect-hook.ts';
-import type {
-  UniplsReconnectEvent,
-  UniplsReconnector,
-} from './reconnector/reconnector.ts';
-import type { UniplsConnectionState, WebSocketData } from './types.ts';
-import { UniplsSessionManager } from './unipls-session.ts';
-import { UniplsSocket, type UniplsSocketPublicEvents } from './unipls-socket';
+import { AsyncResult } from "./async-result.ts";
+import type { UniplsSubscriber } from "./async-results.ts";
+import type { DropDetectorContext } from "./drop-detector";
+import { DropDetectorManager } from "./drop-detector/drop-detector-manager.ts";
+import { UniplsClosedError, UniplsTimeoutError } from "./errors.ts";
+import type { EventBus } from "./event-bus";
+import { createDropWaitHandler, createRetryingDropHandler } from "./operations/drop-policy.ts";
+import { SingleOperationScope, StreamOperationScope } from "./operations/operation-scope.ts";
+import { QuerySession } from "./operations/query-session.ts";
+import { createOnReconnectedHandler } from "./operations/reconnect-hook.ts";
+import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
+import type { UniplsConnectionState, WebSocketData } from "./types.ts";
+import { UniplsSessionManager } from "./unipls-session.ts";
+import { UniplsSocket, type UniplsSocketPublicEvents } from "./unipls-socket";
 import type {
   UniplsCastParams,
   UniplsListenOptions,
@@ -34,12 +22,12 @@ import type {
   UniplsProvisioningContext,
   UniplsRequestParams,
   UniplsSubscribeParams,
-} from './unipls.interface.ts';
+} from "./unipls.interface.ts";
 
 type UniplsEvents<TOutput> = Record<string, unknown> &
   UniplsSocketPublicEvents<TOutput> & {
-  reconnect: UniplsReconnectEvent;
-};
+    reconnect: UniplsReconnectEvent;
+  };
 
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #socket: UniplsSocket<TInput, TOutput>;
@@ -73,7 +61,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#reconnector = params.reconnector;
     this.#detectorManager = new DropDetectorManager(params.dropDetectors ?? []);
 
-    this.events.on('dropped', ({ session }) => {
+    this.events.on("dropped", ({ session }) => {
       this.#detectorManager.stop();
       void this.#handleDropped(session.id);
     });
@@ -124,7 +112,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @throws {UniplsTimeoutError}
    */
   next(params: UniplsNextParams<TOutput>): Promise<TOutput> {
-    if (this.state === 'closed') {
+    if (this.state === "closed") {
       throw new UniplsClosedError();
     }
     if (params.signal?.aborted) {
@@ -138,7 +126,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
     const { events } = scope;
 
-    events.on('message', ({ message }) => {
+    events.on("message", ({ message }) => {
       Unipls.#processMessage({
         message,
         selector: params.selector,
@@ -149,12 +137,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         },
       });
     });
-    events.on('error', ({ error }) => {
+    events.on("error", ({ error }) => {
       scope.reject(error);
     });
 
     events.on(
-      'dropped',
+      "dropped",
       createDropWaitHandler({
         reconnectable: this.#reconnector !== undefined,
         retry: params.retry,
@@ -163,7 +151,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once('closed', () => {
+    events.once("closed", () => {
       scope.reject(new UniplsClosedError());
     });
 
@@ -177,10 +165,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @throws {UniplsClosedError}
    */
-  listen(
-    params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>,
-  ): () => void {
-    if (this.state === 'closed') {
+  listen(params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>): () => void {
+    if (this.state === "closed") {
       throw new UniplsClosedError();
     }
     if (params.signal?.aborted) {
@@ -194,17 +180,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
     const { events } = scope;
 
-    events.on('message', ({ message }) => {
+    events.on("message", ({ message }) => {
       Unipls.#processMessage({
         message,
         selector: params.terminator ?? (() => false),
         onSelected: scope.handleTerminator,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            'An error occurred while processing onTerminator callback:',
-            err,
-          );
+          console.warn("An error occurred while processing onTerminator callback:", err);
         },
       });
       Unipls.#processMessage({
@@ -213,19 +196,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleMessage,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            'An error occurred while processing onMessage callback:',
-            err,
-          );
+          console.warn("An error occurred while processing onMessage callback:", err);
         },
       });
     });
-    events.on('error', ({ error }) => {
+    events.on("error", ({ error }) => {
       scope.handleError(error);
     });
 
     events.on(
-      'dropped',
+      "dropped",
       createDropWaitHandler({
         reconnectable: this.#reconnector !== undefined,
         retry: params.retry,
@@ -233,7 +213,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onFatal: scope.raiseFatalError,
       }),
     );
-    events.once('closed', () => {
+    events.once("closed", () => {
       scope.raiseFatalError(new UniplsClosedError());
     });
 
@@ -277,10 +257,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return this.#request({ ...params, force: true });
   }
 
-  #request(
-    params: UniplsRequestParams<TInput, TOutput> & { force: boolean },
-  ): Promise<TOutput> {
-    if (this.state === 'closed') {
+  #request(params: UniplsRequestParams<TInput, TOutput> & { force: boolean }): Promise<TOutput> {
+    if (this.state === "closed") {
       throw new UniplsClosedError();
     }
     if (params.signal?.aborted) {
@@ -315,15 +293,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    if (
-      this.state === 'connecting' ||
-      this.state === 'provisioning' ||
-      this.state === 'open'
-    ) {
+    if (this.state === "connecting" || this.state === "provisioning" || this.state === "open") {
       request(params.query, params);
     }
 
-    events.on('message', ({ message }) => {
+    events.on("message", ({ message }) => {
       if (!requestSession.sent) {
         return;
       }
@@ -338,7 +312,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         },
       });
     });
-    events.on('error', ({ error }) => {
+    events.on("error", ({ error }) => {
       scope.reject(error);
     });
 
@@ -351,7 +325,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on(
-      'dropped',
+      "dropped",
       createRetryingDropHandler({
         reconnectable: this.#reconnector !== undefined,
         retry: params.retry,
@@ -363,7 +337,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once('closed', () => {
+    events.once("closed", () => {
       scope.reject(new UniplsClosedError());
     });
 
@@ -371,7 +345,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   #cast(params: UniplsCastParams<TInput>, force: boolean): Promise<void> {
-    if (this.state === 'closed') {
+    if (this.state === "closed") {
       throw new UniplsClosedError();
     }
     if (params.signal?.aborted) {
@@ -398,27 +372,23 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           });
       };
 
-      if (this.state === 'open' || (this.state === 'provisioning' && force)) {
+      if (this.state === "open" || (this.state === "provisioning" && force)) {
         enqueueEvaluatedPayload();
         return;
       }
 
       if (force) {
-        events.once('open', enqueueEvaluatedPayload);
+        events.once("open", enqueueEvaluatedPayload);
       } else {
-        events.once('open', enqueueEvaluatedPayload);
+        events.once("open", enqueueEvaluatedPayload);
       }
     };
 
-    if (
-      this.state === 'connecting' ||
-      this.state === 'provisioning' ||
-      this.state === 'open'
-    ) {
+    if (this.state === "connecting" || this.state === "provisioning" || this.state === "open") {
       sendOnce(params.query);
     }
 
-    events.once('closed', () => {
+    events.once("closed", () => {
       scope.reject(new UniplsClosedError());
     });
 
@@ -444,7 +414,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     try {
       if (!this.#provisioner) {
         // do nothing
-      } else if ('setup' in this.#provisioner) {
+      } else if ("setup" in this.#provisioner) {
         await this.#provisioner.setup(ctx);
       } else {
         await this.#provisioner(ctx);
@@ -466,11 +436,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   async #handleDropped(sessionId: number): Promise<void> {
-    if (
-      this.intent === 'close' ||
-      sessionId !== this.#socket.sessionId ||
-      !this.#reconnector
-    ) {
+    if (this.intent === "close" || sessionId !== this.#socket.sessionId || !this.#reconnector) {
       return;
     }
 
@@ -485,7 +451,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     };
 
     const reconnect = async () => {
-      if (settled || this.intent === 'close') {
+      if (settled || this.intent === "close") {
         return;
       }
       cleanup();
@@ -499,7 +465,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         });
 
         const event = this.#session.onSuccess();
-        this.events.emit('reconnect', event);
+        this.events.emit("reconnect", event);
       } catch (err) {
         this.#session.onFailure(err);
       }
@@ -556,7 +522,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
     force: boolean,
   ): () => void {
-    if (this.state === 'closed') {
+    if (this.state === "closed") {
       throw new UniplsClosedError();
     }
     if (params.signal?.aborted) {
@@ -598,22 +564,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    if (
-      this.state === 'connecting' ||
-      this.state === 'provisioning' ||
-      this.state === 'open'
-    ) {
+    if (this.state === "connecting" || this.state === "provisioning" || this.state === "open") {
       request(params.query, params);
     }
 
-    if (typeof params.timeout === 'number' && params.timeout > 0) {
+    if (typeof params.timeout === "number" && params.timeout > 0) {
       timeoutTimer = setTimeout(() => {
         scope.raiseFatalError(new UniplsTimeoutError());
         timeoutTimer = undefined;
       }, params.timeout);
     }
 
-    events.on('message', ({ message }) => {
+    events.on("message", ({ message }) => {
       if (!requestSession.sent) {
         return;
       }
@@ -624,10 +586,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleTerminator,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            'An error occurred while processing onTerminator callback:',
-            err,
-          );
+          console.warn("An error occurred while processing onTerminator callback:", err);
         },
       });
       Unipls.#processMessage({
@@ -636,14 +595,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleMessage,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            'An error occurred while processing onMessage callback:',
-            err,
-          );
+          console.warn("An error occurred while processing onMessage callback:", err);
         },
       });
     });
-    events.on('error', ({ error }) => {
+    events.on("error", ({ error }) => {
       scope.handleError(error);
     });
 
@@ -656,7 +612,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on(
-      'dropped',
+      "dropped",
       createRetryingDropHandler({
         reconnectable: this.#reconnector !== undefined,
         retry: params.retry,
@@ -668,7 +624,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once('closed', () => {
+    events.once("closed", () => {
       scope.raiseFatalError(new UniplsClosedError());
     });
 
@@ -676,7 +632,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   static #evaluateQuery<TInput>(query: UniplsMessageFactory<TInput>): TInput {
-    if (typeof query === 'function') {
+    if (typeof query === "function") {
       return (query as () => TInput)();
     }
     return query;

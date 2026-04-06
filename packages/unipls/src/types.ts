@@ -8,11 +8,6 @@ export type SessionId = number;
 
 export type WebSocketConstructor = new (url: string) => WebSocket;
 
-export type UniplsConnectionState =
-  | 'connecting'
-  | 'provisioning'
-  | 'open'
-  | 'closed'
-  | 'dropped';
+export type UniplsConnectionState = "connecting" | "provisioning" | "open" | "closed" | "dropped";
 
-export type UniplsConnectionIntent = 'open' | 'close';
+export type UniplsConnectionIntent = "open" | "close";

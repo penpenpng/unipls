@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test } from "vitest";
 import {
   ImmediateReconnector,
   Unipls,
@@ -6,20 +6,20 @@ import {
   UniplsDroppedError,
   UniplsTimeoutError,
   type WebSocketData,
-} from '..';
-import { createMockServer } from './test-utils';
+} from "..";
+import { createMockServer } from "./test-utils";
 
-const url = 'ws://localhost:8080';
+const url = "ws://localhost:8080";
 const server = createMockServer(url);
 const query = {
-  selector: (msg: WebSocketData) => typeof msg === 'string' && msg === 'msg',
+  selector: (msg: WebSocketData) => typeof msg === "string" && msg === "msg",
 };
 
 afterEach(() => {
   server.reset();
 });
 
-test('next() は selector に合致する次のメッセージを取得する', async () => {
+test("next() は selector に合致する次のメッセージを取得する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -27,13 +27,13 @@ test('next() は selector に合致する次のメッセージを取得する', 
 
   const promise = unipls.next(query);
 
-  socket.send('ignored');
-  socket.send('msg');
+  socket.send("ignored");
+  socket.send("msg");
 
-  await expect(promise).resolves.toBe('msg');
+  await expect(promise).resolves.toBe("msg");
 });
 
-test('timeout した場合、 UniplsTimeoutError で reject する', async () => {
+test("timeout した場合、 UniplsTimeoutError で reject する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -46,7 +46,7 @@ test('timeout した場合、 UniplsTimeoutError で reject する', async () =>
   await expect(promise).rejects.toThrow(UniplsTimeoutError);
 });
 
-test('signal が abort されると reject する', async () => {
+test("signal が abort されると reject する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -57,12 +57,12 @@ test('signal が abort されると reject する', async () => {
     signal: controller.signal,
   });
 
-  controller.abort(new Error('cancelled'));
+  controller.abort(new Error("cancelled"));
 
-  await expect(promise).rejects.toThrow('cancelled');
+  await expect(promise).rejects.toThrow("cancelled");
 });
 
-test('close() 時に UniplsClosedError で reject する', async () => {
+test("close() 時に UniplsClosedError で reject する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -74,7 +74,7 @@ test('close() 時に UniplsClosedError で reject する', async () => {
   await expect(promise).rejects.toThrow(UniplsClosedError);
 });
 
-test('reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する', async () => {
+test("reconnector が与えられていない場合、drop 時に UniplsDroppedError で reject する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -86,7 +86,7 @@ test('reconnector が与えられていない場合、drop 時に UniplsDroppedE
   await expect(promise).rejects.toThrow(UniplsDroppedError);
 });
 
-test('reconnector が与えられていても、retry: fail が指定されている場合は drop 時に UniplsDroppedError で reject する', async () => {
+test("reconnector が与えられていても、retry: fail が指定されている場合は drop 時に UniplsDroppedError で reject する", async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -95,7 +95,7 @@ test('reconnector が与えられていても、retry: fail が指定されて�
 
   const promise = unipls.next({
     ...query,
-    retry: 'fail',
+    retry: "fail",
   });
 
   unipls.drop();
@@ -103,7 +103,7 @@ test('reconnector が与えられていても、retry: fail が指定されて�
   await expect(promise).rejects.toThrow(UniplsDroppedError);
 });
 
-test('reconnector が与えられている場合、next() は再接続後もメッセージを待機し続ける', async () => {
+test("reconnector が与えられている場合、next() は再接続後もメッセージを待機し続ける", async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -112,13 +112,13 @@ test('reconnector が与えられている場合、next() は再接続後もメ�
 
   const promise = unipls.next({
     ...query,
-    retry: 'wait',
+    retry: "wait",
   });
 
   unipls.drop();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('msg');
+  socket2.send("msg");
 
-  await expect(promise).resolves.toBe('msg');
+  await expect(promise).resolves.toBe("msg");
 });

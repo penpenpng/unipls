@@ -1,20 +1,15 @@
-import { afterEach, expect, test } from 'vitest';
-import {
-  ImmediateReconnector,
-  Unipls,
-  UniplsClosedError,
-  UniplsDroppedError,
-} from '..';
-import { createMockServer, TestSubscriber } from './test-utils';
+import { afterEach, expect, test } from "vitest";
+import { ImmediateReconnector, Unipls, UniplsClosedError, UniplsDroppedError } from "..";
+import { createMockServer, TestSubscriber } from "./test-utils";
 
-const url = 'ws://localhost:8080';
+const url = "ws://localhost:8080";
 const server = createMockServer(url);
 
 afterEach(() => {
   server.reset();
 });
 
-test('listen() はメッセージを監視する', async () => {
+test("listen() はメッセージを監視する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -23,57 +18,57 @@ test('listen() はメッセージを監視する', async () => {
   const sub = new TestSubscriber();
   unipls.listen(sub);
 
-  socket.send('msg-1');
-  socket.send('msg-2');
-  socket.send('msg-3');
+  socket.send("msg-1");
+  socket.send("msg-2");
+  socket.send("msg-3");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-3');
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-1");
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-2");
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-3");
 });
 
-test('selector オプションはメッセージをフィルタリングする', async () => {
+test("selector オプションはメッセージをフィルタリングする", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
   const socket = await server.sockets.dequeue();
 
   const sub = new TestSubscriber();
-  unipls.listen({ ...sub, selector: (msg) => msg.startsWith('msg-') });
+  unipls.listen({ ...sub, selector: (msg) => msg.startsWith("msg-") });
 
-  socket.send('msg-1');
-  socket.send('msg-2');
-  socket.send('msg-3');
+  socket.send("msg-1");
+  socket.send("msg-2");
+  socket.send("msg-3");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-3');
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-1");
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-2");
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-3");
 });
 
-test('terminator オプションがメッセージの終端を定義する', async () => {
+test("terminator オプションがメッセージの終端を定義する", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
   const socket = await server.sockets.dequeue();
 
   const sub = new TestSubscriber();
-  unipls.listen({ ...sub, terminator: (msg) => msg === 'stop' });
+  unipls.listen({ ...sub, terminator: (msg) => msg === "stop" });
 
-  socket.send('msg-1');
-  socket.send('msg-2');
-  socket.send('stop');
-  socket.send('ignored');
+  socket.send("msg-1");
+  socket.send("msg-2");
+  socket.send("stop");
+  socket.send("ignored");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
-  await expect(sub.termination).resolves.toBe('stop');
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-1");
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-2");
+  await expect(sub.termination).resolves.toBe("stop");
   await expect(sub.finalization).resolves.toMatchObject({
-    reason: 'terminated',
+    reason: "terminated",
   });
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('unsubscribe によって onUnsubscribed と finally がトリガーされる', async () => {
+test("unsubscribe によって onUnsubscribed と finally がトリガーされる", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
@@ -83,16 +78,16 @@ test('unsubscribe によって onUnsubscribed と finally がトリガーされ�
   const unsubscribe = unipls.listen(sub);
 
   unsubscribe();
-  socket.send('ignored');
+  socket.send("ignored");
 
   await expect(sub.unsubscription).resolves.toBeUndefined();
   await expect(sub.finalization).resolves.toMatchObject({
-    reason: 'unsubscribed',
+    reason: "unsubscribed",
   });
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('signal が abort されると reason: aborted で onFatalError がトリガーされる', async () => {
+test("signal が abort されると reason: aborted で onFatalError がトリガーされる", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -104,16 +99,16 @@ test('signal が abort されると reason: aborted で onFatalError がトリ�
     signal: controller.signal,
   });
 
-  controller.abort(new Error('cancelled'));
+  controller.abort(new Error("cancelled"));
 
-  await expect(sub.termination).rejects.toThrow('cancelled');
+  await expect(sub.termination).rejects.toThrow("cancelled");
   await expect(sub.finalization).resolves.toMatchObject({
-    reason: 'aborted',
+    reason: "aborted",
   });
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('Unipls を close() すると reason: closed で onFatalError がトリガーされる', async () => {
+test("Unipls を close() すると reason: closed で onFatalError がトリガーされる", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
@@ -123,16 +118,16 @@ test('Unipls を close() すると reason: closed で onFatalError がトリガ�
   unipls.listen(sub);
 
   unipls.close();
-  socket.send('ignored');
+  socket.send("ignored");
 
   await expect(sub.termination).rejects.toThrow(UniplsClosedError);
   await expect(sub.finalization).resolves.toMatchObject({
-    reason: 'closed',
+    reason: "closed",
   });
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーされる', async () => {
+test("reconnector が与えられていない場合、drop 時に reason: dropped で onFatalError がトリガーされる", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
@@ -142,16 +137,16 @@ test('reconnector が与えられていない場合、drop 時に reason: droppe
   unipls.listen(sub);
 
   unipls.drop();
-  socket.send('ignored');
+  socket.send("ignored");
 
   await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
   await expect(sub.finalization).resolves.toMatchObject({
-    reason: 'dropped',
+    reason: "dropped",
   });
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('reconnector が与えられていても、retry: fail が指定されている場合は drop 時に reason: dropped で onFatalError がトリガーされる', async () => {
+test("reconnector が与えられていても、retry: fail が指定されている場合は drop 時に reason: dropped で onFatalError がトリガーされる", async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls<string, string>({ url, reconnector });
 
@@ -161,20 +156,20 @@ test('reconnector が与えられていても、retry: fail が指定されて�
   const sub = new TestSubscriber();
   unipls.listen({
     ...sub,
-    retry: 'fail',
+    retry: "fail",
   });
 
   unipls.drop();
-  socket.send('ignored');
+  socket.send("ignored");
 
   await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
   await expect(sub.finalization).resolves.toMatchObject({
-    reason: 'dropped',
+    reason: "dropped",
   });
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test('reconnector が与えられている場合、listen() は再接続後もメッセージを監視し続ける', async () => {
+test("reconnector が与えられている場合、listen() は再接続後もメッセージを監視し続ける", async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
 
@@ -182,14 +177,14 @@ test('reconnector が与えられている場合、listen() は再接続後も�
   await server.sockets.dequeue();
 
   const sub = new TestSubscriber();
-  unipls.listen({ ...sub, retry: 'wait' });
+  unipls.listen({ ...sub, retry: "wait" });
 
   unipls.drop();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('msg-1');
-  socket2.send('msg-2');
+  socket2.send("msg-1");
+  socket2.send("msg-2");
 
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-1');
-  await expect(sub.messages.dequeue()).resolves.toBe('msg-2');
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-1");
+  await expect(sub.messages.dequeue()).resolves.toBe("msg-2");
 });

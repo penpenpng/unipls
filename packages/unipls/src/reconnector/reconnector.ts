@@ -1,10 +1,7 @@
-import type { SessionId } from '../types.ts';
+import type { SessionId } from "../types.ts";
 
 export interface UniplsReconnector {
-  setup(
-    actions: UniplsReconnectorActions,
-    ctx: ReconnectionContext,
-  ): void | (() => void);
+  setup(actions: UniplsReconnectorActions, ctx: ReconnectionContext): void | (() => void);
 }
 
 export interface UniplsReconnectorActions {

@@ -1,4 +1,4 @@
-import { UniplsTimeoutError } from './errors';
+import { UniplsTimeoutError } from "./errors";
 
 export class AsyncResult<T> {
   #resulted = false;
@@ -40,14 +40,14 @@ export class AsyncResult<T> {
     this.#signal = AbortSignal.any(signals);
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    if (typeof options.timeout === 'number' && options.timeout > 0) {
+    if (typeof options.timeout === "number" && options.timeout > 0) {
       timer = setTimeout(() => {
         this.#controller.abort(new UniplsTimeoutError());
       }, options.timeout);
     }
 
     this.#signal.addEventListener(
-      'abort',
+      "abort",
       () => {
         if (timer !== null) {
           clearTimeout(timer);

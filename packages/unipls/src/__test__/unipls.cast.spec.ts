@@ -1,16 +1,16 @@
-import { afterEach, expect, test } from 'vitest';
-import { Unipls, UniplsTimeoutError } from '..';
-import { createMockServer, TestProvisioner } from './test-utils';
+import { afterEach, expect, test } from "vitest";
+import { Unipls, UniplsTimeoutError } from "..";
+import { createMockServer, TestProvisioner } from "./test-utils";
 
-const url = 'ws://localhost:8080';
+const url = "ws://localhost:8080";
 const server = createMockServer(url);
-const query = { query: 'ping' };
+const query = { query: "ping" };
 
 afterEach(() => {
   server.reset();
 });
 
-test('cast() は query を送信する', async () => {
+test("cast() は query を送信する", async () => {
   await using unipls = new Unipls({ url });
 
   await unipls.open();
@@ -18,10 +18,10 @@ test('cast() は query を送信する', async () => {
 
   unipls.cast(query);
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket.inbox.dequeue()).resolves.toBe("ping");
 });
 
-test('timeout した場合 reject される', async () => {
+test("timeout した場合 reject される", async () => {
   const provisioner = new TestProvisioner<string, string>();
   await using unipls = new Unipls<string, string>({ url });
 
@@ -30,14 +30,14 @@ test('timeout した場合 reject される', async () => {
   await provisioner.dequeueContext();
 
   const promise = unipls.cast({
-    query: 'ping',
+    query: "ping",
     timeout: 50,
   });
 
   await expect(promise).rejects.toThrow(UniplsTimeoutError);
 });
 
-test('signal が abort されると reject される', async () => {
+test("signal が abort されると reject される", async () => {
   const provisioner = new TestProvisioner<string, string>();
   await using unipls = new Unipls<string, string>({ url });
 
@@ -47,16 +47,16 @@ test('signal が abort されると reject される', async () => {
 
   const controller = new AbortController();
   const promise = unipls.cast({
-    query: 'ping',
+    query: "ping",
     signal: controller.signal,
   });
 
-  controller.abort(new Error('cancelled'));
+  controller.abort(new Error("cancelled"));
 
-  await expect(promise).rejects.toThrow('cancelled');
+  await expect(promise).rejects.toThrow("cancelled");
 });
 
-test('query が関数形式の場合、送信時に query は評価される', async () => {
+test("query が関数形式の場合、送信時に query は評価される", async () => {
   const provisioner = new TestProvisioner<string, string>();
   await using unipls = new Unipls<string, string>({ url });
 
@@ -73,7 +73,7 @@ test('query が関数形式の場合、送信時に query は評価される', a
 
   provisioning.resolve();
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('ping-1');
+  await expect(socket.inbox.dequeue()).resolves.toBe("ping-1");
   await expect(promise).resolves.toBeUndefined();
   expect(counter).toBe(1);
 });

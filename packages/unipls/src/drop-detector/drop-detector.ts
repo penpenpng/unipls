@@ -1,4 +1,4 @@
-import type { UniplsMessageFactory } from '../unipls.interface.ts';
+import type { UniplsMessageFactory } from "../unipls.interface.ts";
 
 export interface UniplsDropDetector<TInput = unknown, TOutput = unknown> {
   /**
@@ -16,10 +16,7 @@ export interface DropDetectorContext<TInput = unknown, TOutput = unknown> {
   request(params: DropDetectorRequestParams<TInput, TOutput>): Promise<TOutput>;
 }
 
-export interface DropDetectorRequestParams<
-  TInput = unknown,
-  TOutput = unknown,
-> {
+export interface DropDetectorRequestParams<TInput = unknown, TOutput = unknown> {
   query: UniplsMessageFactory<TInput>;
   selector: (msg: TOutput) => boolean;
   timeout?: number;

@@ -1,11 +1,11 @@
-import { UniplsClosedError, UniplsDroppedError } from './errors.ts';
-import type { WebSocketData } from './types.ts';
+import { UniplsClosedError, UniplsDroppedError } from "./errors.ts";
+import type { WebSocketData } from "./types.ts";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
-import type { Unipls } from './unipls.ts';
+import type { Unipls } from "./unipls.ts";
 
 export class AsyncResults<T> {
   #resulted = false;
-  #reason: SubscriptionEndReason = 'fatal-error';
+  #reason: SubscriptionEndReason = "fatal-error";
   #error: unknown = null;
   #controller = new AbortController();
   #subscriber: UniplsSubscriber<T>;
@@ -29,7 +29,7 @@ export class AsyncResults<T> {
       const signal = params.signal;
 
       signal.addEventListener(
-        'abort',
+        "abort",
         () => {
           this.abort(signal.reason);
         },
@@ -38,11 +38,11 @@ export class AsyncResults<T> {
     }
 
     this.signal.addEventListener(
-      'abort',
+      "abort",
       () => {
         if (!this.#resulted) {
           this.#error = this.signal.reason;
-          this.#reason = 'fatal-error';
+          this.#reason = "fatal-error";
           this.#subscriber.onFatalError?.(this.#error);
         }
         this.#resulted = true;
@@ -53,10 +53,7 @@ export class AsyncResults<T> {
             error: this.#error,
           });
         } catch (err) {
-          console.warn(
-            'An error occurred while processing finally callback:',
-            err,
-          );
+          console.warn("An error occurred while processing finally callback:", err);
         }
 
         params.finally();
@@ -77,7 +74,7 @@ export class AsyncResults<T> {
       return;
     }
     this.#resulted = true;
-    this.#reason = 'terminated';
+    this.#reason = "terminated";
     this.#subscriber.onTerminated?.(message);
     this.#controller.abort();
   };
@@ -97,11 +94,11 @@ export class AsyncResults<T> {
     this.#error = error;
     this.#reason = ((): SubscriptionEndReason => {
       if (error instanceof UniplsClosedError) {
-        return 'closed';
+        return "closed";
       } else if (error instanceof UniplsDroppedError) {
-        return 'dropped';
+        return "dropped";
       } else {
-        return 'fatal-error';
+        return "fatal-error";
       }
     })();
     this.#subscriber.onFatalError?.(error);
@@ -115,7 +112,7 @@ export class AsyncResults<T> {
 
     this.#resulted = true;
     this.#error = reason;
-    this.#reason = 'aborted';
+    this.#reason = "aborted";
     this.#subscriber.onFatalError?.(reason);
     this.#controller.abort();
   }
@@ -125,7 +122,7 @@ export class AsyncResults<T> {
       return;
     }
     this.#resulted = true;
-    this.#reason = 'unsubscribed';
+    this.#reason = "unsubscribed";
     this.#subscriber.onUnsubscribed?.();
     this.#controller.abort();
   };
@@ -159,9 +156,9 @@ export interface SubscriptionFinalizationContext {
 }
 
 export type SubscriptionEndReason =
-  | 'closed'
-  | 'dropped'
-  | 'unsubscribed'
-  | 'terminated'
-  | 'aborted'
-  | 'fatal-error';
+  | "closed"
+  | "dropped"
+  | "unsubscribed"
+  | "terminated"
+  | "aborted"
+  | "fatal-error";

@@ -1,12 +1,16 @@
-import type { EventBus } from '../event-bus.ts';
-import { UniplsDroppedError } from '../errors.ts';
-import type { UniplsReconnectEvent } from '../reconnector/reconnector.ts';
-import type { UniplsMessageFactory } from '../unipls.interface.ts';
+import type { EventBus } from "../event-bus.ts";
+import { UniplsDroppedError } from "../errors.ts";
+import type { UniplsReconnectEvent } from "../reconnector/reconnector.ts";
+import type { UniplsMessageFactory } from "../unipls.interface.ts";
 
-export function createOnReconnectedHandler<TInput, TOutput, TEvents extends {
-  reconnect: UniplsReconnectEvent;
-}>(params: {
-  events: Pick<EventBus<TEvents>, 'once'>;
+export function createOnReconnectedHandler<
+  TInput,
+  TOutput,
+  TEvents extends {
+    reconnect: UniplsReconnectEvent;
+  },
+>(params: {
+  events: Pick<EventBus<TEvents>, "once">;
   isDone: () => boolean;
   reset: () => void;
   request: (
@@ -25,7 +29,7 @@ export function createOnReconnectedHandler<TInput, TOutput, TEvents extends {
   }) => Promise<void> | void,
 ) => void {
   return (callback) => {
-    params.events.once('reconnect', async (reconnection) => {
+    params.events.once("reconnect", async (reconnection) => {
       if (params.isDone()) {
         params.onSettled?.();
         return;

@@ -1,13 +1,11 @@
-import type { WebSocketData } from '../..';
-import type {
-  UniplsProvisionerObject,
-  UniplsProvisioningContext,
-} from '../../unipls.interface';
-import { AwaitableQueue } from './awaitable-queue';
+import type { WebSocketData } from "../..";
+import type { UniplsProvisionerObject, UniplsProvisioningContext } from "../../unipls.interface";
+import { AwaitableQueue } from "./awaitable-queue";
 
-export class TestProvisioner<TInput = WebSocketData, TOutput = WebSocketData>
-  implements UniplsProvisionerObject<TInput, TOutput>
-{
+export class TestProvisioner<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> implements UniplsProvisionerObject<TInput, TOutput> {
   #queue = new AwaitableQueue<
     PromiseWithResolvers<void> & UniplsProvisioningContext<TInput, TOutput>
   >();

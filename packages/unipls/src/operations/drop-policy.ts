@@ -1,11 +1,11 @@
-import { UniplsDroppedError } from '../errors.ts';
-import type { UniplsReconnectEvent } from '../reconnector/reconnector.ts';
+import { UniplsDroppedError } from "../errors.ts";
+import type { UniplsReconnectEvent } from "../reconnector/reconnector.ts";
 import type {
   UniplsDropRetryStrategy,
   UniplsMessageFactory,
   UniplsRecoveryDecision,
   UniplsRetryStrategy,
-} from '../unipls.interface.ts';
+} from "../unipls.interface.ts";
 
 type RetryRequest<TInput, TOutput> = (
   data: UniplsMessageFactory<TInput>,
@@ -30,8 +30,8 @@ export function createDropWaitHandler(params: {
       return;
     }
 
-    const retry = params.retry ?? 'wait';
-    if (!params.reconnectable || retry === 'fail') {
+    const retry = params.retry ?? "wait";
+    if (!params.reconnectable || retry === "fail") {
       params.onFatal(new UniplsDroppedError());
     }
   };
@@ -53,8 +53,8 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
       return;
     }
 
-    const retry = params.retry ?? 'fail';
-    if (!params.reconnectable || retry === 'fail') {
+    const retry = params.retry ?? "fail";
+    if (!params.reconnectable || retry === "fail") {
       params.onFatal(new UniplsDroppedError());
       return;
     }
@@ -66,11 +66,11 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
     params.onReconnected(async ({ request, reconnection }) => {
       waitingForReconnect = false;
 
-      if (retry === 'wait') {
+      if (retry === "wait") {
         return;
       }
 
-      if (retry === 'resend') {
+      if (retry === "resend") {
         await request(query, { selector });
         return;
       }
@@ -98,15 +98,15 @@ async function runRecoveryDecision<TInput, TOutput>(
     selector: (data: TOutput) => boolean;
   },
 ): Promise<void> {
-  if (decision === undefined || decision === 'wait') {
+  if (decision === undefined || decision === "wait") {
     return;
   }
 
-  if (decision === 'fail') {
+  if (decision === "fail") {
     throw new UniplsDroppedError();
   }
 
-  if (decision === 'resend') {
+  if (decision === "resend") {
     await params.request(params.query, {
       selector: params.selector,
     });

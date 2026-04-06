@@ -1,15 +1,15 @@
-import { afterEach, expect, test } from 'vitest';
-import { Unipls, UniplsClosedError } from '..';
-import { createMockServer, TestProvisioner, TimeoutError, timeout } from './test-utils';
+import { afterEach, expect, test } from "vitest";
+import { Unipls, UniplsClosedError } from "..";
+import { createMockServer, TestProvisioner, TimeoutError, timeout } from "./test-utils";
 
-const url = 'ws://localhost:8080';
+const url = "ws://localhost:8080";
 const server = createMockServer(url);
 
 afterEach(() => {
   server.reset();
 });
 
-test('open インテント中の送信は、必要であればバッファリングされる', async () => {
+test("open インテント中の送信は、必要であればバッファリングされる", async () => {
   const provisioner = new TestProvisioner<string, string>();
   await using unipls = new Unipls<string, string>({ url });
 
@@ -18,7 +18,7 @@ test('open インテント中の送信は、必要であればバッファリン
   const provisioning = await provisioner.dequeueContext();
 
   const promise = unipls.cast({
-    query: 'ping',
+    query: "ping",
   });
 
   await expect(socket.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
@@ -26,11 +26,11 @@ test('open インテント中の送信は、必要であればバッファリン
 
   provisioning.resolve();
 
-  await expect(socket.inbox.dequeue()).resolves.toBe('ping');
+  await expect(socket.inbox.dequeue()).resolves.toBe("ping");
   await expect(promise).resolves.toBeUndefined();
 });
 
-test('open インテント中にバッファされた送信は、close インテントに遷移したときに破棄される', async () => {
+test("open インテント中にバッファされた送信は、close インテントに遷移したときに破棄される", async () => {
   const provisioner = new TestProvisioner<string, string>();
   await using unipls = new Unipls<string, string>({ url });
 
@@ -39,7 +39,7 @@ test('open インテント中にバッファされた送信は、close インテ
   await provisioner.dequeueContext();
 
   const promise = unipls.cast({
-    query: 'ping',
+    query: "ping",
   });
 
   await unipls.close();
@@ -48,7 +48,7 @@ test('open インテント中にバッファされた送信は、close インテ
   await expect(promise).rejects.toThrow();
 });
 
-test('close インテント中に送信することはできない', async () => {
+test("close インテント中に送信することはできない", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();
@@ -57,12 +57,12 @@ test('close インテント中に送信することはできない', async () =>
 
   expect(() =>
     unipls.cast({
-      query: 'ping',
+      query: "ping",
     }),
   ).toThrow(UniplsClosedError);
 });
 
-test('close インテント中に受信することはできない', async () => {
+test("close インテント中に受信することはできない", async () => {
   await using unipls = new Unipls<string, string>({ url });
 
   await unipls.open();

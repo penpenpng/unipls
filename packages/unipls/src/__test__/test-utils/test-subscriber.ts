@@ -1,13 +1,8 @@
-import type { WebSocketData } from '../..';
-import type {
-  SubscriptionFinalizationContext,
-  UniplsSubscriber,
-} from '../../async-results';
-import { AwaitableQueue } from './awaitable-queue';
+import type { WebSocketData } from "../..";
+import type { SubscriptionFinalizationContext, UniplsSubscriber } from "../../async-results";
+import { AwaitableQueue } from "./awaitable-queue";
 
-export class TestSubscriber<TOutput = WebSocketData>
-  implements UniplsSubscriber<TOutput>
-{
+export class TestSubscriber<TOutput = WebSocketData> implements UniplsSubscriber<TOutput> {
   readonly messages = new AwaitableQueue<TOutput>();
   readonly errors = new AwaitableQueue<unknown>();
   #termination = Promise.withResolvers<TOutput>();
