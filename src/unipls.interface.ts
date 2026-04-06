@@ -113,6 +113,9 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
 
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
+
+  /** レスポンス待機中に drop が発生した場合の待機継続戦略を指定します。 */
+  retry?: UniplsDropRetryStrategy;
 }
 
 /** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
@@ -125,6 +128,9 @@ export interface UniplsListenOptions<TOutput = WebSocketData> {
 
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
+
+  /** 購読中に drop が発生した場合の待機継続戦略を指定します。 */
+  retry?: UniplsDropRetryStrategy;
 }
 
 /**
@@ -185,6 +191,8 @@ export type UniplsRetryStrategy<
   | 're-request'
   | 'keep-listening'
   | UniplsRetrySetupFunction<TInput, TOutput>;
+
+export type UniplsDropRetryStrategy = 'never' | 'keep-listening';
 
 /**
  * {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の再送戦略を定義する関数を表します。

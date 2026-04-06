@@ -86,9 +86,22 @@ test('reconnector が与えられていない場合、drop 時に UniplsDroppedE
   await expect(promise).rejects.toThrow(UniplsDroppedError);
 });
 
-// TODO: request などにあわせて、stopOnDropped の代わりに `retry: 'keep-listening' | 'never'` とする
-// test.skip('reconnector が与えられていたとしても stopOnDropped オプションが有効ならば、drop 時に UniplsDroppedError で reject する', async () => {
-// });
+test('reconnector が与えられていても、retry: never が指定されている場合は drop 時に UniplsDroppedError で reject する', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  const promise = unipls.next({
+    ...query,
+    retry: 'never',
+  });
+
+  unipls.drop();
+
+  await expect(promise).rejects.toThrow(UniplsDroppedError);
+});
 
 test('reconnector が与えられている場合、next() は再接続後もメッセージを待機し続ける', async () => {
   const reconnector = new ImmediateReconnector();
@@ -97,7 +110,10 @@ test('reconnector が与えられている場合、next() は再接続後もメ�
   await unipls.open();
   await server.sockets.dequeue();
 
-  const promise = unipls.next(query);
+  const promise = unipls.next({
+    ...query,
+    retry: 'keep-listening',
+  });
 
   unipls.drop();
   const socket2 = await server.sockets.dequeue();

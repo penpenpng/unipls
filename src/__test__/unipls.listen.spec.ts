@@ -151,6 +151,29 @@ test('reconnector が与えられていない場合、drop 時に reason: droppe
   await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
+test('reconnector が与えられていても、retry: never が指定されている場合は drop 時に reason: dropped で onFatalError がトリガーされる', async () => {
+  const reconnector = new ImmediateReconnector();
+  await using unipls = new Unipls<string, string>({ url, reconnector });
+
+  await unipls.open();
+  const socket = await server.sockets.dequeue();
+
+  const sub = new TestSubscriber();
+  unipls.listen({
+    ...sub,
+    retry: 'never',
+  });
+
+  unipls.drop();
+  socket.send('ignored');
+
+  await expect(sub.termination).rejects.toThrow(UniplsDroppedError);
+  await expect(sub.finalization).resolves.toMatchObject({
+    reason: 'dropped',
+  });
+  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
+});
+
 test('reconnector が与えられている場合、listen() は再接続後もメッセージを監視し続ける', async () => {
   const reconnector = new ImmediateReconnector();
   await using unipls = new Unipls({ url, reconnector });
@@ -159,7 +182,7 @@ test('reconnector が与えられている場合、listen() は再接続後も�
   await server.sockets.dequeue();
 
   const sub = new TestSubscriber();
-  unipls.listen(sub);
+  unipls.listen({ ...sub, retry: 'keep-listening' });
 
   unipls.drop();
   const socket2 = await server.sockets.dequeue();

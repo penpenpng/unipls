@@ -149,7 +149,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      if (!this.#reconnector) {
+      const retry = params.retry ?? 'keep-listening';
+      if (!this.#reconnector || retry === 'never') {
         result.reject(new UniplsDroppedError());
       }
     });
@@ -222,7 +223,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on('dropped', () => {
-      if (!this.#reconnector) {
+      const retry = params.retry ?? 'keep-listening';
+      if (!this.#reconnector || retry === 'never') {
         results.raiseFatalError(new UniplsDroppedError());
       }
     });
