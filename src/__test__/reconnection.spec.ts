@@ -113,8 +113,19 @@ test('drop 後、Reconnector が reconnect() を呼び出したとき、再接�
   await expect(sub.messages.dequeue()).resolves.toBe('after-reconnect');
 });
 
-test.skip('drop 後、Reconnector が cancel() を呼び出したとき、再接続は実行されない', () => {
-  // TODO
+test('drop 後、Reconnector が cancel() を呼び出したとき、再接続は実行されない', async () => {
+  const reconnector = new TestReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  unipls.drop();
+
+  const ctx = await reconnector.dequeueContext();
+  ctx.cancel();
+
+  await expect(server.sockets.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
 test.skip('再接続成功時、reconnect イベントが発火する', async () => {
