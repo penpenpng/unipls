@@ -17,6 +17,7 @@ import {
   StreamOperationScope,
 } from './operations/operation-scope.ts';
 import { QuerySession } from './operations/query-session.ts';
+import { createOnReconnectedHandler } from './operations/reconnect-hook.ts';
 import type {
   UniplsReconnectEvent,
   UniplsReconnector,
@@ -33,7 +34,6 @@ import type {
   UniplsProvisioner,
   UniplsProvisioningContext,
   UniplsRequestParams,
-  UniplsRetrySetupContext,
   UniplsSubscribeParams,
 } from './unipls.interface.ts';
 
@@ -342,27 +342,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       scope.reject(error);
     });
 
-    const onReconnected: UniplsRetrySetupContext<
-      TInput,
-      TOutput
-    >['onReconnected'] = (callback) => {
-      events.once('reconnect', async (reconnection) => {
-        if (scope.resulted) {
-          return;
-        }
-
-        requestSession.resetForReconnect();
-
-        try {
-          await callback({
-            request,
-            reconnection,
-          });
-        } catch (err) {
-          scope.reject(err ?? new UniplsDroppedError());
-        }
-      });
-    };
+    const onReconnected = createOnReconnectedHandler({
+      events,
+      isDone: () => scope.resulted,
+      reset: () => requestSession.resetForReconnect(),
+      request,
+      onError: scope.reject,
+    });
 
     events.on(
       'dropped',
@@ -659,27 +645,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       scope.handleError(error);
     });
 
-    const onReconnected: UniplsRetrySetupContext<
-      TInput,
-      TOutput
-    >['onReconnected'] = (callback) => {
-      events.once('reconnect', async (reconnection) => {
-        if (scope.resulted) {
-          return;
-        }
-
-        requestSession.resetForReconnect();
-
-        try {
-          await callback({
-            request,
-            reconnection,
-          });
-        } catch (err) {
-          scope.raiseFatalError(err ?? new UniplsDroppedError());
-        }
-      });
-    };
+    const onReconnected = createOnReconnectedHandler({
+      events,
+      isDone: () => scope.resulted,
+      reset: () => requestSession.resetForReconnect(),
+      request,
+      onError: scope.raiseFatalError,
+    });
 
     events.on(
       'dropped',
