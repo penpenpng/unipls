@@ -128,8 +128,35 @@ test('drop 後、Reconnector が cancel() を呼び出したとき、再接続�
   await expect(server.sockets.dequeue({ timeout: 50 })).rejects.toThrow();
 });
 
-test.skip('再接続成功時、reconnect イベントが発火する', async () => {
-  // TODO
+test('再接続成功時、reconnect イベントが発火する', async () => {
+  const reconnector = new TestReconnector();
+  await using unipls = new Unipls({ url, reconnector });
+
+  const reconnectEvent = Promise.withResolvers<{
+    session: number;
+    sessionAttempts: readonly unknown[];
+  }>();
+  const off = unipls.on('reconnect', (event) => {
+    reconnectEvent.resolve(event);
+  });
+
+  await unipls.open();
+  await server.sockets.dequeue();
+
+  unipls.drop();
+
+  const ctx = await reconnector.dequeueContext();
+  const session = ctx.session;
+  ctx.reconnect();
+
+  await server.sockets.dequeue();
+
+  const event = await reconnectEvent.promise;
+
+  expect(event.session).toBe(session);
+  expect(event.sessionAttempts).toHaveLength(1);
+
+  off();
 });
 
 test.skip('drop 後、Reconnector が reconnect(), cancel() を呼び出す前に Unipls が close() されたとき、cleanup 関数が呼び出される', async () => {
