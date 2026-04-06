@@ -207,11 +207,11 @@ test('reconnector が与えられていて、リトライ戦略に keep-listenin
   unipls.drop();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('pong');
+  socket2.send('pong-1');
 
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
   await expect(socket2.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
-  await expect(sub.messages.dequeue()).resolves.toBe('pong');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
 });
 
 test('reconnector が与えられていて、リトライ戦略に re-request が指定されている場合、再接続後に query の再送が行われ、レスポンスの待機も継続する', async () => {
@@ -231,11 +231,11 @@ test('reconnector が与えられていて、リトライ戦略に re-request �
   unipls.drop();
   const socket2 = await server.sockets.dequeue();
 
-  socket2.send('pong');
+  socket2.send('pong-1');
 
   await expect(socket1.inbox.dequeue()).resolves.toBe('ping');
   await expect(socket2.inbox.dequeue()).resolves.toBe('ping');
-  await expect(sub.messages.dequeue()).resolves.toBe('pong');
+  await expect(sub.messages.dequeue()).resolves.toBe('pong-1');
 });
 
 test('reconnector が与えられていて、リトライ戦略に never が指定されている場合、drop 時に reason: dropped で onFatalError がトリガーされる', async () => {

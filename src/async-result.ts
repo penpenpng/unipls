@@ -31,6 +31,7 @@ export class AsyncResult<T> {
       this.#resolve = resolve;
       this.#reject = reject;
     });
+    void this.#promise.catch(() => {});
 
     const signals = [this.#controller.signal];
     if (options.signal) {

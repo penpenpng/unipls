@@ -351,6 +351,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
       retryRegistered = true;
 
+      if (params.retry === undefined || params.retry === 'never') {
+        result.reject(new UniplsDroppedError());
+        return;
+      }
+
       const setupRetry = Unipls.getRetrySetupFunction(params.retry);
 
       try {
@@ -650,6 +655,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
       retryRegistered = true;
 
+      if (params.retry === undefined || params.retry === 'never') {
+        results.raiseFatalError(new UniplsDroppedError());
+        return;
+      }
+
       const setupRetry = Unipls.getRetrySetupFunction(params.retry);
 
       try {
@@ -673,12 +683,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   protected static getRetrySetupFunction<TInput, TOutput>(
     retry?: UniplsRetryStrategy<TInput, TOutput>,
   ): UniplsRetrySetupFunction<TInput, TOutput> {
-    if (retry === undefined || retry === 'never') {
-      return () => {
-        throw new UniplsDroppedError();
-      };
-    }
-
     if (retry === 're-request') {
       return ({ onReconnected, data, selector }) => {
         onReconnected(async ({ request }) => {
@@ -693,7 +697,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       };
     }
 
-    return retry;
+    return retry ?? (() => {});
   }
 
   static #evaluateQuery<TInput>(query: UniplsMessageFactory<TInput>): TInput {
