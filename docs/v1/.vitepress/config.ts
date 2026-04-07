@@ -1,30 +1,31 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
+  base: '/v1/',
   title: 'unipls Docs',
   description: 'Documentation site scaffold for unipls',
   cleanUrls: true,
   themeConfig: {
     nav: [
-      { text: 'English', link: '/en/v1/' },
-      { text: '日本語', link: '/ja/v1/' },
+      { text: 'English', link: '/en/' },
+      { text: '日本語', link: '/ja/' },
     ],
     sidebar: {
-      '/en/v1/': [
+      '/en/': [
         {
           text: 'v1',
           items: [
-            { text: 'Overview', link: '/en/v1/' },
-            { text: 'Guide', link: '/en/v1/guide' },
+            { text: 'Overview', link: '/en/' },
+            { text: 'Guide', link: '/en/guide' },
           ],
         },
       ],
-      '/ja/v1/': [
+      '/ja/': [
         {
           text: 'v1',
           items: [
-            { text: '概要', link: '/ja/v1/' },
-            { text: 'ガイド', link: '/ja/v1/guide' },
+            { text: '概要', link: '/ja/' },
+            { text: 'ガイド', link: '/ja/guide' },
           ],
         },
       ],

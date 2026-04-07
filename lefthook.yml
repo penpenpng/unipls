@@ -3,7 +3,7 @@ pre-commit:
   commands:
     unipls-fmt:
       root: packages/unipls
-      run: pnpm fmt
+      run: mise exec -- pnpm fmt
     unipls-lint-fix:
       root: packages/unipls
-      run: pnpm exec vp lint --fix src vite.config.ts
+      run: mise exec -- pnpm exec vp lint --fix src vite.config.ts
