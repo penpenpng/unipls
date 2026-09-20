@@ -20,11 +20,11 @@
 
 | operation | closed、ready待機、open、recovery、drop policy、成功結果を検証する主なtest |
 | --- | --- |
-| `cast` | `operation-lifecycle.spec.ts`の5種類拒否、recovery中受付、factory/serializer failure、全待機段階timeout |
-| `next` | `operation-lifecycle.spec.ts`のready境界、broadcast、predicate policy、recovery中受付、abort/timeout/cleanup |
-| `request` | `operation-lifecycle.spec.ts`の送信後観測、recovery中の初回送信、fail/wait/resend、custom recovery |
-| `listen` | `stream-operation.spec.ts`のcallback/iterator delivery、terminator、buffer、close/abort/drop、recovery中受付 |
-| `subscribe` | `stream-operation.spec.ts`のfactory failure、明示resend、共通stream終了契約 |
+| `cast` | `cast.spec.ts`のready待機と送信、`operation-lifecycle.spec.ts`の5種類拒否、recovery中受付、factory/serializer failure、全待機段階timeout |
+| `next` | `next.spec.ts`のmessage選択、`operation-lifecycle.spec.ts`のready境界、broadcast、predicate policy、recovery中受付、abort/timeout/cleanup |
+| `request` | `request.spec.ts`の送信後観測、`operation-lifecycle.spec.ts`のrecovery中の初回送信、fail/wait/resend、custom recovery |
+| `listen` | `listen.spec.ts`の選択・配送・終端、`stream-operation.spec.ts`のcallback/iterator delivery、buffer、close/abort/drop、recovery中受付 |
+| `subscribe` | `subscribe.spec.ts`の送信・配送・終端、`stream-operation.spec.ts`のfactory failure、明示resend、共通stream終了契約 |
 
 必須値、callback、policy、signalの不正とtimeout/buffer範囲は、`operation-lifecycle.spec.ts`と`stream-operation.spec.ts`でsession確認より先の同期errorとして検証します。provisionerの削除済みfunction shorthandとhook形状は`open-provisioning.spec.ts`で検証します。
 
@@ -53,7 +53,7 @@
 
 これらのtestはtimer数、listener数、cleanup回数、遅延callback後の状態を観測し、成功、失敗、drop、closeの競合後にresourceが残らないことを確認します。
 
-test runnerの`--detectAsyncLeaks`も全20 file、109 testに対して実行しました。test自体はすべて成功し、検出された非同期resourceは全fileで共通してtest moduleの読込時にVite+ / rolldownのnative bindingが生成する`CustomGC`だけでした。stack traceはライブラリのsession、operation、timer、listener、socket、detector、reconnectorを経由していないためrunner由来のfalse positiveと判断し、ライブラリ資源のleak判定には上記の明示的な観測testを使用します。
+test runnerの`--detectAsyncLeaks`も全25 file、114 testに対して実行しました。test自体はすべて成功し、検出された非同期resourceは全fileで共通してtest moduleの読込時にVite+ / rolldownのnative bindingが生成する`CustomGC`だけでした。stack traceはライブラリのsession、operation、timer、listener、socket、detector、reconnectorを経由していないためrunner由来のfalse positiveと判断し、ライブラリ資源のleak判定には上記の明示的な観測testを使用します。
 
 ## runtimeとpackage artifact
 
