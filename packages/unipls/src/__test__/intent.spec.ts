@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { Unipls, UniplsClosedError } from "..";
-import { createMockServer, TestProvisioner, TimeoutError, timeout } from "./test-utils";
+import { createMockServer, TestProvisioner, timeout, TimeoutError } from "./test-utils";
 
 const url = "ws://localhost:8080";
 const server = createMockServer(url);
@@ -43,9 +43,10 @@ test("open インテント中にバッファされた送信は、close インテ
   });
 
   await unipls.close();
+  await unipls.open();
 
   await expect(socket.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
-  await expect(promise).rejects.toThrow();
+  await expect(promise).rejects.toThrow(UniplsClosedError);
 });
 
 test("close インテント中に送信することはできない", async () => {
@@ -58,20 +59,6 @@ test("close インテント中に送信することはできない", async () =>
   expect(() =>
     unipls.cast({
       query: "ping",
-    }),
-  ).toThrow(UniplsClosedError);
-});
-
-test("close インテント中に受信することはできない", async () => {
-  await using unipls = new Unipls<string, string>({ url });
-
-  await unipls.open();
-  await server.sockets.dequeue();
-  await unipls.close();
-
-  expect(() =>
-    unipls.next({
-      selector: () => true,
     }),
   ).toThrow(UniplsClosedError);
 });

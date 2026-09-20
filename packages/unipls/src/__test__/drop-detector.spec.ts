@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "vitest";
-import { Unipls } from "..";
+import { afterEach, expect, test, vi } from "vitest";
+import { ImmediateReconnector, Unipls } from "..";
 import { createMockServer, TestDropDetector } from "./test-utils";
 
 const url = "ws://localhost:8080";
@@ -15,6 +15,7 @@ test("Unipls が open() され、provisioning が完了したとき、DropDetect
 
   await unipls.open();
   await server.sockets.dequeue();
+  await detector.dequeueContext();
 
   expect(detector.setupCount).toBe(1);
 });
@@ -25,8 +26,7 @@ test("Unipls が close() されたとき、DropDetector が cleanup される", 
 
   await unipls.open();
   await server.sockets.dequeue();
-
-  expect(detector.setupCount).toBe(1);
+  await detector.dequeueContext();
 
   await unipls.close();
 
@@ -35,12 +35,23 @@ test("Unipls が close() されたとき、DropDetector が cleanup される", 
 
 test("再接続され、provisioning が完了したとき、DropDetector が setup される", async () => {
   const detector = new TestDropDetector();
-  await using unipls = new Unipls({ url, dropDetectors: [detector] });
+  await using unipls = new Unipls({
+    url,
+    reconnector: new ImmediateReconnector(),
+    dropDetectors: [detector],
+  });
 
   await unipls.open();
   await server.sockets.dequeue();
+  await detector.dequeueContext();
 
   expect(detector.setupCount).toBe(1);
+
+  unipls.drop();
+  await server.sockets.dequeue();
+  await detector.dequeueContext();
+
+  expect(detector.setupCount).toBe(2);
 });
 
 test("DropDetector が drop を検出したとき、dropped イベントが発火する", async () => {
@@ -48,18 +59,15 @@ test("DropDetector が drop を検出したとき、dropped イベントが発�
   await using unipls = new Unipls({ url, dropDetectors: [detector] });
 
   const dropped = Promise.withResolvers<void>();
-  const off = unipls.on("dropped", () => {
-    dropped.resolve();
-  });
+  unipls.on("dropped", () => dropped.resolve(), { once: true });
 
   await unipls.open();
   await server.sockets.dequeue();
+  await detector.dequeueContext();
 
   detector.drop();
 
   await expect(dropped.promise).resolves.toBeUndefined();
-
-  off();
 });
 
 test("同一の接続に対して複数の DropDetector が drop を検出したとしても、dropped イベントは一度だけ発火する", async () => {
@@ -70,22 +78,21 @@ test("同一の接続に対して複数の DropDetector が drop を検出した
     dropDetectors: [detector1, detector2],
   });
 
-  let droppedCount = 0;
-  const off = unipls.on("dropped", () => {
-    droppedCount += 1;
+  const spy = vi.fn();
+  const dropped = Promise.withResolvers<void>();
+  unipls.on("dropped", () => {
+    spy();
+    dropped.resolve();
   });
 
   await unipls.open();
-  await server.sockets.dequeue();
+  const socket = await server.sockets.dequeue();
+  await Promise.all([detector1.dequeueContext(), detector2.dequeueContext()]);
 
   detector1.drop();
   detector2.drop();
 
-  await expect
-    .poll(() => droppedCount, {
-      timeout: 100,
-    })
-    .toBe(1);
+  await Promise.all([dropped.promise, socket.closeEvent.dequeue()]);
 
-  off();
+  expect(spy).toHaveBeenCalledTimes(1);
 });

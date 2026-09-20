@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { UniplsSocket } from "..";
+import { UniplsSocket, UniplsSocketClosedError, UniplsSocketDroppedError } from "..";
 import { createMockServer } from "./test-utils";
 
 const url = "ws://localhost:8080";
@@ -21,4 +21,22 @@ test("open() と close() に応じて state が遷移する", async () => {
 
   await socket.close();
   expect(socket.state).toBe("closed");
+});
+
+test("接続されていない状態の enqueue() は UniplsSocketClosedError で reject する", async () => {
+  const socket = new UniplsSocket({ url });
+
+  await expect(socket.enqueue("ping")).rejects.toThrow(UniplsSocketClosedError);
+});
+
+test("接続処理中に drop された open() は UniplsSocketDroppedError で reject する", async () => {
+  const provisioning = Promise.withResolvers<void>();
+  const socket = new UniplsSocket({ url });
+
+  const promise = socket.open(() => provisioning.promise);
+  await server.sockets.dequeue();
+
+  socket.drop();
+
+  await expect(promise).rejects.toThrow(UniplsSocketDroppedError);
 });

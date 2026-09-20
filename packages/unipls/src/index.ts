@@ -3,6 +3,9 @@ export {
   UniplsDroppedError,
   UniplsDuplicatedConnectionError,
   UniplsError,
+  UniplsSocketClosedError,
+  UniplsSocketDroppedError,
+  UniplsSocketError,
   UniplsTimeoutError,
 } from "./errors";
 export {

@@ -7,30 +7,29 @@ type EventListener<
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class EventBus<TEvents extends Record<string, any>> {
   #listeners: {
-    [K in keyof TEvents]?: Set<EventListener<TEvents, K>>;
+    [K in keyof TEvents]?: Map<EventListener<TEvents, K>, { once: boolean }>;
   } = {};
 
   protected getListeners<K extends keyof TEvents>(event: K) {
-    return (this.#listeners[event] ??= new Set());
+    return (this.#listeners[event] ??= new Map());
   }
 
-  on<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
+  on<K extends keyof TEvents>(
+    event: K,
+    listener: EventListener<TEvents, K>,
+    options?: { once?: boolean },
+  ): () => void {
     const listeners = this.getListeners(event);
-
-    listeners.add(listener);
+    listeners.set(listener, { once: options?.once ?? false });
 
     return () => {
       this.off(event, listener);
     };
   }
 
+  /** @deprecated Use `on` with `once` */
   once<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
-    const off = this.on(event, (args: TEvents[K]) => {
-      off();
-      listener(args);
-    });
-
-    return off;
+    return this.on(event, listener, { once: true });
   }
 
   off<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): void {
@@ -40,7 +39,10 @@ export class EventBus<TEvents extends Record<string, any>> {
   }
 
   emit<K extends keyof TEvents>(event: K, args: TEvents[K]): void {
-    for (const listener of this.getListeners(event)) {
+    for (const [listener, options] of this.getListeners(event)) {
+      if (options.once) {
+        this.off(event, listener);
+      }
       listener(args);
     }
   }
@@ -64,8 +66,12 @@ class EventBusView<TEvents extends Record<string, any>> {
     this.#events = events;
   }
 
-  on<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
-    const cleanup = this.#events.on(event, listener);
+  on<K extends keyof TEvents>(
+    event: K,
+    listener: EventListener<TEvents, K>,
+    options?: { once?: boolean },
+  ): () => void {
+    const cleanup = this.#events.on(event, listener, options);
     this.#cleanups.add(cleanup);
 
     return () => {
@@ -74,8 +80,9 @@ class EventBusView<TEvents extends Record<string, any>> {
     };
   }
 
+  /** @deprecated Use `on` with `once` */
   once<K extends keyof TEvents>(event: K, listener: EventListener<TEvents, K>): () => void {
-    const cleanup = this.#events.once(event, listener);
+    const cleanup = this.#events.on(event, listener, { once: true });
     this.#cleanups.add(cleanup);
 
     return () => {

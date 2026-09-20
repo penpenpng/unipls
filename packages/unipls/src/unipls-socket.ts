@@ -1,8 +1,8 @@
 import { AsyncResult } from "./async-result.ts";
 import {
-  UniplsClosedError,
-  UniplsDroppedError,
   UniplsDuplicatedConnectionError,
+  UniplsSocketClosedError,
+  UniplsSocketDroppedError,
   UniplsTimeoutError,
 } from "./errors.ts";
 import { EventBus } from "./event-bus.ts";
@@ -149,13 +149,13 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       if (ev.session.id !== session.id) {
         return;
       }
-      result.reject(new UniplsClosedError());
+      result.reject(new UniplsSocketClosedError());
     });
     events.on("dropped", (ev) => {
       if (ev.session.id !== session.id) {
         return;
       }
-      result.reject(new UniplsDroppedError());
+      result.reject(new UniplsSocketDroppedError());
     });
     events.on("failed", (ev) => {
       if (ev.session.id !== session.id) {
@@ -185,7 +185,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       socket = new WebSocket(this.url);
     } catch {
       // When the given URL is invalid, Deno runtime throws SyntaxError.
-      throw new UniplsDroppedError();
+      throw new UniplsSocketDroppedError();
     }
 
     socket.onopen = () => {
@@ -254,30 +254,34 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       finally: () => events.dispose(),
     });
 
-    if (
-      !this.#socket ||
-      this.state === "closed" ||
-      this.state === "dropped" ||
-      this.intent === "close" ||
-      options?.signal?.aborted
-    ) {
-      result.reject();
-      return result.promise;
-    }
-
     const send = () => {
       if (!this.#socket || this.#socket.readyState !== WebSocketReadyState.OPEN) {
-        result.reject();
+        result.reject(new UniplsSocketClosedError());
         return;
       }
 
       try {
         this.#socket.send(this.serialize(data));
         result.resolve();
-      } catch {
-        result.reject();
+      } catch (error) {
+        result.reject(error);
       }
     };
+
+    if (!this.#socket || this.state === "closed" || this.intent === "close") {
+      result.reject(new UniplsSocketClosedError());
+      return result.promise;
+    }
+
+    if (this.state === "dropped") {
+      result.reject(new UniplsSocketDroppedError());
+      return result.promise;
+    }
+
+    if (options?.signal?.aborted) {
+      result.reject(options.signal.reason);
+      return result.promise;
+    }
 
     if (
       (this.state === "open" || (this.state === "provisioning" && options?.force)) &&
@@ -299,10 +303,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     }
     events.once("closed", () => {
-      result.reject();
+      result.reject(new UniplsSocketClosedError());
     });
     events.once("dropped", () => {
-      result.reject();
+      result.reject(new UniplsSocketDroppedError());
     });
     events.once("failed", ({ error }) => {
       result.reject(error);

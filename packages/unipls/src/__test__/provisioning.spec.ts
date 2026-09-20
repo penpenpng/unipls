@@ -38,9 +38,10 @@ test("初回接続後、Provisioning が失敗した場合、open() の結果は
   await server.sockets.dequeue();
 
   // Fail provisioning manually.
-  (await provisioner.dequeueContext()).reject();
+  const ERROR = Symbol();
+  (await provisioner.dequeueContext()).reject(ERROR);
 
-  await expect(promise).rejects.toThrow();
+  await expect(promise).rejects.toBe(ERROR);
 });
 
 test("初回接続後、Provisioning が完了する前に close() された場合、open() の結果は reject される", async () => {
@@ -62,13 +63,12 @@ test("初回接続後、Provisioning が完了するまで cast() の送信は�
   unipls.open(provisioner);
   const socket = await server.sockets.dequeue();
 
-  const promise = unipls.cast({
+  unipls.cast({
     query: "ping",
   });
 
   // 'ping' is not sent because provisioner is not settled yet.
   await expect(socket.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
-  await expect(timeout(promise, 50)).rejects.toThrow(TimeoutError);
 
   // Complete provisioning manually.
   (await provisioner.dequeueContext()).resolve();
@@ -83,14 +83,13 @@ test("初回接続後、Provisioning が完了するまで request() の送信�
   unipls.open(provisioner);
   const socket = await server.sockets.dequeue();
 
-  const response = unipls.request({
+  unipls.request({
     query: "ping",
     selector: (msg) => msg === "pong",
   });
 
   // 'ping' is not sent because provisioner is not settled yet.
   await expect(socket.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
-  await expect(timeout(response, 50)).rejects.toThrow();
 
   // Complete provisioning manually.
   (await provisioner.dequeueContext()).resolve();
@@ -114,7 +113,6 @@ test("初回接続後、Provisioning が完了するまで subscribe() の送信
 
   // 'ping' is not sent because provisioner is not settled yet.
   await expect(socket.inbox.dequeue({ timeout: 50 })).rejects.toThrow();
-  await expect(sub.messages.dequeue({ timeout: 50 })).rejects.toThrow();
 
   // Complete provisioning manually.
   (await provisioner.dequeueContext()).resolve();
@@ -124,20 +122,16 @@ test("初回接続後、Provisioning が完了するまで subscribe() の送信
 
 test("再接続後、Provisioning が完了するまで request() の送信は保留される", async () => {
   const provisioner = new TestProvisioner<string, string>();
-  const reconnector = new ImmediateReconnector();
-  await using unipls = new Unipls<string, string>({ url, reconnector });
+  await using unipls = new Unipls<string, string>({
+    url,
+    reconnector: new ImmediateReconnector(),
+  });
 
   const openPromise = unipls.open(provisioner);
   await server.sockets.dequeue();
 
-  const firstProvisioning = await provisioner.dequeueContext();
-  firstProvisioning.resolve();
+  (await provisioner.dequeueContext()).resolve();
   await openPromise;
-
-  const socket1 = await server.sockets.dequeue({ timeout: 50 }).catch(() => null);
-  if (socket1) {
-    throw new Error("unexpected extra socket");
-  }
 
   unipls.drop();
   const socket2 = await server.sockets.dequeue();

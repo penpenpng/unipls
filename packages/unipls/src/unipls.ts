@@ -2,7 +2,13 @@ import { AsyncResult } from "./async-result.ts";
 import type { UniplsSubscriber } from "./async-results.ts";
 import type { DropDetectorContext } from "./drop-detector";
 import { DropDetectorManager } from "./drop-detector/drop-detector-manager.ts";
-import { UniplsClosedError, UniplsTimeoutError } from "./errors.ts";
+import {
+  UniplsClosedError,
+  UniplsDroppedError,
+  UniplsSocketClosedError,
+  UniplsSocketDroppedError,
+  UniplsTimeoutError,
+} from "./errors.ts";
 import type { EventBus } from "./event-bus";
 import { createDropWaitHandler, createRetryingDropHandler } from "./operations/drop-policy.ts";
 import { SingleOperationScope, StreamOperationScope } from "./operations/operation-scope.ts";
@@ -80,10 +86,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#session.new();
 
     // TODO: 初回の接続が即失敗したときには、デフォルトではリトライしない (polite option)
-    return this.#socket.open(async () => {
-      await this.#runProvisioner();
-      this.#detectorManager.start(this.#createDropDetectorContext());
-    });
+    const promise = this.#socket
+      .open(async () => {
+        await this.#runProvisioner();
+        this.#detectorManager.start(this.#createDropDetectorContext());
+      })
+      .catch((error) => {
+        throw Unipls.#translateSocketError(error);
+      });
+    void promise.catch(() => {});
+    return promise;
   }
 
   /**
@@ -280,7 +292,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           force: params.force,
           signal: scope.signal,
         }),
-      onError: scope.reject,
+      onError: (error) => scope.reject(Unipls.#translateSocketError(error)),
     });
 
     const request = (
@@ -367,8 +379,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         this.#socket
           .enqueue(payload, { force, signal: scope.signal })
           .then(() => scope.resolve())
-          .catch((err) => {
-            scope.reject(err);
+          .catch((error) => {
+            scope.reject(Unipls.#translateSocketError(error));
           });
       };
 
@@ -551,7 +563,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           force,
           signal: scope.signal,
         }),
-      onError: scope.raiseFatalError,
+      onError: (error) => scope.raiseFatalError(Unipls.#translateSocketError(error)),
     });
 
     const request = (
@@ -636,6 +648,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       return (query as () => TInput)();
     }
     return query;
+  }
+
+  static #translateSocketError(error: unknown): unknown {
+    if (error instanceof UniplsSocketClosedError) {
+      return new UniplsClosedError();
+    }
+    if (error instanceof UniplsSocketDroppedError) {
+      return new UniplsDroppedError();
+    }
+    return error;
   }
 
   static #processMessage<TOutput>({

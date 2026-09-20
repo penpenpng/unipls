@@ -24,6 +24,21 @@ export class UniplsDuplicatedConnectionError extends UniplsError {
   }
 }
 
+/** UniplsSocket が物理接続の状態を通知するために使用する低レベルエラーです。 */
+export abstract class UniplsSocketError extends Error {}
+
+export class UniplsSocketClosedError extends UniplsSocketError {
+  constructor() {
+    super("UniplsSocketClosedError: The WebSocket was disconnected.");
+  }
+}
+
+export class UniplsSocketDroppedError extends UniplsSocketError {
+  constructor() {
+    super("UniplsSocketDroppedError: The WebSocket connection was dropped.");
+  }
+}
+
 export class NotImplementedError extends Error {
   constructor() {
     super("NotImplementedError: This feature is not implemented yet.");
