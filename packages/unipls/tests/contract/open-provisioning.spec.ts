@@ -3,6 +3,15 @@ import { describe, expect, it } from "vite-plus/test";
 import { flushMicrotasks, UniplsRaceScenario } from "../support/index.ts";
 
 describe("Unipls.open の ready 契約", () => {
+  /**
+   * ```ts
+   * const opening = client.open(async () => {
+   *   // ! WebSocket が接続し、provisioning が開始される
+   *   await authenticate(); // この処理が完了するまで opening は未完了
+   * });
+   * await opening; // WebSocket 接続と provisioning の両方が成功済み
+   * ```
+   */
   it("provisioning が成功するまで open を未完了に保つ", async () => {
     // open の Promise と、その完了状態を独立に観測します。
     const scenario = new UniplsRaceScenario();

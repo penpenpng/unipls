@@ -3,6 +3,17 @@ import { describe, expect, it } from "vite-plus/test";
 import { ControlledProvisioner, UniplsRaceScenario } from "../support/index.ts";
 
 describe("Unipls の lifecycle", () => {
+  /**
+   * ```ts
+   * client.on("lifecycle", ({ current }) => {
+   *   // snapshot は凍結され、次の遷移までは client.lifecycle と同じ参照を保つ
+   *   render(current);
+   * });
+   * const opening = client.open(provisioner);
+   * // ! WebSocket が接続し、provisioning が完了する
+   * await opening;
+   * ```
+   */
   it("初回 ready まで同一性が安定した不変の snapshot を通知する", async () => {
     // idle な client を作り、すべての lifecycle 通知を記録します。
     const scenario = new UniplsRaceScenario();
@@ -81,6 +92,16 @@ describe("Unipls の lifecycle", () => {
     expect(scenario.client.lifecycle).toBe(closed);
   });
 
+  /**
+   * ```ts
+   * client.on("open", ({ session, connection }) => {
+   *   // 再接続後も session は変わらず、connection だけが新しくなる
+   *   record(session, connection);
+   * });
+   * await client.open(provisioner);
+   * // ! 接続が drop し、reconnector による再接続が ready になる
+   * ```
+   */
   it("回復時は論理セッションを維持して接続 ID を更新する", async () => {
     // observer を登録し、最初の接続を ready にします。
     const scenario = new UniplsRaceScenario();
@@ -168,6 +189,17 @@ describe("Unipls の lifecycle", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * await client.open({
+   *   // 論理 session ごとに一度だけ実行される
+   *   setupSession: initializeSession,
+   *   // 初回接続および再接続ごとに実行される
+   *   setupConnection: initializeConnection,
+   * });
+   * // ! 接続が drop し、同じ論理 session で再接続が行われる
+   * ```
+   */
   it("session setup は一度、connection setup は接続ごとに実行する", async () => {
     // 論理セッションと WebSocket 接続の setup 回数を別々に記録します。
     const scenario = new UniplsRaceScenario();
@@ -212,6 +244,14 @@ describe("Unipls の lifecycle", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * const opening = client.open(firstProvisioner);
+   * client.open(secondProvisioner); // 同期的に例外を投げる
+   * // 最初の lifecycle と firstProvisioner は置き換えられない
+   * await opening;
+   * ```
+   */
   it("active lifecycle を変更する前に重複 open を拒否する", async () => {
     // active な open 試行と、置き換えられてはならない provisioner を用意します。
     const scenario = new UniplsRaceScenario();
@@ -243,6 +283,23 @@ describe("Unipls の lifecycle", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * const firstOpening = client.open();
+   * // ! 最初の WebSocket が接続する
+   * await firstOpening;
+   * const firstLifecycle = client.lifecycle;
+   * if (firstLifecycle.phase !== "open") throw new Error("not open");
+   * const firstSession = firstLifecycle.session;
+   * await client.close();
+   * const secondOpening = client.open();
+   * // ! 2つ目の WebSocket が接続する
+   * await secondOpening;
+   * const secondLifecycle = client.lifecycle;
+   * if (secondLifecycle.phase !== "open") throw new Error("not open");
+   * // secondLifecycle.session は firstSession と異なり、connection ID も再利用しない
+   * ```
+   */
   it("前のセッション終了後の open で新しい論理セッションを作る", async () => {
     // 最初の論理セッションを ready にし、その ID を記録します。
     const scenario = new UniplsRaceScenario();
@@ -278,6 +335,18 @@ describe("Unipls の lifecycle", () => {
     await secondClosing;
   });
 
+  /**
+   * ```ts
+   * const client = new Unipls({ url }); // reconnector なし
+   * client.on("open", () => {
+   *   // provisioning が失敗した場合は呼ばれない
+   * });
+   * await client.open(async () => {
+   *   // ! WebSocket が接続し、provisioning が開始される
+   *   throw authenticationError;
+   * }); // cause と stage: "provisioning" を持つ UniplsOpenError を投げる
+   * ```
+   */
   it("ready 接続を公開せずに provisioning 失敗を記録する", async () => {
     // 既知の原因で provisioning が失敗する初回接続を用意します。
     const scenario = new UniplsRaceScenario({ reconnectable: false });

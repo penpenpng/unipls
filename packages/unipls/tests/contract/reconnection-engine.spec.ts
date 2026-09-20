@@ -16,6 +16,21 @@ async function openReady(scenario: UniplsRaceScenario): Promise<void> {
 }
 
 describe("再接続エンジン", () => {
+  /**
+   * ```ts
+   * const reconnector = {
+   *   setup({ reconnect }) {
+   *     retryLater(reconnect);
+   *   },
+   * };
+   * const client = new Unipls({ url, reconnector });
+   * const opening = client.open(provisioner);
+   * // ! 初回接続が失敗し、reconnector が再試行を開始する
+   * // reconnector が再試行を続ける間は opening は未完了
+   * // ! 再試行した接続が初めて ready になる
+   * await opening; // いずれかの接続が初めて ready になった時点で解決する
+   * ```
+   */
   it("初回の接続失敗後も同じ open を保留して再試行を成功させる", async () => {
     // 最初の transport を接続前に失敗させ、policy へ判断を渡します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
@@ -60,6 +75,21 @@ describe("再接続エンジン", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * const reconnector = {
+   *   setup(actions, context) {
+   *     // provisioning の失敗を接続失敗と区別して再試行できる
+   *     if (context.stage === "provisioning") actions.reconnect();
+   *   },
+   * };
+   * const client = new Unipls({ url, reconnector });
+   * const opening = client.open(async () => provisionConnection());
+   * // ! WebSocket 接続後、初回の provisionConnection() が失敗する
+   * // ! reconnector が開始した次の接続では provisioning が成功する
+   * await opening;
+   * ```
+   */
   it("初回 provisioning 失敗も同じ試行モデルで再試行する", async () => {
     // provisioning を失敗させ、接続段階と区別された context を受け取ります。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
@@ -88,6 +118,20 @@ describe("再接続エンジン", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * const reconnector = {
+   *   setup(actions) {
+   *     shouldRetry ? actions.reconnect() : actions.cancel();
+   *     // 試行余地を使い切った場合は actions.exhaust() も選べる
+   *   },
+   * };
+   * const opening = new Unipls({ url, reconnector }).open(provisioner);
+   * // ! 初回接続または provisioning が失敗し、reconnector.setup() が呼ばれる
+   * // cancel は attempts-cancelled、exhaust は attempts-exhausted の
+   * // UniplsOpenError で opening を一度だけ失敗させる
+   * ```
+   */
   it.each([
     { action: "cancel" as const, outcome: "attempts-cancelled" as const },
     { action: "exhaust" as const, outcome: "attempts-exhausted" as const },
@@ -110,6 +154,22 @@ describe("再接続エンジン", () => {
     expect(policy.cleanupCount).toBe(1);
   });
 
+  /**
+   * ```ts
+   * const reconnector = {
+   *   setup() {
+   *     throw policyError; // Promise.reject(policyError) でも同じ
+   *   },
+   * };
+   * const client = new Unipls({ url, reconnector });
+   * client.on("diagnostic", ({ error, cause }) => {
+   *   // error は open() が投げる UniplsOpenError と同じ参照で、cause は policyError
+   * });
+   * const opening = client.open();
+   * // ! 初回接続が失敗し、reconnector.setup() が呼ばれる
+   * await opening; // diagnostic.error と同じ UniplsOpenError を投げる
+   * ```
+   */
   it.each([
     { failurePoint: "setup" as const, reject: false },
     { failurePoint: "policy" as const, reject: true },
@@ -150,6 +210,21 @@ describe("再接続エンジン", () => {
     },
   );
 
+  /**
+   * ```ts
+   * const reconnector = {
+   *   setup({ reconnect }) {
+   *     const timer = setTimeout(reconnect, 1000);
+   *     return () => clearTimeout(timer);
+   *   },
+   * };
+   * const client = new Unipls({ url, reconnector });
+   * const opening = client.open();
+   * // ! 初回接続が失敗し、policy の timer が再試行を待っている
+   * await client.close(); // opening は UniplsClosedError で失敗する
+   * // close 後に古い reconnect callback が呼ばれても新しい接続を開始しない
+   * ```
+   */
   it("初回 policy 待機中の close と stale action を session-closed に収束させる", async () => {
     // 初回失敗後、再試行 action を保留します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
@@ -167,6 +242,21 @@ describe("再接続エンジン", () => {
     expect(scenario.client.lifecycle).toMatchObject({ phase: "closed", reason: "user" });
   });
 
+  /**
+   * ```ts
+   * const reconnector = {
+   *   setup(actions, context) {
+   *     // 回復試行が失敗するたびに再実行される
+   *     // context には同じ drop、失敗段階、原因、凍結された全試行履歴が入る
+   *     decide(actions, context);
+   *   },
+   * };
+   * const client = new Unipls({ url, reconnector });
+   * await client.open(provisioner);
+   * // ! ready 接続が drop し、最初の回復試行の provisioning も失敗する
+   * // この時点で setup() が同じ drop と更新済みの試行履歴を受け取って再実行される
+   * ```
+   */
   it("失敗した回復試行の後に同じ drop で policy を再実行する", async () => {
     // ready 接続を drop し、最初の回復試行を provisioning まで進めます。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
@@ -213,6 +303,23 @@ describe("再接続エンジン", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * const reconnector = {
+   *   async setup() {
+   *     throw policyError;
+   *   },
+   * };
+   * const client = new Unipls({ url, reconnector });
+   * await client.open();
+   * const waiting = client.next({ selector, retry: "wait" });
+   * client.on("diagnostic", ({ error }) => {
+   *   // error は waiting と closed event が受け取る UniplsDroppedError と同じ参照
+   * });
+   * // ! ready 接続が drop し、回復のために呼ばれた setup() が reject する
+   * await waiting; // policyError を cause に持つ UniplsDroppedError を投げる
+   * ```
+   */
   it("回復 policy の非同期失敗を dropped error と同じ診断へ変換する", async () => {
     // ready 接続の drop 後に policy Promise を reject させます。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });

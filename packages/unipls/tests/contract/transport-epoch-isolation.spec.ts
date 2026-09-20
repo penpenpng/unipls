@@ -8,6 +8,17 @@ import {
 } from "../support/index.ts";
 
 describe("接続試行の分離", () => {
+  /**
+   * ```ts
+   * const client = new Unipls({ url, reconnector, dropDetectors: [detector] });
+   * client.on("message", consume);
+   * await client.open(provisioner);
+   * // ! 接続が drop し、reconnector が新しい接続試行を開始する
+   * // ! その後、古い WebSocket の event や detector の callback が発生する
+   * // 古い callback は
+   * // message、error、drop、lifecycle のいずれも変更しない
+   * ```
+   */
   it("回復試行の開始後は古い接続のイベントを無視する", async () => {
     // 公開 event の observer を登録し、最初の接続を ready にします。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
@@ -60,6 +71,17 @@ describe("接続試行の分離", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * await client.open({
+   *   setupConnection: async () => delayedSetup(),
+   * });
+   * // ! 再接続の provisioning 中にその接続が再び drop する
+   * // ! 失効後に delayedSetup() が完了する
+   * // delayedSetup() が完了しても、
+   * // その接続の open event や detector resource は作られない
+   * ```
+   */
   it("遅延した provisioning が古い接続を ready に戻さない", async () => {
     // 初回セッションを ready にし、公開 open event を記録します。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
@@ -106,6 +128,18 @@ describe("接続試行の分離", () => {
     await closing;
   });
 
+  /**
+   * ```ts
+   * const opening = socket.open();
+   * const sending = socket.enqueue(payload, { force: true }); // この接続に束縛される
+   * // ! WebSocket が接続しないまま timeout に到達する
+   * await opening.catch(handleConnectionError);
+   * await sending.catch(handleSendError); // 同じ接続の失敗で終了する
+   * const nextOpening = socket.open();
+   * // ! 次の WebSocket が接続する
+   * await nextOpening; // payload は次の WebSocket へ送られない
+   * ```
+   */
   it("送信待機を開始時と同じ接続の socket に束縛する", async () => {
     // 仮想時間を使い、実時間を待たずに最初の接続を timeout させます。
     vi.useFakeTimers();
