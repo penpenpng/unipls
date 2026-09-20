@@ -1,6 +1,6 @@
 # 初期release監査記録
 
-この文書はTask 15で行ったrelease candidate監査の結果です。規範的な公開契約は[実装タスクとdecision record](./tasks.md)および[コアコンセプト](./overview.md)です。
+この文書はTask 15で行ったrelease candidate監査の結果です。規範的な公開契約は[実装タスクとdecision record](./tasks.md)および[コアコンセプト](../v1/ja/concepts.md)です。
 
 ## behavior matrixとcontract test
 
@@ -71,10 +71,10 @@ test runnerの`--detectAsyncLeaks`も全26 file、124 testに対して実行し�
 - local consumer testはtarballを一時directoryへinstallし、root/socket/browser entry、DOMなし型検査、global WebSocket、constructor注入、close/drop cleanup、native `AbortSignal.any`、deep import拒否を検証する。
 - CIは同じtarball artifactをNode.js `22.4.0`とlatest、Deno `2.0.0`とlatest、Bun `1.2.0`とlatestで実行する。
 - browser CIは最新2系統のPlaywright releaseごとにChromium、Firefox、WebKitで`unipls/browser`を含むconsumer smokeを実行する。
-- tarballは`dist`、support文書、package metadataだけを含み、sourceやmonorepo aliasを必要としない。
+- tarballは`dist`、support文書、package metadataだけを含み、sourceやrepository内だけで解決できるaliasを必要としない。
 
 ## 文書照合
 
-- `overview.md`はlogical session、transport epoch、readiness、recovery、stream、diagnostic、公開entry pointの現行契約と一致する。
-- `support.md`とpackage metadataはNode.js、Deno、Bun、browser、ES2022、WebSocket、`AbortSignal.any`の前提と一致する。
-- `plan.md`は実装前の問題一覧を現在形で残さず、完了したP0/P1と次期milestoneを示す。
+- `docs/v1/ja/concepts.md`はlogical session、transport epoch、readiness、recovery、stream、diagnostic、公開entry pointの現行契約と一致する。
+- `docs/v1/ja/support.md`とpackage metadataはNode.js、Deno、Bun、browser、ES2022、WebSocket、`AbortSignal.any`の前提と一致する。
+- `docs/dev/plan.md`は実装前の問題一覧を現在形で残さず、完了したP0/P1と次期milestoneを示す。

@@ -1,6 +1,6 @@
 # uniplsのテスト構成
 
-このdirectoryには、source tree上の挙動だけでなく、利用者が受け取る型宣言と配布packageを検証するtestも置きます。公開契約の期待値は`docs/overview.md`と`docs/tasks.md`から導き、既存実装だけを根拠に新しい契約を固定しません。
+このdirectoryには、source tree上の挙動だけでなく、利用者が受け取る型宣言と配布packageを検証するtestも置きます。公開契約の期待値は`docs/v1/ja/concepts.md`と`docs/dev/tasks.md`から導き、既存実装だけを根拠に新しい契約を固定しません。
 
 ## directoryの役割
 
@@ -17,14 +17,14 @@
 
 ## 実行方法
 
-workspace rootから次のcommandを実行します。
+repository rootから次のcommandを実行します。
 
 ```sh
 pnpm test
-pnpm --filter unipls test:contract
-pnpm --filter unipls test:unit
+pnpm test:contract
+pnpm test:unit
 pnpm typecheck
-pnpm --filter unipls test:package
+pnpm test:package
 pnpm check
 ```
 

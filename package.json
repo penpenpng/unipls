@@ -1,21 +1,86 @@
 {
-  "name": "unipls-monorepo",
-  "private": true,
-  "packageManager": "pnpm@10.4.1",
+  "name": "unipls",
+  "version": "0.0.0",
+  "description": "A typed WebSocket client with explicit readiness, recovery, and stream lifecycles.",
+  "keywords": [
+    "async-iterable",
+    "reconnection",
+    "typescript",
+    "websocket"
+  ],
+  "bugs": {
+    "url": "https://github.com/penpenpng/unipls/issues"
+  },
+  "license": "MIT",
+  "author": "penpenpng",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/penpenpng/unipls.git"
+  },
+  "files": [
+    "dist",
+    "docs/v1/ja/support.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./socket": {
+      "types": "./dist/socket.d.mts",
+      "import": "./dist/socket.mjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.mts",
+      "import": "./dist/browser.mjs"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
-    "build": "pnpm -r build",
-    "check": "pnpm --filter unipls check",
-    "format": "pnpm --filter unipls format",
-    "format:check": "pnpm --filter unipls format:check",
-    "lint": "pnpm --filter unipls lint",
+    "build": "vp pack",
+    "check": "vp check src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs",
+    "docs:build": "vitepress build docs/v1",
+    "docs:dev": "vitepress dev docs/v1",
+    "docs:preview": "vitepress preview docs/v1",
+    "format": "vp fmt --config vite.config.mjs src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs tsconfig.json tsconfig.api.json tsconfig.check.json package.json --write",
+    "format:check": "vp fmt --config vite.config.mjs src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs tsconfig.json tsconfig.api.json tsconfig.check.json package.json --check",
+    "fmt": "pnpm format",
+    "lint": "vp lint src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs",
     "prepare": "lefthook install",
-    "test": "pnpm --filter unipls test",
-    "typecheck": "pnpm --filter unipls typecheck",
-    "docs:dev": "pnpm --filter unipls-docs docs:dev",
-    "docs:build": "pnpm --filter unipls-docs docs:build",
-    "docs:preview": "pnpm --filter unipls-docs docs:preview"
+    "typecheck": "tsc --project tsconfig.check.json && pnpm typecheck:api",
+    "typecheck:api": "pnpm build && tsc --project tsconfig.api.json",
+    "test": "vp test run",
+    "test:contract": "vp test run --project contract",
+    "test:package": "pnpm build && node tests/package/run-node-consumer.mjs",
+    "test:unit": "vp test run --project unit",
+    "test:ui": "vp test --ui"
   },
   "devDependencies": {
-    "lefthook": "^2.1.5"
+    "@vitest/ui": "^4.1.2",
+    "lefthook": "^2.1.5",
+    "msw": "^2.10.5",
+    "typescript": "5.9.2",
+    "vite": "^7.1.3",
+    "vite-plus": "^0.1.15",
+    "vitepress": "^1.6.3",
+    "vitest": "^4.1.2"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ],
+  "engines": {
+    "bun": ">=1.2.0",
+    "deno": ">=2.0.0",
+    "node": ">=22.4.0"
+  },
+  "packageManager": "pnpm@10.4.1",
+  "uniplsSupport": {
+    "javascriptTarget": "ES2022"
   }
 }

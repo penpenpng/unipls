@@ -2,7 +2,7 @@
 
 ## 現在の状態
 
-初期releaseで必要なP0/P1の実装は完了しています。実装前に確認された問題、採用した公開判断、依存順、個別checklistは[実装タスクとdecision record](./tasks.md)に、利用者へ保証する概念は[コアコンセプト](./overview.md)に記録しています。
+初期releaseで必要なP0/P1の実装は完了しています。実装前に確認された問題、採用した公開判断、依存順、個別checklistは[実装タスクとdecision record](./tasks.md)に、利用者へ保証する概念は[コアコンセプト](../v1/ja/concepts.md)に記録しています。
 
 この文書は未実装項目の一覧ではなく、release candidateの到達点と今後の優先順位を示します。過去の実装形を現行仕様の根拠にはしません。
 
@@ -47,7 +47,7 @@ mise exec -- pnpm lint
 mise exec -- pnpm typecheck
 mise exec -- pnpm test
 mise exec -- pnpm build
-mise exec -- pnpm --filter unipls test:package
+mise exec -- pnpm test:package
 git diff --check
 ```
 

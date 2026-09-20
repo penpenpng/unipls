@@ -25,7 +25,9 @@ export default defineConfig({
           text: 'v1',
           items: [
             { text: '概要', link: '/ja/' },
+            { text: 'コアコンセプト', link: '/ja/concepts' },
             { text: 'ガイド', link: '/ja/guide' },
+            { text: '対応runtime', link: '/ja/support' },
           ],
         },
       ],

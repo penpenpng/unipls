@@ -2,7 +2,7 @@
 
 ## この文書の使い方
 
-この文書は、[コアコンセプト](./overview.md) と [実装計画](./plan.md) を、レビュー可能な作業単位と依存順に落としたものです。
+この文書は、[コアコンセプト](../v1/ja/concepts.md) と [実装計画](./plan.md) を、レビュー可能な作業単位と依存順に落としたものです。
 
 - 各タスクは原則として単独でレビュー・merge できる大きさにする。
 - 振る舞いを変えるタスクでは、先に black-box の contract test を書き、そのタスク内で green にする。
@@ -18,7 +18,7 @@
 
 参照時の優先順位:
 
-1. `overview.md`の変化させないコアコンセプト。
+1. `docs/v1/ja/concepts.md`の変化させないコアコンセプト。
 2. 本書D1〜D12の決定本文と公開contract。
 3. 本書のタスク順序、checklist、完了条件。
 4. `plan.md`の現状分析。これは問題の由来を説明する資料であり、後から確定した決定を上書きしない。
@@ -1100,7 +1100,7 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 成果物:
 
 - 実装が参照できる decision record と behavior matrix。
-- 必要なら `overview.md` の曖昧な表現の更新。
+- 必要なら `docs/v1/ja/concepts.md` の曖昧な表現の更新。
 
 完了条件:
 
@@ -1476,7 +1476,7 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - [x] browser fixtureで`unipls/browser`を検証し、Node/Deno/Bun fixtureではroot importがbrowser固有moduleを評価せず`window`へアクセスしないことを検証する。
 - [x] global WebSocketの既定利用、注入constructorの優先、global欠落時の同期的な構成error、module importだけではglobalへアクセスしないことをtestする。
 - [x] operationのuser/scope/timeout signal合成がnative `AbortSignal.any`を使い、最初の`reason`を同一objectのままresultへ伝えることを全runtimeでtestする。
-- [x] source や monorepo alias がなくても動作することを確認する。
+- [x] source やrepository内だけで解決できるaliasがなくても動作することを確認する。
 
 完了条件:
 
@@ -1501,7 +1501,7 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - [x] format、lint、型検査、unit/contract test、build、consumer smoke test を実行する。
 - [x] timer、listener、AbortSignal、detector、reconnector cleanup の leak test を実行する。
 - [x] supported runtime ごとの最小 integration test を実行する。
-- [x] `overview.md`とpublic API docsを実装と照合する。
+- [x] `docs/v1/ja/concepts.md`とpublic API docsを実装と照合する。
 - [x] `plan.md` と本書の完了項目を更新し、残課題を次期 milestone へ移す。
 
 完了条件:

@@ -70,9 +70,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Contract tests (*.spec.ts)
-        run: pnpm --filter unipls test:contract
+        run: pnpm test:contract
       - name: Unit tests (*.test.ts)
-        run: pnpm --filter unipls test:unit
+        run: pnpm test:unit
 
   build:
     name: Build (ES2022)
@@ -102,18 +102,18 @@ jobs:
           node-version: 22.4.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter unipls build
+      - run: pnpm build
       - name: Pack the published file set
         run: |
           mkdir -p "$RUNNER_TEMP/unipls-package"
-          npm pack --pack-destination "$RUNNER_TEMP/unipls-package" ./packages/unipls
+          npm pack --pack-destination "$RUNNER_TEMP/unipls-package" .
       - name: Install and verify the isolated consumer
         run: |
           tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
-          node packages/unipls/tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
+          node tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
           node "$RUNNER_TEMP/unipls-consumer/run-smoke.mjs"
           node "$RUNNER_TEMP/unipls-consumer/verify-node-package.mjs"
-          node packages/unipls/node_modules/typescript/bin/tsc --project "$RUNNER_TEMP/unipls-consumer/tsconfig.json"
+          node node_modules/typescript/bin/tsc --project "$RUNNER_TEMP/unipls-consumer/tsconfig.json"
       - uses: actions/upload-artifact@v4
         with:
           name: unipls-package
@@ -171,7 +171,7 @@ jobs:
       - name: Install the same tarball in an isolated consumer
         run: |
           tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
-          node packages/unipls/tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
+          node tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
       - name: Run package and native capability smoke tests
         working-directory: ${{ runner.temp }}/unipls-consumer
         run: ${{ matrix.command }} run-smoke.mjs
@@ -188,7 +188,7 @@ jobs:
           node-version: lts/*
       - id: versions
         name: Select the latest two stable Playwright release lines
-        run: npm view playwright versions --json | node packages/unipls/tests/runtime/select-playwright-versions.mjs >> "$GITHUB_OUTPUT"
+        run: npm view playwright versions --json | node tests/runtime/select-playwright-versions.mjs >> "$GITHUB_OUTPUT"
 
   browser-runtime:
     name: ${{ matrix.browser }} (Playwright ${{ matrix.playwright }})
@@ -220,8 +220,8 @@ jobs:
         run: |
           runtime_dir="$RUNNER_TEMP/unipls-browser-runtime"
           tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
-          node packages/unipls/tests/package/prepare-consumer.mjs "$tarball" "$runtime_dir"
-          cp packages/unipls/tests/runtime/run-package-browser.mjs "$runtime_dir/"
+          node tests/package/prepare-consumer.mjs "$tarball" "$runtime_dir"
+          cp tests/runtime/run-package-browser.mjs "$runtime_dir/"
           cd "$runtime_dir"
           npm install --no-package-lock --no-save "playwright@$PLAYWRIGHT_VERSION"
           npx playwright install --with-deps "$BROWSER_NAME"
