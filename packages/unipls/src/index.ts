@@ -35,11 +35,13 @@ export type {
   ConnectionAttemptStage,
   ConnectionId,
   DropDetectorIdentity,
+  DropDetectorFailedDiagnostic,
   OperationId,
   OperationType,
   PredicateErrorPolicy,
   ReconnectionEngineOutcome,
   ReconnectorFailedDiagnostic,
+  ResourceCleanupFailedDiagnostic,
   SessionId,
   StreamCallbackFailedDiagnostic,
   StreamMessageDroppedDiagnostic,
@@ -55,9 +57,23 @@ export type {
   UniplsOpenErrorOutcome,
   WebSocketData,
 } from "./types";
+export type {
+  Disposer,
+  MaybePromise,
+  ResourceOptions,
+  ResourceRegistrationSource,
+  ResourceScope,
+} from "./resource-scope.ts";
+export type {
+  DropDetectorContext,
+  DropDetectorRequestParams,
+  UniplsDropDetector,
+} from "./drop-detector/drop-detector.ts";
 export { Unipls } from "./unipls";
 export { UniplsSocket, UniplsWebSocketCloseCode } from "./unipls-socket";
 export type {
+  ConnectionSetupContext,
+  SessionSetupContext,
   UniplsListenCallbackParams,
   UniplsListenIteratorParams,
   UniplsProvisioner,

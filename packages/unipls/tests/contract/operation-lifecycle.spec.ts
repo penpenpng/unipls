@@ -155,12 +155,14 @@ describe("operation の共通 lifecycle", () => {
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
     });
-    const opening = client.open(async (context) => {
-      context.listen({
-        selector: () => true,
-        next: (message) => provisioningMessages.push(message),
-      });
-      await provisioningGate;
+    const opening = client.open({
+      setupConnection: async (context) => {
+        context.listen({
+          selector: () => true,
+          next: (message) => provisioningMessages.push(message),
+        });
+        await provisioningGate;
+      },
     });
     const applicationMessage = client.next({
       selector: (message) => {
@@ -665,7 +667,7 @@ describe("operation の共通 lifecycle", () => {
         url: "wss://unipls.test/socket",
         WebSocket: transport.WebSocket,
       });
-      const opening = client.open(provisioner.setupConnection);
+      const opening = client.open(provisioner);
       const socket = transport.current;
       socket.emitOpen();
       const invocation = provisioner.invocations.take();

@@ -195,6 +195,30 @@ export type StreamMessageDroppedDiagnostic = Readonly<{
   capacity: number;
 }>;
 
+/** resource の解放処理が失敗したことを通知する診断情報です。 */
+export type ResourceCleanupFailedDiagnostic = Readonly<{
+  type: "resource-cleanup-failed";
+  severity: "error";
+  scope: UniplsDiagnosticScope;
+  occurredAt: number;
+  cause: unknown;
+  resource: Readonly<{
+    name?: string;
+    source: import("./resource-scope.ts").ResourceRegistrationSource;
+  }>;
+}>;
+
+/** drop detector の監督対象 callback または task が失敗したことを通知する診断情報です。 */
+export type DropDetectorFailedDiagnostic = Readonly<{
+  type: "drop-detector-failed";
+  severity: "error";
+  scope: Extract<UniplsDiagnosticScope, { type: "connection" }>;
+  occurredAt: number;
+  cause: unknown;
+  detector: DropDetectorIdentity;
+  boundary: "guard" | "run";
+}>;
+
 /** reconnector の実行に失敗したことを通知する診断情報です。 */
 export type ReconnectorFailedDiagnostic =
   | Readonly<{
@@ -224,7 +248,9 @@ export type UniplsDiagnostic =
   | MessageDeserializationFailedDiagnostic
   | MessagePredicateFailedDiagnostic
   | StreamCallbackFailedDiagnostic
-  | StreamMessageDroppedDiagnostic;
+  | StreamMessageDroppedDiagnostic
+  | ResourceCleanupFailedDiagnostic
+  | DropDetectorFailedDiagnostic;
 
 /** 終了した論理セッション、または未開始状態を表す不変なスナップショットです。 */
 export type ClosedLifecycleSnapshot =

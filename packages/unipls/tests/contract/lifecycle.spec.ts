@@ -114,7 +114,7 @@ describe("Unipls の lifecycle", () => {
     const firstProvisioning = scenario.provisioner.invocations.take();
     const firstProvisioningContext = firstProvisioning.context as {
       session: unknown;
-      isSessionBeginning: boolean;
+      connection: unknown;
     };
     scenario.provisioner.succeed(firstProvisioning);
     await opening;
@@ -125,7 +125,8 @@ describe("Unipls の lifecycle", () => {
       throw new Error("Expected the first connection to be open");
     }
     expect(firstProvisioningContext.session).toBe(firstOpen.session);
-    expect(firstProvisioningContext.isSessionBeginning).toBe(true);
+    expect(firstProvisioningContext.connection).toBe(firstOpen.connection);
+    expect("isSessionBeginning" in firstProvisioningContext).toBe(false);
     expect(opened[0]).toMatchObject({
       session: firstOpen.session,
       connection: firstOpen.connection,
@@ -165,10 +166,11 @@ describe("Unipls の lifecycle", () => {
     const secondProvisioning = scenario.provisioner.invocations.take();
     const secondProvisioningContext = secondProvisioning.context as {
       session: unknown;
-      isSessionBeginning: boolean;
+      connection: unknown;
     };
     expect(secondProvisioningContext.session).toBe(firstOpen.session);
-    expect(secondProvisioningContext.isSessionBeginning).toBe(false);
+    expect(secondProvisioningContext.connection).toBe(reconnecting.connection);
+    expect("isSessionBeginning" in secondProvisioningContext).toBe(false);
     scenario.provisioner.succeed(secondProvisioning);
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
 
@@ -228,6 +230,10 @@ describe("Unipls の lifecycle", () => {
     scenario.reconnector.invocations.take().reconnect();
     scenario.transport.connection(1).emitOpen();
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
+    const secondOpen = scenario.client.lifecycle;
+    if (secondOpen.phase !== "open") {
+      throw new Error("Expected the recovered connection to be open");
+    }
 
     // session hook は繰り返さず、connection hook だけを再実行することを確認します。
     expect(sessionSetups).toHaveLength(1);
@@ -235,7 +241,7 @@ describe("Unipls の lifecycle", () => {
     expect(sessionSetups[0]).toMatchObject({ session: firstOpen.session });
     expect(connectionSetups[1]).toMatchObject({
       session: firstOpen.session,
-      isSessionBeginning: false,
+      connection: secondOpen.connection,
     });
 
     // 回復後の接続を終了します。

@@ -7,7 +7,9 @@ import type {
 } from "./async-results.ts";
 import type { UniplsDropDetector } from "./drop-detector";
 import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
+import type { Disposer, MaybePromise, ResourceScope } from "./resource-scope.ts";
 import type {
+  ConnectionId,
   PredicateErrorPolicy,
   SessionId,
   WebSocketConstructor,
@@ -37,34 +39,21 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   dropDetectors?: UniplsDropDetector<TInput, TOutput>[];
 }
 
-/**
- * {@link Unipls.open} に渡す初期化処理です。初回接続と回復接続の WebSocket が開いた後、ready になる前に実行されます。
- */
-export type UniplsProvisioner<TInput = WebSocketData, TOutput = WebSocketData> =
-  | UniplsProvisionerFunction<TInput, TOutput>
-  | UniplsProvisionerObject<TInput, TOutput>;
-
-/** 接続を ready にするための初期化関数です。 */
-export type UniplsProvisionerFunction<TInput = WebSocketData, TOutput = WebSocketData> = (
-  ctx: UniplsProvisioningContext<TInput, TOutput>,
-) => Promise<void> | void;
-
-/** 論理セッション単位と接続単位の初期化を分けて指定します。 */
-export interface UniplsProvisionerObject<TInput = WebSocketData, TOutput = WebSocketData> {
-  /** 論理セッションごとに、最初に成功するまで実行されます。 */
-  setupSession?: UniplsProvisionerFunction<TInput, TOutput>;
-  /** 初回接続と回復接続を含む各 WebSocket 接続で実行されます。 */
-  setupConnection: UniplsProvisionerFunction<TInput, TOutput>;
+/** 論理 session が終了するまで維持する resource を登録する context です。 */
+export interface SessionSetupContext extends ResourceScope {
+  /** resource を所有する論理 session です。 */
+  readonly session: SessionId;
 }
 
-/**
- * provisioner が ready 前の接続で通信するためのコンテキストです。
- */
-export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = WebSocketData> {
+/** 接続が終了するまで維持する resource と ready 前の通信 capability を提供します。 */
+export interface ConnectionSetupContext<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> extends ResourceScope {
   /**
    * {@link Unipls.cast|unipls.cast()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
-   * - {@link UniplsCastParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
+   * - signal は context の接続終了時に自動的に中断されます。
    * - 送信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   cast(data: TInput): Promise<void>;
@@ -72,14 +61,14 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
   /**
    * {@link Unipls.request|unipls.request()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
-   * - {@link UniplsRequestParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
+   * - {@link UniplsRequestParams.signal|signal} は指定できず、context の接続終了時に自動的に中断されます。
    * - {@link UniplsRequestParams.retry|retry} は指定できず、通信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   request(params: Omit<UniplsRequestParams<TInput, TOutput>, "signal" | "retry">): Promise<TOutput>;
 
   /**
    * {@link Unipls.listen|unipls.listen()} とほとんど同様ですが、以下が異なります:
-   * - {@link UniplsListenOptions.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
+   * - {@link UniplsListenOptions.signal|signal} は指定できず、provisioning 完了時までに終了しなければ自動的に中断されます。
    * - {@link UniplsListenOptions.retry|retry} は指定できず、購読が失敗すると provisioner と現在の接続試行が失敗します。
    */
   listen(
@@ -93,7 +82,7 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
   /**
    * {@link Unipls.subscribe|unipls.subscribe()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
-   * - {@link UniplsSubscribeParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
+   * - {@link UniplsSubscribeParams.signal|signal} は指定できず、provisioning 完了時までに終了しなければ自動的に中断されます。
    * - {@link UniplsSubscribeParams.retry|retry} は指定できず、通信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   subscribe(
@@ -105,11 +94,18 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
       Omit<UniplsSubscribeParams<TInput, TOutput>, "signal" | "retry">,
   ): AsyncSubscription<TOutput>;
 
-  /** 現在の論理セッションです。 */
-  session: SessionId;
+  /** resource を所有する論理 session です。 */
+  readonly session: SessionId;
+  /** capability が束縛された WebSocket 接続です。 */
+  readonly connection: ConnectionId;
+}
 
-  /** 現在の論理セッションで session setup がまだ完了していない場合は `true` です。 */
-  isSessionBeginning: boolean;
+/** 論理 session と接続ごとの初期化処理を指定します。 */
+export interface UniplsProvisioner<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** 論理 session ごとに一度だけ成功させる初期化処理です。 */
+  setupSession?(context: SessionSetupContext): MaybePromise<void | Disposer>;
+  /** 初回接続と回復接続を含む各 WebSocket 接続で実行する初期化処理です。 */
+  setupConnection(context: ConnectionSetupContext<TInput, TOutput>): MaybePromise<void | Disposer>;
 }
 
 /** 次に selector と一致するメッセージを待つ方法を指定します。 */

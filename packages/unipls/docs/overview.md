@@ -22,13 +22,13 @@ WebSocket が提供するのは、接続と双方向のメッセージストリ�
 
 単一の受信ストリームに対する操作を、入力の有無と結果の個数で整理します。
 
-| 操作 | 送信 | 結果 | 意味 |
-| --- | --- | --- | --- |
-| `cast` | 1 | 0 | メッセージを送信し、送信完了までを扱う |
-| `next` | 0 | 1 | 条件に合う次のメッセージを 1 件待つ |
-| `request` | 1 | 1 | 送信後、条件に合う最初の応答を待つ |
-| `listen` | 0 | N | 条件に合う受信メッセージを継続的に観測する |
-| `subscribe` | 1 | N | 購読要求を送信後、条件に合うメッセージを継続的に観測する |
+| 操作        | 送信 | 結果 | 意味                                                     |
+| ----------- | ---- | ---- | -------------------------------------------------------- |
+| `cast`      | 1    | 0    | メッセージを送信し、送信完了までを扱う                   |
+| `next`      | 0    | 1    | 条件に合う次のメッセージを 1 件待つ                      |
+| `request`   | 1    | 1    | 送信後、条件に合う最初の応答を待つ                       |
+| `listen`    | 0    | N    | 条件に合う受信メッセージを継続的に観測する               |
+| `subscribe` | 1    | N    | 購読要求を送信後、条件に合うメッセージを継続的に観測する |
 
 `request` と `subscribe` は、送信が完了する前に届いたメッセージをその操作の結果にしません。単発操作は結果、timeout、abort、接続終了のいずれかで完了します。ストリーム操作は明示的な解除、terminator、abort、接続終了のいずれかまで継続します。
 
@@ -74,6 +74,39 @@ WebSocket が提供するのは、接続と双方向のメッセージストリ�
 
 二つのsetup hookとcontextを型で分けることで、「物理接続ごとにやり直す処理」と「論理セッションで一度だけ登録する処理」を、実行時のflagに依存せず区別します。
 
+### setup と resource の例
+
+```ts
+const client = new Unipls<ClientMessage, ServerMessage>({
+  url: "wss://example.com/socket",
+  reconnector,
+});
+
+await client.open({
+  setupSession(ctx) {
+    const stop = credentials.onChange(invalidateApplicationState);
+    ctx.defer(stop, { name: "credentials-listener" });
+  },
+
+  async setupConnection(ctx) {
+    const authenticated = await ctx.request({
+      query: { type: "authenticate", token: credentials.currentToken() },
+      selector: (message) => message.type === "authenticated",
+    });
+    connectionState.setAuthenticatedUser(authenticated.user);
+
+    ctx.defer(() => connectionState.clear(), { name: "connection-state" });
+    return () => metrics.finishConnection(ctx.connection);
+  },
+});
+```
+
+`setupSession`は同じ論理セッションで一度だけ成功し、登録したcredential listenerはsession終了時に解放されます。`setupConnection`は初回接続と各再接続で実行され、登録または返却したdisposerはその物理接続を失った時点で逆順に解放されます。非同期disposerも順番に待機してから回復処理へ進みます。
+
+`setupConnection`の`cast`、`request`、`listen`、`subscribe`は、現在準備している物理接続だけに有効です。setupが完了するか接続を失うと、そのcontextと未完了の一時的な受信操作は失効します。ready後も残すlistenerは、通常のclient APIで作成し、その解除処理を適切なscopeへ`defer()`してください。
+
+setup途中で例外が発生した場合は、そのsetupで登録済みのresourceだけを逆順にrollbackします。cleanupの失敗は残りのcleanupを止めず、元のsetup errorを置き換えずにdiagnosticとして通知されます。同じscopeでresourceを診断上区別したい場合は、一意な`name`を指定できます。
+
 ## 障害回復を 3 つの判断に分ける
 
 通信断からの回復は、独立した 3 層の判断として扱います。
@@ -90,11 +123,11 @@ reconnector は、直前の失敗、現在の論理セッションとその試�
 
 接続自体を再確立する判断と、個々の操作を再送する判断は別です。操作は切断時に次の方針を選びます。
 
-| 方針 | 挙動 |
-| --- | --- |
-| `fail` | drop を操作の失敗として確定する |
-| `wait` | 再送せず、新しい接続でも結果の待機だけを継続する |
-| `resend` | ready になった新しい接続で送信をやり直す |
+| 方針            | 挙動                                                                       |
+| --------------- | -------------------------------------------------------------------------- |
+| `fail`          | drop を操作の失敗として確定する                                            |
+| `wait`          | 再送せず、新しい接続でも結果の待機だけを継続する                           |
+| `resend`        | ready になった新しい接続で送信をやり直す                                   |
 | custom recovery | 再接続の履歴を見て、送信値や selector を差し替えるか、待機または失敗を選ぶ |
 
 送信が相手に届いたかを WebSocket クライアントだけで確定することはできません。そのため、自動再送は重複実行を起こし得ます。再送を安全にするには、上位プロトコルの冪等性や重複排除が必要です。ライブラリは暗黙に安全性を仮定せず、再送を操作ごとの明示的な判断にします。

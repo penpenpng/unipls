@@ -22,15 +22,17 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
       reject(signal.reason);
       return;
     }
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
+    const finish = (callback: () => void) => {
+      signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const timer = setTimeout(() => finish(resolve), ms);
+    const onAbort = () =>
+      finish(() => {
         clearTimeout(timer);
         reject(signal.reason);
-      },
-      { once: true },
-    );
+      });
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -44,13 +46,11 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
   }
 
   /** 現在の接続に対する heartbeat 監視を開始します。 */
-  setup(ctx: DropDetectorContext<TInput, TOutput>): () => void {
-    const abort = new AbortController();
-
+  setup(ctx: DropDetectorContext<TInput, TOutput>): void {
     const loop = async () => {
-      while (!abort.signal.aborted) {
+      while (!ctx.signal.aborted) {
         try {
-          await sleep(this.#options.interval, abort.signal);
+          await sleep(this.#options.interval, ctx.signal);
         } catch {
           break;
         }
@@ -60,7 +60,7 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
             query: this.#options.ping,
             selector: this.#options.pong,
             timeout: this.#options.timeout ?? this.#options.interval,
-            signal: abort.signal,
+            signal: ctx.signal,
           });
         } catch (err) {
           if (err instanceof UniplsTimeoutError) {
@@ -72,8 +72,6 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
       }
     };
 
-    void loop();
-
-    return () => abort.abort();
+    ctx.run(loop);
   }
 }

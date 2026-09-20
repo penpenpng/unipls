@@ -1383,22 +1383,22 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 10: provisioning capability と resource scope を再設計する
 
-- [ ] provisioning contextに通常APIとは分離したtransport-epoch-bound receive capabilityを持たせ、provisioning完了またはtransport epoch終了時に一時receive operationを失効させる。
-- [ ] provisioning context外からreadiness barrierを迂回できないことを型とruntimeの両方でtestする。
-- [ ] provisioning contextをtransport epochに束縛する。
-- [ ] provisionerをsession setupとconnection setupへ分け、`isSessionBeginning`を削除する。function shorthandを残す場合はconnection setupへ写像する。
-- [ ] session scopeとconnection scopeにそれぞれ`defer`相当の即時disposer登録とhook戻り値の取り込みを実装する。
-- [ ] 専用`ResourceScope`に任意のscope-localな一意nameと登録元metadata、LIFOの逐次async cleanup、memoizedなdispose Promise、dispose開始後の登録拒否を実装する。標準`DisposableStack`の有無に挙動を依存させない。
-- [ ] `defer(disposer, { name? })`を公開し、nameを省略したresourceの個別識別を保証せず、library-owned resourceには安定したnameを割り当てる。
-- [ ] context の通信操作に適切な cleanup/cancel handle を返す。
-- [ ] drop detector contextへdetector-scopedな`signal`、event callback用`guard()`、background task用`run()`を追加し、connection setup contextのresource scopeと統合する。
-- [ ] force 系を高レベル `Unipls` の public surface から除き、transport-epoch-boundなprovisioning contextのcapabilityとして共通primitive上に実装する。
-- [ ] connecting 中の準備通信が raw open 後、ready 前に動作することを test する。
-- [ ] 再接続ごとに session-scoped listener が重複しないことを test する。
-- [ ] setup途中のthrow/rejectではそのtransactionで登録済みの同期・非同期disposerをLIFO rollbackし、cleanup errorを診断へ集約する。
-- [ ] setup transactionを親scopeから分離した子`ResourceScope`として扱い、rollback時に当該transactionのresourceだけを破棄する。
-- [ ] rollback中にdisposerが失敗しても残りをLIFO順にすべて一度ずつ試行し、元のsetup errorをattempt failureの主要なcauseとして維持する。cleanup errorで置換したり暗黙に`AggregateError`化しない。
-- [ ] drop detector setupをready前のconnection setup transactionへ含め、failureをattempt causeとしてreconnectorへ渡す。
+- [x] provisioning contextに通常APIとは分離したtransport-epoch-bound receive capabilityを持たせ、provisioning完了またはtransport epoch終了時に一時receive operationを失効させる。
+- [x] provisioning context外からreadiness barrierを迂回できないことを型とruntimeの両方でtestする。
+- [x] provisioning contextをtransport epochに束縛する。
+- [x] provisionerをsession setupとconnection setupへ分け、`isSessionBeginning`を削除する。function shorthandを残す場合はconnection setupへ写像する。
+- [x] session scopeとconnection scopeにそれぞれ`defer`相当の即時disposer登録とhook戻り値の取り込みを実装する。
+- [x] 専用`ResourceScope`に任意のscope-localな一意nameと登録元metadata、LIFOの逐次async cleanup、memoizedなdispose Promise、dispose開始後の登録拒否を実装する。標準`DisposableStack`の有無に挙動を依存させない。
+- [x] `defer(disposer, { name? })`を公開し、nameを省略したresourceの個別識別を保証せず、library-owned resourceには安定したnameを割り当てる。
+- [x] context の通信操作に適切な cleanup/cancel handle を返す。
+- [x] drop detector contextへdetector-scopedな`signal`、event callback用`guard()`、background task用`run()`を追加し、connection setup contextのresource scopeと統合する。
+- [x] force 系を高レベル `Unipls` の public surface から除き、transport-epoch-boundなprovisioning contextのcapabilityとして共通primitive上に実装する。
+- [x] connecting 中の準備通信が raw open 後、ready 前に動作することを test する。
+- [x] 再接続ごとに session-scoped listener が重複しないことを test する。
+- [x] setup途中のthrow/rejectではそのtransactionで登録済みの同期・非同期disposerをLIFO rollbackし、cleanup errorを診断へ集約する。
+- [x] setup transactionを親scopeから分離した子`ResourceScope`として扱い、rollback時に当該transactionのresourceだけを破棄する。
+- [x] rollback中にdisposerが失敗しても残りをLIFO順にすべて一度ずつ試行し、元のsetup errorをattempt failureの主要なcauseとして維持する。cleanup errorで置換したり暗黙に`AggregateError`化しない。
+- [x] drop detector setupをready前のconnection setup transactionへ含め、failureをattempt causeとしてreconnectorへ渡す。
 
 完了条件:
 
