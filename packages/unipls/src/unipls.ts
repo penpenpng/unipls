@@ -41,25 +41,37 @@ import type {
   UniplsSubscribeParams,
 } from "./unipls.interface.ts";
 
+/** 公開 event を発生させた論理セッションと接続を識別します。 */
 interface ConnectionEventContext {
+  /** event が属する論理セッションです。 */
   readonly session: SessionId;
+  /** event が属する WebSocket 接続試行です。 */
   readonly connection: ConnectionId;
 }
 
 type UniplsEvents<TOutput> = {
+  /** 接続が ready になったときに通知されます。 */
   open: ConnectionEventContext;
+  /** メッセージを受信して変換できたときに通知されます。 */
   message: ConnectionEventContext & { message: TOutput };
+  /** 受信メッセージの変換など、継続可能な処理が失敗したときに通知されます。 */
   error: ConnectionEventContext & { error: unknown };
+  /** 論理セッションが終了したときに通知されます。 */
   closed: ConnectionEventContext & { error?: UniplsDroppedError };
+  /** ready だった接続を失ったときに通知されます。 */
   dropped: ConnectionEventContext & { drop: UniplsDrop; error: UniplsDroppedError };
+  /** 接続の初期化処理が失敗したときに通知されます。 */
   failed: ConnectionEventContext & { error: unknown };
+  /** 論理セッションの lifecycle が遷移したときに通知されます。 */
   lifecycle: {
     previous: UniplsLifecycleSnapshot;
     current: UniplsLifecycleSnapshot;
   };
+  /** 接続回復が成功したときに通知されます。 */
   reconnect: UniplsReconnectEvent;
 };
 
+/** 論理セッションを維持しながら WebSocket の送受信と回復を管理する client です。 */
 export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #socket: UniplsSocket<TInput, TOutput>;
   #events = new EventBus<UniplsEvents<TOutput>>();
@@ -70,28 +82,36 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #reconnectorCleanup?: () => void;
   #lifecycle: UniplsLifecycleCoordinator;
   #detectorManager: DropDetectorManager<TInput, TOutput>;
+  /** 接続先の WebSocket URL です。 */
   get url(): string {
     return this.#socket.url;
   }
+  /** 現在の WebSocket 接続状態です。 */
   get state(): UniplsConnectionState {
     return this.#socket.state;
   }
+  /** 現在の接続意図です。 */
   get intent() {
     return this.#socket.intent;
   }
+  /** 論理セッションの現在状態を表す不変なスナップショットです。 */
   get lifecycle(): UniplsLifecycleSnapshot {
     return this.#lifecycle.snapshot;
   }
+  /** subclass が公開 event を購読・通知するための event bus です。 */
   protected get events(): EventBus<UniplsEvents<TOutput>> {
     return this.#events;
   }
+  /** 公開イベントの listener を登録します。 */
   get on() {
     return this.events.on.bind(this.events);
   }
+  /** 公開イベントの listener を解除します。 */
   get off() {
     return this.events.off.bind(this.events);
   }
 
+  /** 接続先と通信方針を指定して client を作成します。 */
   constructor(params: UniplsParams<TInput, TOutput>) {
     this.#socket = new UniplsSocket(params);
     this.#lifecycle = new UniplsLifecycleCoordinator((event) => {
@@ -105,8 +125,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * WebSocket 接続を確立します。
    *
-   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。
-   * @returns {Promise<void>} WebSocket 接続と初期化が完了したことを表す Promise を返します。
+   * @param provisioner WebSocket 接続後、ready になる前に行う初期化処理です。
+   * @returns WebSocket 接続と初期化が完了すると解決する Promise です。
    *
    * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
    */
@@ -183,16 +203,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return closing;
   }
 
+  /** `await using` の終了時に論理セッションを閉じます。 */
   async [Symbol.asyncDispose]() {
     await this.close();
   }
 
+  /** 現在の接続を手動で drop として報告します。 */
   drop(): void {
     return this.#socket.drop();
   }
 
   /**
-   * 0-input 1-output の通信を行います。
+   * selector に最初に一致する受信メッセージを待ちます。
    *
    * @throws {UniplsClosedError}
    * @throws {UniplsTimeoutError}
@@ -219,7 +241,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.resolve,
         onSelectorError: scope.reject,
         onProcessorError: () => {
-          // ignore because `scope.resolve` never throws
+          // resolve は例外を投げないため追加処理は不要です。
         },
       });
     });
@@ -237,15 +259,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once("closed", ({ error }) => {
-      scope.reject(error ?? new UniplsClosedError());
-    });
+    events.on(
+      "closed",
+      ({ error }) => {
+        scope.reject(error ?? new UniplsClosedError());
+      },
+      { once: true },
+    );
 
     return scope.promise;
   }
 
   /**
-   * 0-input N-output の通信を行います。
+   * selector に一致する受信メッセージを購読します。
    *
    * @returns 購読を解除する関数を返します。
    *
@@ -299,17 +325,21 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onFatal: scope.raiseFatalError,
       }),
     );
-    events.once("closed", ({ error }) => {
-      scope.raiseFatalError(error ?? new UniplsClosedError());
-    });
+    events.on(
+      "closed",
+      ({ error }) => {
+        scope.raiseFatalError(error ?? new UniplsClosedError());
+      },
+      { once: true },
+    );
 
     return scope.unsubscribe;
   }
 
   /**
-   * 1-input 0-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
+   * 1件のメッセージを送信します。初期化中の場合は ready になるまで送信を待ちます。
    *
-   * @returns {Promise<void>} WebSocket 接続が確立している間にデータを送信した場合に resolve される Promise を返します。
+   * @returns メッセージの送信が完了すると解決する Promise です。
    *
    * @throws {UniplsClosedError}
    */
@@ -318,16 +348,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   /**
-   * {@link Unipls.cast|unipls.cast()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
+   * {@link Unipls.cast} と同じですが、WebSocket が開いた時点で初期化の完了を待たずに送信します。
    */
   castForce(params: UniplsCastParams<TInput>): Promise<void> {
     return this.#cast(params, true);
   }
 
   /**
-   * 1-input 1-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
+   * 1件のメッセージを送信し、selector に最初に一致する応答を待ちます。初期化中の場合は ready になるまで送信を待ちます。
    *
-   * @returns {Promise<T>} レスポンスを観測したときに resolve される Promise を返します。
+   * @returns selector に一致するメッセージで解決する Promise です。
    *
    * @throws {UniplsClosedError}
    * @throws {UniplsTimeoutError}
@@ -337,7 +367,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   /**
-   * {@link Unipls.request|unipls.request()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
+   * {@link Unipls.request} と同じですが、WebSocket が開いた時点で初期化の完了を待たずに送信します。
    */
   requestForce(params: UniplsRequestParams<TInput, TOutput>): Promise<TOutput> {
     return this.#request({ ...params, force: true });
@@ -394,7 +424,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.resolve,
         onSelectorError: scope.reject,
         onProcessorError: () => {
-          // ignore because `scope.resolve` never throws
+          // resolve は例外を投げないため追加処理は不要です。
         },
       });
     });
@@ -423,9 +453,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once("closed", ({ error }) => {
-      scope.reject(error ?? new UniplsClosedError());
-    });
+    events.on(
+      "closed",
+      ({ error }) => {
+        scope.reject(error ?? new UniplsClosedError());
+      },
+      { once: true },
+    );
 
     return scope.promise;
   }
@@ -464,9 +498,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
 
       if (force) {
-        events.once("open", enqueueEvaluatedPayload);
+        events.on("open", enqueueEvaluatedPayload, { once: true });
       } else {
-        events.once("open", enqueueEvaluatedPayload);
+        events.on("open", enqueueEvaluatedPayload, { once: true });
       }
     };
 
@@ -474,9 +508,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       sendOnce(params.query);
     }
 
-    events.once("closed", ({ error }) => {
-      scope.reject(error ?? new UniplsClosedError());
-    });
+    events.on(
+      "closed",
+      ({ error }) => {
+        scope.reject(error ?? new UniplsClosedError());
+      },
+      { once: true },
+    );
 
     return scope.promise;
   }
@@ -829,7 +867,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   /**
-   * 1-input N-output の通信を行います。{@link UniplsProvisioner} による初期化が終了していない場合、初期化が終了するまで送信は延期されます。
+   * メッセージを1件送信し、selector に一致する受信メッセージを購読します。初期化中の場合は ready になるまで送信を待ちます。
    *
    * @returns 購読を解除する関数を返します
    *
@@ -842,7 +880,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   /**
-   * {@link Unipls.subscribe|unipls.subscribe()} と同じですが、初期化が終了していなくてもただちに送信を試みます。接続試行中の場合は接続の完了まで待って、初期化前に送信します。
+   * {@link Unipls.subscribe} と同じですが、WebSocket が開いた時点で初期化の完了を待たずに送信します。
    */
   subscribeForce(
     params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
@@ -956,9 +994,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once("closed", ({ error }) => {
-      scope.raiseFatalError(error ?? new UniplsClosedError());
-    });
+    events.on(
+      "closed",
+      ({ error }) => {
+        scope.raiseFatalError(error ?? new UniplsClosedError());
+      },
+      { once: true },
+    );
 
     return scope.unsubscribe;
   }

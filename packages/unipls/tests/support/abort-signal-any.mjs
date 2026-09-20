@@ -1,7 +1,7 @@
 export function verifyAbortSignalAny() {
   let checks = 0;
 
-  // Combine two pre-aborted inputs and observe input-order priority.
+  // 事前に abort 済みの signal を2つ合成し、入力順の優先規則を確認します。
   const firstPreAbortedReason = { source: "first-pre-aborted" };
   const secondPreAbortedReason = { source: "second-pre-aborted" };
   const firstPreAborted = AbortSignal.abort(firstPreAbortedReason);
@@ -13,7 +13,7 @@ export function verifyAbortSignalAny() {
   }
   checks += 1;
 
-  // Abort one live input and observe exact reason identity.
+  // active な入力の一方を abort し、reason の同一性を確認します。
   const firstController = new AbortController();
   const secondController = new AbortController();
   const liveResult = AbortSignal.any([firstController.signal, secondController.signal]);
@@ -26,13 +26,13 @@ export function verifyAbortSignalAny() {
   }
   checks += 1;
 
-  // Abort the other input and verify the settled result is unchanged.
+  // もう一方も abort し、確定済みの結果が変化しないことを確認します。
   secondController.abort(laterReason);
   if (liveResult.reason !== firstLiveReason) {
     throw new Error("AbortSignal.any changed after a later abort");
   }
   checks += 1;
 
-  // Return an immutable summary shared by unit, host-runtime, and browser-runtime tests.
+  // unit、host runtime、browser runtime の各テストで共有する不変の結果を返します。
   return Object.freeze({ checks });
 }

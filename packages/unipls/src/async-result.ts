@@ -70,7 +70,7 @@ export class AsyncResult<T> {
     }
     this.#resulted = true;
     this.#resolve(value);
-    this.#controller.abort(); // For cleanup
+    this.#controller.abort(); // 関連する listener と timer を解放します。
   };
 
   reject = (reason?: unknown) => {
@@ -79,6 +79,6 @@ export class AsyncResult<T> {
     }
     this.#resulted = true;
     this.#reject(reason);
-    this.#controller.abort(); // For cleanup
+    this.#controller.abort(); // 関連する listener と timer を解放します。
   };
 }

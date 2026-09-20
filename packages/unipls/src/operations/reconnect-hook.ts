@@ -9,7 +9,7 @@ export function createOnReconnectedHandler<
     reconnect: UniplsReconnectEvent;
   },
 >(params: {
-  events: Pick<EventBus<TEvents>, "once">;
+  events: Pick<EventBus<TEvents>, "on">;
   isDone: () => boolean;
   reset: () => void;
   request: (
@@ -28,24 +28,28 @@ export function createOnReconnectedHandler<
   }) => Promise<void> | void,
 ) => void {
   return (callback) => {
-    params.events.once("reconnect", async (reconnection) => {
-      if (params.isDone()) {
-        params.onSettled?.();
-        return;
-      }
+    params.events.on(
+      "reconnect",
+      async (reconnection) => {
+        if (params.isDone()) {
+          params.onSettled?.();
+          return;
+        }
 
-      params.reset();
+        params.reset();
 
-      try {
-        await callback({
-          request: params.request,
-          reconnection,
-        });
-      } catch (err) {
-        params.onError(err ?? new Error("Recovery callback failed"));
-      } finally {
-        params.onSettled?.();
-      }
-    });
+        try {
+          await callback({
+            request: params.request,
+            reconnection,
+          });
+        } catch (err) {
+          params.onError(err ?? new Error("Recovery callback failed"));
+        } finally {
+          params.onSettled?.();
+        }
+      },
+      { once: true },
+    );
   };
 }

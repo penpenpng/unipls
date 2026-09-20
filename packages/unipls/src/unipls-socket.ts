@@ -16,39 +16,45 @@ import type {
 import type { UniplsParams } from "./unipls.interface.ts";
 
 /**
- * 基礎的な機能を備えた WebSocket クライアントです。
- *
- * - コネクションプロビジョニング
- * - 同インスタンス上での (手動の) 再接続
- * - メッセージのシリアライズ/デシリアライズ
- * - drop イベントの検知
+ * 1つの WebSocket 接続を開閉し、値の変換と drop の分類を行う低レベル client です。
+ * 論理セッションや自動回復が必要な場合は {@link Unipls} を利用してください。
  */
 export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   #url: string;
+  /** 接続先の WebSocket URL です。 */
   get url(): string {
     return this.#url;
   }
+  /** 送信値を WebSocket が扱えるデータへ変換します。 */
   protected serialize: (data: TInput) => WebSocketData;
+  /** 受信した WebSocket データを利用者向けの値へ変換します。 */
   protected deserialize: (data: WebSocketData) => TOutput;
+  /** WebSocket 接続の成立を待つ最大時間です。 */
   protected timeout: number;
   #WebSocket: WebSocketConstructor;
   #epoch: UniplsTransportEpoch = UniplsTransportEpoch.dead();
   #events = new EventBus<UniplsSocketPublicEvents<TOutput> & UniplsSocketInternalEvents>();
+  /** 接続単位のイベントを購読する event bus です。 */
   get events(): EventBus<UniplsSocketPublicEvents<TOutput>> {
     return this.#events as EventBus<UniplsSocketPublicEvents<TOutput>>;
   }
+  /** 現在の WebSocket 接続状態です。 */
   get state(): UniplsConnectionState {
     return this.#epoch.connection.state;
   }
+  /** 利用者が接続の維持と終了のどちらを意図しているかを表します。 */
   get intent() {
     return this.#epoch.intent;
   }
+  /** 現在の接続試行を識別する単調増加の番号です。 */
   get transportEpochId() {
     return this.#epoch.id;
   }
+  /** 指定した接続試行が現在も有効な場合に `true` を返します。 */
   isCurrentTransportEpoch(epochId: number): boolean {
     return this.#epoch.id === epochId && !this.#epoch.signal.aborted;
   }
+  /** 接続先と値の変換方法を指定して低レベル client を作成します。 */
   constructor({
     url,
     serializer = (data) => data as WebSocketData,
@@ -138,9 +144,8 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * WebSocket 接続が未確立ならば新規の接続を試みて、接続とプロビジョニングに成功したときに解決する Promise を返します。
    *
-   * @param {UniplsProvisioner} provisioner WebSocket 接続成功後の初期化処理を定義します。
-   *
-   * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
+   * @param provisioner WebSocket が開いた後、`open()` の解決前に行う初期化処理です。
+   * @throws {@link UniplsDuplicatedConnectionError} 接続済み、または接続試行中の場合に投げます。
    */
   open(provisioner?: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.intent === "open" && this.state !== "dropped") {
@@ -276,6 +281,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
+  /** 現在の接続を手動で drop として報告します。 */
   drop(epochId = this.#epoch.id): void {
     this.reportDrop(
       epochId,
@@ -284,6 +290,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     );
   }
 
+  /**
+   * 指定した接続試行の drop を同期的に報告します。
+   * 最初の報告だけが採用され、同じ接続試行への後続報告は `false` を返します。
+   */
   reportDrop(
     epochId: number,
     report: UniplsSocketDropReport,
@@ -305,10 +315,12 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     return true;
   }
 
+  /** 指定した接続試行で採用された drop 報告を返します。 */
   getDropReport(epochId: number): UniplsSocketDropReport | undefined {
     return this.#epoch.id === epochId ? this.#epoch.dropReport : undefined;
   }
 
+  /** 指定した接続試行を再接続せずに終了します。 */
   terminate(epochId: number): void {
     if (this.#epoch.id !== epochId) {
       return;
@@ -431,12 +443,19 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 }
 
+/** `UniplsSocket` が通知する接続単位のイベントです。 */
 export interface UniplsSocketPublicEvents<TOutput> {
+  /** WebSocket と初期化処理が完了したときの情報です。 */
   open: { epoch: UniplsTransportEpoch };
+  /** 変換済みのメッセージを受信したときの情報です。 */
   message: { epoch: UniplsTransportEpoch; message: TOutput };
+  /** メッセージ変換に失敗したときの情報です。 */
   error: { epoch: UniplsTransportEpoch; error: unknown };
+  /** 明示的な close が完了したときの情報です。 */
   closed: { epoch: UniplsTransportEpoch; close?: Readonly<UniplsSocketCloseMetadata> };
+  /** open intent 中に接続を失ったときの情報です。 */
   dropped: { epoch: UniplsTransportEpoch; report: UniplsSocketDropReport };
+  /** 初期化処理に失敗したときの情報です。 */
   failed: { epoch: UniplsTransportEpoch; error: unknown };
 }
 
@@ -453,21 +472,29 @@ interface UniplsSocketInternalEvents {
   };
 }
 
+/** WebSocket の close event から保持する安全なメタデータです。 */
 export interface UniplsSocketCloseMetadata {
+  /** WebSocket close code です。 */
   readonly code: number;
+  /** peer が通知した close reason です。信頼済みのメッセージとしては扱いません。 */
   readonly reason: string;
+  /** WebSocket 実装が clean close と判定したかを表します。 */
   readonly wasClean: boolean;
 }
 
+/** 低レベルの検出経路が同期 drop gate へ渡す報告です。 */
 export interface UniplsSocketDropReport {
+  /** drop の検出元です。 */
   readonly source: UniplsDropSource;
+  /** peer close に付随するメタデータです。 */
   readonly close?: Readonly<UniplsSocketCloseMetadata>;
+  /** 検出に関連する元の例外または値です。 */
   readonly cause?: unknown;
 }
 
 type UniplsProvisioner = (signal: AbortSignal) => Promise<void>;
 
-// FIXME: ドメインを記述する
+/** @internal 1回の WebSocket 接続試行に属する状態と callback をまとめます。 */
 class UniplsTransportEpoch {
   static #nextEpochId = 1;
 
@@ -537,6 +564,7 @@ class UniplsTransportEpoch {
   }
 }
 
+/** @internal 1回の接続試行が所有する WebSocket と状態を保持します。 */
 class UniplsTransportConnection {
   state: UniplsConnectionState = "closed";
   socket?: WebSocket;
@@ -554,27 +582,23 @@ class UniplsTransportConnection {
   constructor(public epochId: number) {}
 }
 
+/** Unipls が WebSocket の close request に使用する code です。 */
 export const UniplsWebSocketCloseCode = {
   /**
-   * 1000 indicates a normal closure, meaning that the purpose for
-   * which the connection was established has been fulfilled.
-   *
-   * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+   * RFC 6455 が定義する正常終了の code です。
+   * @see https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
    */
   NORMAL_CLOSURE: 1000,
   /**
-   * Status codes in the range 3000-3999 are reserved for use by
-   * libraries, frameworks, and applications.  These status codes are
-   * registered directly with IANA.  The interpretation of these codes
-   * is undefined by this protocol.
-   *
-   * See also: https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.2
+   * 回復不能な drop を peer へ通知するためのライブラリ固有 code です。
+   * @see https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.2
    */
   IRRECOVERABLE_DROP: 3000,
   /**
    * 1006 はクライアントサイドからは送信できないため、代わりに 3001 を使用します。
    */
   ABNORMAL_CLOSURE: 3001,
+  /** 接続試行の timeout を peer へ通知するためのライブラリ固有 code です。 */
   MARKED_AS_TIMED_OUT: 3002,
 } as const;
 

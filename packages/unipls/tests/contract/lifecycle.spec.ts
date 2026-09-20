@@ -2,9 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { ControlledProvisioner, UniplsRaceScenario } from "../support/index.ts";
 
-describe("Unipls lifecycle", () => {
-  it("publishes frozen snapshots with stable identity through initial readiness", async () => {
-    // Arrange an idle client and record every lifecycle publication.
+describe("Unipls の lifecycle", () => {
+  it("初回 ready まで同一性が安定した不変の snapshot を通知する", async () => {
+    // idle な client を作り、すべての lifecycle 通知を記録します。
     const scenario = new UniplsRaceScenario();
     const transitions: Array<{ previous: unknown; current: unknown }> = [];
     const getterMatchesEvent: boolean[] = [];
@@ -14,13 +14,13 @@ describe("Unipls lifecycle", () => {
       expect(Object.isFrozen(event)).toBe(true);
     });
 
-    // Observe the initial snapshot before any connection attempt exists.
+    // 接続試行前の初期 snapshot を確認します。
     const idle = scenario.client.lifecycle;
     expect(idle).toEqual({ phase: "closed", reason: "idle" });
     expect(Object.isFrozen(idle)).toBe(true);
     expect(scenario.client.lifecycle).toBe(idle);
 
-    // Start the logical session and inspect its synchronous connecting snapshot.
+    // 論理セッションを開始し、同期的に公開される connecting snapshot を確認します。
     const opening = scenario.beginOpen();
     const connecting = scenario.client.lifecycle;
     expect(connecting).toMatchObject({
@@ -39,7 +39,7 @@ describe("Unipls lifecycle", () => {
     expect(Object.isFrozen(connecting)).toBe(true);
     expect(Object.isFrozen(connecting.attempts)).toBe(true);
 
-    // Open the transport while holding provisioning at its controlled gate.
+    // WebSocket を開き、制御 gate で provisioning を保留します。
     scenario.transport.connection(0).emitOpen();
     const provisioning = scenario.client.lifecycle;
     expect(provisioning).toMatchObject({
@@ -49,7 +49,7 @@ describe("Unipls lifecycle", () => {
     });
     expect(scenario.client.lifecycle).toBe(provisioning);
 
-    // Release provisioning and verify the ready attempt and lifecycle event identities.
+    // provisioning を成功させ、ready 試行と lifecycle event の同一性を確認します。
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
     const open = scenario.client.lifecycle;
@@ -72,7 +72,7 @@ describe("Unipls lifecycle", () => {
     expect(transitions.every(({ current }) => Object.isFrozen(current))).toBe(true);
     expect(getterMatchesEvent.every(Boolean)).toBe(true);
 
-    // Close the session and verify that a repeated close is an identity-preserving no-op.
+    // セッションを閉じ、2回目の close が snapshot を変えないことを確認します。
     const closing = scenario.client.close();
     scenario.transport.connection(0).emitClose({ code: 1000, wasClean: true });
     await closing;
@@ -81,8 +81,8 @@ describe("Unipls lifecycle", () => {
     expect(scenario.client.lifecycle).toBe(closed);
   });
 
-  it("keeps the logical session and changes the connection across recovery", async () => {
-    // Arrange observers and establish the first ready transport epoch.
+  it("回復時は論理セッションを維持して接続 ID を更新する", async () => {
+    // observer を登録し、最初の接続を ready にします。
     const scenario = new UniplsRaceScenario();
     const opened: Array<{ session: unknown; connection: unknown }> = [];
     const dropped: Array<{ session: unknown; connection: unknown }> = [];
@@ -98,7 +98,7 @@ describe("Unipls lifecycle", () => {
     scenario.provisioner.succeed(firstProvisioning);
     await opening;
 
-    // Confirm the first provisioning and open event use the logical session identity.
+    // 最初の provisioning と open event が同じ論理セッションを使うことを確認します。
     const firstOpen = scenario.client.lifecycle;
     if (firstOpen.phase !== "open") {
       throw new Error("Expected the first connection to be open");
@@ -110,7 +110,7 @@ describe("Unipls lifecycle", () => {
       connection: firstOpen.connection,
     });
 
-    // Drop the first epoch and inspect the recovery snapshot and drop event.
+    // 最初の接続を drop し、回復 snapshot と drop event を確認します。
     scenario.drop(0);
     const recovering = scenario.client.lifecycle;
     expect(recovering).toMatchObject({
@@ -122,7 +122,7 @@ describe("Unipls lifecycle", () => {
       connection: firstOpen.connection,
     });
 
-    // Authorize the next attempt and verify it keeps the session but changes connection ID.
+    // 次の試行を開始し、セッションを維持したまま connection ID が変わることを確認します。
     const reconnection = scenario.reconnector.invocations.take();
     expect(reconnection.context.session).toBe(firstOpen.session);
     reconnection.reconnect();
@@ -139,7 +139,7 @@ describe("Unipls lifecycle", () => {
     }
     expect(reconnecting.connection).not.toBe(firstOpen.connection);
 
-    // Complete provisioning on the replacement epoch and wait for semantic readiness.
+    // 代替接続の provisioning を完了し、ready への遷移を待ちます。
     scenario.transport.connection(1).emitOpen();
     const secondProvisioning = scenario.provisioner.invocations.take();
     const secondProvisioningContext = secondProvisioning.context as {
@@ -162,14 +162,14 @@ describe("Unipls lifecycle", () => {
       connection: reconnecting.connection,
     });
 
-    // Clean up the replacement transport.
+    // 代替接続を終了します。
     const closing = scenario.client.close();
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
 
-  it("runs session setup once and connection setup for every transport epoch", async () => {
-    // Arrange separate counters for logical-session and transport-connection setup.
+  it("session setup は一度、connection setup は接続ごとに実行する", async () => {
+    // 論理セッションと WebSocket 接続の setup 回数を別々に記録します。
     const scenario = new UniplsRaceScenario();
     const sessionSetups: unknown[] = [];
     const connectionSetups: unknown[] = [];
@@ -182,7 +182,7 @@ describe("Unipls lifecycle", () => {
       },
     };
 
-    // Establish the initial epoch, which runs both setup hooks.
+    // 両方の setup hook を実行する初回接続を ready にします。
     const opening = scenario.client.open(provisioner);
     scenario.transport.connection(0).emitOpen();
     await opening;
@@ -191,13 +191,13 @@ describe("Unipls lifecycle", () => {
       throw new Error("Expected the first connection to be open");
     }
 
-    // Recover onto a second epoch and wait until both setup paths have settled.
+    // 2つ目の接続へ回復し、両方の setup が完了するまで待ちます。
     scenario.drop(0);
     scenario.reconnector.invocations.take().reconnect();
     scenario.transport.connection(1).emitOpen();
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
 
-    // Verify the session hook is not repeated while the connection hook is.
+    // session hook は繰り返さず、connection hook だけを再実行することを確認します。
     expect(sessionSetups).toHaveLength(1);
     expect(connectionSetups).toHaveLength(2);
     expect(sessionSetups[0]).toMatchObject({ session: firstOpen.session });
@@ -206,24 +206,24 @@ describe("Unipls lifecycle", () => {
       isSessionBeginning: false,
     });
 
-    // Clean up the recovered epoch.
+    // 回復後の接続を終了します。
     const closing = scenario.client.close();
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
 
-  it("validates duplicate open before changing the active lifecycle", async () => {
-    // Arrange an active opening attempt and a provisioner that must never replace it.
+  it("active lifecycle を変更する前に重複 open を拒否する", async () => {
+    // active な open 試行と、置き換えられてはならない provisioner を用意します。
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
     const beforeDuplicate = scenario.client.lifecycle;
     const replacementProvisioner = new ControlledProvisioner();
 
-    // Attempt the invalid second open and verify it performs no lifecycle mutation.
+    // 無効な2回目の open を試し、lifecycle が変化しないことを確認します。
     expect(() => scenario.client.open(replacementProvisioner)).toThrow();
     expect(scenario.client.lifecycle).toBe(beforeDuplicate);
 
-    // Finish the original attempt, then force recovery to observe the retained provisioner.
+    // 元の試行を完了し、回復時にも同じ provisioner が使われることを確認します。
     scenario.transport.connection(0).emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -237,14 +237,14 @@ describe("Unipls lifecycle", () => {
     scenario.provisioner.succeed(originalProvisionerInvocation);
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
 
-    // Clean up the connection created by the recovery attempt.
+    // 回復試行が作成した接続を終了します。
     const closing = scenario.client.close();
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
 
-  it("creates a new logical session after the previous session closes", async () => {
-    // Establish and record the identity of the first logical session.
+  it("前のセッション終了後の open で新しい論理セッションを作る", async () => {
+    // 最初の論理セッションを ready にし、その ID を記録します。
     const scenario = new UniplsRaceScenario();
     const firstOpening = scenario.beginOpen();
     scenario.transport.connection(0).emitOpen();
@@ -255,12 +255,12 @@ describe("Unipls lifecycle", () => {
       throw new Error("Expected the first logical session to be open");
     }
 
-    // Terminate the first session completely.
+    // 最初のセッションを終了します。
     const firstClosing = scenario.client.close();
     scenario.transport.connection(0).emitClose({ code: 1000, wasClean: true });
     await firstClosing;
 
-    // Start a fresh session and compare both logical and physical identities.
+    // 新しいセッションを開始し、session ID と connection ID を比較します。
     const secondOpening = scenario.beginOpen();
     const secondConnecting = scenario.client.lifecycle;
     if (secondConnecting.phase !== "connecting" || secondConnecting.status !== "attempting") {
@@ -269,7 +269,7 @@ describe("Unipls lifecycle", () => {
     expect(secondConnecting.session).not.toBe(firstOpen.session);
     expect(secondConnecting.connection).not.toBe(firstOpen.connection);
 
-    // Complete and clean up the second session.
+    // 2つ目のセッションを ready にしてから終了します。
     scenario.transport.connection(1).emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await secondOpening;
@@ -278,15 +278,15 @@ describe("Unipls lifecycle", () => {
     await secondClosing;
   });
 
-  it("records a provisioning failure without exposing a ready connection", async () => {
-    // Arrange an initial transport whose provisioning hook fails with a known cause.
+  it("ready 接続を公開せずに provisioning 失敗を記録する", async () => {
+    // 既知の原因で provisioning が失敗する初回接続を用意します。
     const scenario = new UniplsRaceScenario();
     const cause = new Error("authentication rejected");
     const opening = scenario.beginOpen();
     scenario.transport.connection(0).emitOpen();
     scenario.provisioner.fail(scenario.provisioner.invocations.take(), cause);
 
-    // Observe the public open failure and its matching terminal lifecycle snapshot.
+    // 公開される open error と対応する終了 snapshot を確認します。
     await expect(opening).rejects.toMatchObject({
       name: "UniplsOpenError",
       outcome: "attempt-failed",
@@ -309,7 +309,7 @@ describe("Unipls lifecycle", () => {
       cause,
     });
 
-    // Emit a late physical close to ensure no further lifecycle work is required.
+    // 遅れて close event を発火し、lifecycle が変化しないことを確認します。
     scenario.transport.connection(0).emitClose({ code: 1000, wasClean: true });
   });
 });

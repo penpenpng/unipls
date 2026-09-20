@@ -1,12 +1,12 @@
 import { verifyAbortSignalAny } from "../support/abort-signal-any.mjs";
 
-// Execute the shared probe in the current host runtime.
+// 現在の host runtime で共通 probe を実行します。
 const result = verifyAbortSignalAny();
 
-// Fail the process unless every probe stage completed.
+// すべての検証段階が完了していなければ process を失敗させます。
 if (result.checks !== 3) {
   throw new Error(`Expected 3 AbortSignal.any checks, received ${result.checks}`);
 }
 
-// Publish a concise success record for the runtime matrix log.
+// runtime matrix の log に簡潔な成功結果を出力します。
 console.log(`AbortSignal.any: ${result.checks} checks passed`);

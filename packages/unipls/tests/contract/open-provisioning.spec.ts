@@ -2,9 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { flushMicrotasks, UniplsRaceScenario } from "../support/index.ts";
 
-describe("Unipls open readiness contract", () => {
-  it("keeps open pending until provisioning succeeds", async () => {
-    // Arrange an opening Promise and an independent settlement observation.
+describe("Unipls.open の ready 契約", () => {
+  it("provisioning が成功するまで open を未完了に保つ", async () => {
+    // open の Promise と、その完了状態を独立に観測します。
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
     const transport = scenario.transport.connection(0);
@@ -13,19 +13,19 @@ describe("Unipls open readiness contract", () => {
       settled = true;
     });
 
-    // Open the transport but keep provisioning blocked at the controlled hook.
+    // WebSocket を開き、制御 hook で provisioning を保留します。
     transport.emitOpen();
     const provisioning = scenario.provisioner.invocations.take();
-    // Drain pending Promise work once to prove transport-open alone cannot settle open().
+    // microtask を進め、WebSocket の open だけでは完了しないことを確認します。
     await flushMicrotasks();
     expect(settled).toBe(false);
 
-    // Release provisioning and verify the original opening Promise becomes ready.
+    // provisioning を成功させ、元の open が完了することを確認します。
     scenario.provisioner.succeed(provisioning);
     await opening;
     expect(settled).toBe(true);
 
-    // Clean up the ready transport.
+    // ready になった接続を終了します。
     const closing = scenario.client.close();
     transport.emitClose({ code: 1000, wasClean: true });
     await closing;

@@ -31,7 +31,7 @@ export class DropDetectorManager<TInput, TOutput> {
     });
   }
 
-  /** プロビジョニング完了後に呼び出します。各 detector の setup() を実行します。 */
+  /** 接続が ready になる直前に各 detector の `setup()` を実行します。 */
   start(
     transportEpochId: number,
     createContext: (identity: DropDetectorIdentity) => DropDetectorContext<TInput, TOutput>,
@@ -43,7 +43,7 @@ export class DropDetectorManager<TInput, TOutput> {
     );
   }
 
-  /** 切断または close() 時に呼び出します。各 detector の dispose 関数を実行します。 */
+  /** 接続の drop または close 時に各 detector の後始末を実行します。 */
   stop(transportEpochId?: number): void {
     if (transportEpochId !== undefined && transportEpochId !== this.#transportEpochId) {
       return;

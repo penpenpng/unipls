@@ -2,51 +2,59 @@ import { type UniplsSubscriber } from "./async-results.ts";
 import type { UniplsDropDetector } from "./drop-detector";
 import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
 import type { SessionId, WebSocketConstructor, WebSocketData } from "./types.ts";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- JSDoc のリンクで使用します。
 import type { Unipls } from "./unipls.ts";
 
 /** 送信するメッセージを値または評価関数として受け取ります。 */
 export type UniplsMessageFactory<TInput = WebSocketData> = TInput | (() => TInput);
 
+/** Unipls client の接続先、変換処理、回復方針を指定します。 */
 export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** 接続先の WebSocket URL です。 */
   url: string;
+  /** 送信値を WebSocket が扱えるデータへ変換します。 */
   serializer?: (data: TInput) => WebSocketData;
+  /** 受信した WebSocket データを利用者向けの値へ変換します。 */
   deserializer?: (data: WebSocketData) => TOutput;
+  /** 接続に使う WebSocket 実装です。省略時は実行環境の `WebSocket` を使います。 */
   WebSocket?: WebSocketConstructor;
+  /** WebSocket 接続の成立を待つ最大時間をミリ秒で指定します。 */
   timeout?: number;
   /** 再接続戦略を定義します。省略した場合は再接続を行いません。 */
   reconnector?: UniplsReconnector;
-  /** 切断検知プラグインのリストを指定します。各プラグインはプロビジョニング完了後に起動し、切断を検知した際に drop を発生させます。 */
+  /** ready な接続を監視する drop detector を登録順に指定します。 */
   dropDetectors?: UniplsDropDetector<TInput, TOutput>[];
 }
 
 /**
- * {@link Unipls.open|unipls.connect()} の任意の引数で、{@link UniplsReconnector} による再接続を含む WebSocket 接続の成功直後に実行されます。
+ * {@link Unipls.open} に渡す初期化処理です。初回接続と回復接続の WebSocket が開いた後、ready になる前に実行されます。
  */
 export type UniplsProvisioner<TInput = WebSocketData, TOutput = WebSocketData> =
   | UniplsProvisionerFunction<TInput, TOutput>
   | UniplsProvisionerObject<TInput, TOutput>;
 
+/** 接続を ready にするための初期化関数です。 */
 export type UniplsProvisionerFunction<TInput = WebSocketData, TOutput = WebSocketData> = (
   ctx: UniplsProvisioningContext<TInput, TOutput>,
 ) => Promise<void> | void;
 
+/** 論理セッション単位と接続単位の初期化を分けて指定します。 */
 export interface UniplsProvisionerObject<TInput = WebSocketData, TOutput = WebSocketData> {
-  /** 論理 session ごとに一度だけ、成功するまで実行されます。 */
+  /** 論理セッションごとに、最初に成功するまで実行されます。 */
   setupSession?: UniplsProvisionerFunction<TInput, TOutput>;
-  /** 各 transport epoch の connection setup として実行されます。 */
+  /** 初回接続と回復接続を含む各 WebSocket 接続で実行されます。 */
   setupConnection: UniplsProvisionerFunction<TInput, TOutput>;
 }
 
 /**
- * {@link UniplsProvisioner} の引数で、{@link Unipls} の初期化を行うためのコンテキストを表します。
+ * provisioner が ready 前の接続で通信するためのコンテキストです。
  */
 export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * {@link Unipls.cast|unipls.cast()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
    * - {@link UniplsCastParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
-   * - {@link UniplsCastParams.recast|recast} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
+   * - 送信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   cast(data: TInput): Promise<void>;
 
@@ -54,14 +62,14 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
    * {@link Unipls.request|unipls.request()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
    * - {@link UniplsRequestParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
-   * - {@link UniplsRequestParams.retry|retry} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
+   * - {@link UniplsRequestParams.retry|retry} は指定できず、通信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   request(params: Omit<UniplsRequestParams<TInput, TOutput>, "signal" | "retry">): Promise<TOutput>;
 
   /**
    * {@link Unipls.listen|unipls.listen()} とほとんど同様ですが、以下が異なります:
    * - {@link UniplsListenOptions.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
-   * - {@link UniplsListenOptions.retry|retry} を指定することはできません。購読が中断されたときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
+   * - {@link UniplsListenOptions.retry|retry} は指定できず、購読が失敗すると provisioner と現在の接続試行が失敗します。
    */
   listen(
     params: UniplsSubscriber<TOutput> & Omit<UniplsListenOptions<TOutput>, "signal" | "retry">,
@@ -71,20 +79,21 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
    * {@link Unipls.subscribe|unipls.subscribe()} とほとんど同様ですが、以下が異なります:
    * - この関数は初期化完了前でもただちにデータを送信します。
    * - {@link UniplsSubscribeParams.signal|signal} を指定することはできません。この関数は {@link Unipls.close|unipls.close()} によって接続が中断されたときにのみ中断されます。
-   * - {@link UniplsSubscribeParams.retry|retry} を指定することはできません。送信に失敗したときには初期化が失敗したものとみなされ、{@link UniplsReconnector} による再接続が試みられます。
+   * - {@link UniplsSubscribeParams.retry|retry} は指定できず、通信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   subscribe(
     params: UniplsSubscriber<TOutput> &
       Omit<UniplsSubscribeParams<TInput, TOutput>, "signal" | "retry">,
   ): () => void;
 
-  /** 現在のセッションを表します。 */
+  /** 現在の論理セッションです。 */
   session: SessionId;
 
-  /** これが現在のセッションの中での最初の初期化ならば `true`、そうでなければ `false` を与えます。 */
+  /** 現在の論理セッションで session setup がまだ完了していない場合は `true` です。 */
   isSessionBeginning: boolean;
 }
 
+/** 次に selector と一致するメッセージを待つ方法を指定します。 */
 export interface UniplsNextParams<TOutput = WebSocketData> {
   /** どのメッセージをレスポンスとみなすかを決定する述語関数です。この条件を最初に満たしたメッセージがレスポンスになります。 */
   selector: (data: TOutput) => boolean;
@@ -92,14 +101,14 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
   /** レスポンスを待つ最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
   timeout?: number;
 
-  /** 購読を中断するための {@link AbortSignal} を指定します。 */
+  /** メッセージ待機を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 
   /** レスポンス待機中に drop が発生した場合の待機継続戦略を指定します。 */
   retry?: UniplsDropRetryStrategy;
 }
 
-/** {@link Unipls.listen|unipls.listen()} の必須の第2引数で、`listen()` の挙動を制御します。 */
+/** {@link Unipls.listen} の受信条件と終了条件を指定します。 */
 export interface UniplsListenOptions<TOutput = WebSocketData> {
   /** どのメッセージを購読の対象とみなすかを決定する述語関数です。この条件を満たしたすべてのメッセージが購読の対象になります。 */
   selector?: (data: TOutput) => boolean;
@@ -115,31 +124,20 @@ export interface UniplsListenOptions<TOutput = WebSocketData> {
 }
 
 /**
- * {@link Unipls.cast|unipls.cast()} の任意の第2引数で、`cast()` の挙動を制御します。
+ * {@link Unipls.cast} で送信する値と待機条件を指定します。
  */
 export interface UniplsCastParams<TInput = WebSocketData> {
+  /** 送信する値、または実際の送信時に値を生成する関数です。 */
   query: UniplsMessageFactory<TInput>;
-  /** Provisioning 終了を待つ最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
+  /** 送信完了を待つ最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
   timeout?: number;
-  /**
-   * 再送を中断するための {@link AbortSignal} を指定します。
-   */
+  /** 送信待機を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 }
 
-/**
- * {@link UniplsRecastFunction} の引数で、再送の方法を制御するためのコンテキストを表します。
- */
-export interface UniplsRecastContext<TInput = WebSocketData> {
-  /** 直前に送信が試行されたデータを表します。すなわち、初回の再送では {@link Unipls.cast|unipls.cast()} の引数に等しく、それ以降の再送では直前の再送で送信を試行したデータに等しいです。 */
-  data: TInput;
-
-  /** 再送を試行します。 */
-  cast(data: TInput): void;
-}
-
-/** {@link Unipls.request|unipls.request()} の必須の第2引数で、`request()` の挙動を制御します。 */
+/** {@link Unipls.request} の送信値、応答条件、回復方法を指定します。 */
 export interface UniplsRequestParams<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** 送信する値、または実際の送信時に値を生成する関数です。 */
   query: UniplsMessageFactory<TInput>;
   /** どのメッセージをレスポンスとみなすかを決定する述語関数です。この条件を最初に満たしたメッセージがレスポンスになります。 */
   selector: (data: TOutput) => boolean;
@@ -155,16 +153,17 @@ export interface UniplsRequestParams<TInput = WebSocketData, TOutput = WebSocket
 }
 
 /**
- * {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の再送戦略を指定します。
+ * {@link Unipls.request} または {@link Unipls.subscribe} が drop をまたぐ場合の回復方法を指定します。
  * - `fail`: リクエストを再送せず、例外終了します。
  * - `wait`: 再接続後にリクエストは再送しませんが、レスポンスを待機し続けます。
  * - `resend`: 再度同じリクエストを送信します。
- * - `recover`: 再接続後の回復方法を細かく制御します。
+ * - {@link UniplsRecoverStrategy}: 再接続後の回復方法を callback で決定します。
  */
 export type UniplsRetryStrategy<TInput = WebSocketData, TOutput = WebSocketData> =
   | UniplsRetryPreset
   | UniplsRecoverStrategy<TInput, TOutput>;
 
+/** 再接続後の request または subscribe の扱いを簡潔に指定します。 */
 export type UniplsRetryPreset = "fail" | "wait" | "resend";
 
 /**
@@ -172,9 +171,13 @@ export type UniplsRetryPreset = "fail" | "wait" | "resend";
  */
 export type UniplsDropRetryStrategy = "fail" | "wait";
 
+/** custom recovery 関数へ渡される直前の query、selector、再接続情報です。 */
 export interface UniplsRecoverContext<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** drop 前に使用していた query です。 */
   query: UniplsMessageFactory<TInput>;
+  /** drop 前に使用していた selector です。 */
   selector: (data: TOutput) => boolean;
+  /** 成功した再接続の情報です。 */
   reconnection: UniplsReconnectEvent;
 }
 
@@ -187,20 +190,24 @@ export interface UniplsRecoveryPlan<TInput = WebSocketData, TOutput = WebSocketD
   selector?: (data: TOutput) => boolean;
 }
 
+/** custom recovery が選択できる継続方法です。 */
 export type UniplsRecoveryDecision<TInput = WebSocketData, TOutput = WebSocketData> =
   | Exclude<UniplsRetryPreset, "resend">
   | "resend"
   | UniplsRecoveryPlan<TInput, TOutput>
   | void;
 
+/** 再接続後の query と selector を利用者が決定する回復戦略です。 */
 export interface UniplsRecoverStrategy<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** 成功した再接続ごとに呼ばれ、今回の回復方法を返します。 */
   recover: (
     ctx: UniplsRecoverContext<TInput, TOutput>,
   ) => UniplsRecoveryDecision<TInput, TOutput> | Promise<UniplsRecoveryDecision<TInput, TOutput>>;
 }
 
-/** {@link Unipls.subscribe|unipls.subscribe()} の必須の第2引数で、`subscribe()` の挙動を制御します。 */
+/** {@link Unipls.subscribe} の送信値、受信条件、終了条件、回復方法を指定します。 */
 export interface UniplsSubscribeParams<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** 送信する値、または実際の送信時に値を生成する関数です。 */
   query: UniplsMessageFactory<TInput>;
 
   /** どのメッセージを購読の対象とみなすかを決定する述語関数です。この条件を満たしたすべてのメッセージが購読の対象になります。 */
@@ -209,7 +216,7 @@ export interface UniplsSubscribeParams<TInput = WebSocketData, TOutput = WebSock
   /** どのメッセージを購読の終端とみなすかを決定する述語関数です。この条件を最初に満たしたメッセージが購読の終端になります。 */
   terminator?: (data: TOutput) => boolean;
 
-  /** 購読の終端を待つ最大時間をミリ秒単位で指定します。 */
+  /** 購読の終端を待つ最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
   timeout?: number;
 
   /** 購読を中断するための {@link AbortSignal} を指定します。 */

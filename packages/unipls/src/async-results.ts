@@ -1,8 +1,9 @@
 import { UniplsClosedError, UniplsDroppedError } from "./errors.ts";
 import type { WebSocketData } from "./types.ts";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by JSDoc
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- JSDoc のリンクで使用します。
 import type { Unipls } from "./unipls.ts";
 
+/** @internal 複数の非同期結果を購読 callback へ配送します。 */
 export class AsyncResults<T> {
   #resulted = false;
   #reason: SubscriptionEndReason = "fatal-error";
@@ -128,7 +129,7 @@ export class AsyncResults<T> {
   };
 }
 
-/** {@link Unipls.listen|unipls.listen()} または {@link Unipls.subscribe|unipls.subscribe()} の必須の引数で、購読者を定義します。 */
+/** {@link Unipls.listen} または {@link Unipls.subscribe} が通知する callback を指定します。 */
 export interface UniplsSubscriber<TOutput = WebSocketData> {
   /** 購読の対象となるメッセージを観測したときに実行されるコールバックを指定します。 */
   onMessage?: (data: TOutput) => void;
@@ -136,17 +137,20 @@ export interface UniplsSubscriber<TOutput = WebSocketData> {
   /** 購読の終端となるメッセージを観測したときに実行されるコールバックを指定します。 */
   onTerminated?: (data: TOutput) => void;
 
-  /** 購読の対象となるメッセージがエラーを引き起こしたときに実行されるコールバックを指定します。このエラーは、典型的には `deserializer` によって発生し得ます。 */
+  /** 購読中に回復可能なエラーを観測したときに呼ばれます。 */
   onError?: (error: unknown) => void;
 
+  /** 利用者の unsubscribe によって購読が終了したときに呼ばれます。 */
   onUnsubscribed?: () => void;
 
+  /** 購読を継続できないエラーで終了したときに呼ばれます。 */
   onFatalError?: (error: unknown) => void;
 
   /** 購読が終了したときに実行されるコールバックを指定します。 */
   finally?: (ctx: SubscriptionFinalizationContext) => void;
 }
 
+/** 購読終了時に `finally` callback へ渡される情報です。 */
 export interface SubscriptionFinalizationContext {
   /** 購読が終了した理由を表します。 */
   reason: SubscriptionEndReason;
@@ -155,6 +159,7 @@ export interface SubscriptionFinalizationContext {
   error?: unknown;
 }
 
+/** 購読が終了した理由です。 */
 export type SubscriptionEndReason =
   | "closed"
   | "dropped"

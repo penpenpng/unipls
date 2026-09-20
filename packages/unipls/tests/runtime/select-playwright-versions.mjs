@@ -1,11 +1,11 @@
 let input = "";
 
-// Collect the registry version list from standard input.
+// 標準入力から registry の version 一覧を取得します。
 for await (const chunk of process.stdin) {
   input += chunk;
 }
 
-// Retain stable semantic versions and sort newest first.
+// 安定版の semantic version だけを新しい順に並べます。
 const versions = JSON.parse(input);
 const stableVersions = versions
   .filter((version) => /^\d+\.\d+\.\d+$/.test(version))
@@ -23,7 +23,7 @@ const stableVersions = versions
     return 0;
   });
 
-// Select the newest release from each of the latest two release lines.
+// 最新2系統の release line から、それぞれ最新 release を選びます。
 const selectedVersions = [];
 const selectedLines = new Set();
 
@@ -40,10 +40,10 @@ for (const candidate of stableVersions) {
   }
 }
 
-// Reject incomplete registry data instead of weakening the CI matrix.
+// CI matrix を縮小せず、不完全な registry data を拒否します。
 if (selectedVersions.length !== 2) {
   throw new Error("Could not resolve the latest two stable Playwright release lines");
 }
 
-// Emit the GitHub Actions-compatible matrix value.
+// GitHub Actions で利用できる matrix 値を出力します。
 process.stdout.write(`versions=${JSON.stringify(selectedVersions)}\n`);

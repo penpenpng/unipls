@@ -2,14 +2,17 @@ import { UniplsTimeoutError } from "../errors.ts";
 import type { UniplsMessageFactory } from "../unipls.interface.ts";
 import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector";
 
+/** heartbeat の送信間隔、応答条件、待機時間を指定します。 */
 export interface HeartbeatOptions<TInput, TOutput> {
-  /** ping 送信間隔 (ms) */
+  /** ping の送信間隔をミリ秒で指定します。 */
   interval: number;
 
-  /** pong 待機タイムアウト (ms)。省略時は interval と同値 */
+  /** pong を待つ最大時間です。省略時は `interval` と同じ値を使います。 */
   timeout?: number;
 
+  /** ping として送信する値、または送信時に値を生成する関数です。 */
   ping: UniplsMessageFactory<TInput>;
+  /** pong とみなすメッセージを判定します。 */
   pong: (msg: TOutput) => boolean;
 }
 
@@ -31,13 +34,16 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** 定期的な ping に応答がない接続を drop として報告します。 */
 export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetector<TInput, TOutput> {
   #options: HeartbeatOptions<TInput, TOutput>;
 
+  /** heartbeat の契約を指定して detector を作成します。 */
   constructor(options: HeartbeatOptions<TInput, TOutput>) {
     this.#options = options;
   }
 
+  /** 現在の接続に対する heartbeat 監視を開始します。 */
   setup(ctx: DropDetectorContext<TInput, TOutput>): () => void {
     const abort = new AbortController();
 
@@ -60,7 +66,7 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
           if (err instanceof UniplsTimeoutError) {
             ctx.drop();
           }
-          // UniplsDroppedError / UniplsClosedError / AbortError → loop 終了
+          // timeout は drop として報告し、それ以外の終了理由では監視だけを終了します。
           break;
         }
       }

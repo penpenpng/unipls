@@ -7,9 +7,9 @@ import {
   UniplsRaceScenario,
 } from "../support/index.ts";
 
-describe("transport epoch isolation", () => {
-  it("ignores stale transport events after a recovery attempt starts", async () => {
-    // Arrange public event observers and establish the first ready epoch.
+describe("接続試行の分離", () => {
+  it("回復試行の開始後は古い接続のイベントを無視する", async () => {
+    // 公開 event の observer を登録し、最初の接続を ready にします。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
     const messages: string[] = [];
     const errors: unknown[] = [];
@@ -23,22 +23,22 @@ describe("transport epoch isolation", () => {
     await opening;
     const firstDetector = scenario.detectors[0].invocations.take();
 
-    // Drop the first epoch and start its replacement without opening it yet.
+    // 最初の接続を drop し、代替接続を open 前で保留します。
     scenario.drop(0);
     const recovery = scenario.reconnector.invocations.take();
     recovery.reconnect();
     const reconnecting = scenario.client.lifecycle;
 
-    // Replay every stale callback source, including the detector captured by epoch one.
+    // 最初の接続が保持していた detector を含む、すべての古い callback を再現します。
     first.emitOpen();
     first.emitMessage("stale message");
     first.emitError(new Error("stale error"));
     first.emitClose({ code: 4100, wasClean: false });
     firstDetector.drop();
-    // Drain delayed callbacks once so a stale async continuation would become observable.
+    // microtask を進め、古い非同期継続があれば観測可能にします。
     await flushMicrotasks();
 
-    // Verify stale work changed neither lifecycle, public events, nor the new socket.
+    // 古い処理が lifecycle、公開 event、新しい socket のどれも変更しないことを確認します。
     expect(scenario.client.lifecycle).toBe(reconnecting);
     expect(messages).toEqual([]);
     expect(errors).toEqual([]);
@@ -49,7 +49,7 @@ describe("transport epoch isolation", () => {
     expect(first.listenerCount("error")).toBe(0);
     expect(first.listenerCount("close")).toBe(0);
 
-    // Complete and clean up the current replacement epoch.
+    // 現在の代替接続を ready にしてから終了します。
     const second = scenario.transport.connection(1);
     second.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
@@ -60,8 +60,8 @@ describe("transport epoch isolation", () => {
     await closing;
   });
 
-  it("does not let delayed provisioning make an obsolete epoch ready", async () => {
-    // Arrange an initially ready session and record its public open events.
+  it("遅延した provisioning が古い接続を ready に戻さない", async () => {
+    // 初回セッションを ready にし、公開 open event を記録します。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
     const opened: unknown[] = [];
     scenario.client.on("open", (event) => opened.push(event));
@@ -72,41 +72,41 @@ describe("transport epoch isolation", () => {
     await opening;
     scenario.detectors[0].invocations.take();
 
-    // Start a second epoch and hold its provisioning completion.
+    // 2つ目の接続を開始し、provisioning の完了を保留します。
     scenario.drop(0);
     scenario.reconnector.invocations.take().reconnect();
     scenario.transport.connection(1).emitOpen();
     const obsoleteProvisioning = scenario.provisioner.invocations.take();
 
-    // Drop the provisioning epoch and begin a third, current attempt.
+    // provisioning 中の接続を drop し、現在の3つ目の試行を開始します。
     scenario.drop(1);
     scenario.reconnector.invocations.take().reconnect();
     const currentConnecting = scenario.client.lifecycle;
 
-    // Release the obsolete hook and drain its continuation once.
+    // 古い hook を解放し、その非同期継続を進めます。
     scenario.provisioner.succeed(obsoleteProvisioning);
     await flushMicrotasks();
 
-    // Verify the obsolete epoch published neither readiness nor detector resources.
+    // 古い接続が ready 通知も detector resource も公開しないことを確認します。
     expect(scenario.client.lifecycle).toBe(currentConnecting);
     expect(opened).toHaveLength(1);
     expect(scenario.detectors[0].invocations.size).toBe(0);
 
-    // Complete the third epoch and wait for its semantic ready transition.
+    // 3つ目の接続を完了し、ready への遷移を待ちます。
     const current = scenario.transport.connection(2);
     current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
     expect(opened).toHaveLength(2);
 
-    // Clean up the surviving epoch.
+    // 有効な接続を終了します。
     const closing = scenario.client.close();
     current.emitClose({ code: 1000, wasClean: true });
     await closing;
   });
 
-  it("binds a waiting send to the socket from the same epoch", async () => {
-    // Use virtual time so the first epoch can time out without wall-clock delay.
+  it("送信待機を開始時と同じ接続の socket に束縛する", async () => {
+    // 仮想時間を使い、実時間を待たずに最初の接続を timeout させます。
     vi.useFakeTimers();
     try {
       const transport = new ControlledWebSocketServer();
@@ -116,20 +116,20 @@ describe("transport epoch isolation", () => {
         timeout: 100,
       });
 
-      // Queue a forced send while the first socket is still connecting, then time it out.
+      // 最初の socket が接続中に強制送信を待機させ、接続を timeout させます。
       const firstOpening = socket.open();
       const firstSend = socket.enqueue("obsolete", { force: true });
       const first = transport.connection(0);
       await vi.advanceTimersByTimeAsync(100);
       await expect(firstOpening).rejects.toThrow();
 
-      // Open a replacement epoch; the obsolete payload must not migrate to its socket.
+      // 代替接続を開き、古い payload が新しい socket へ移らないことを確認します。
       const secondOpening = socket.open();
       const second = transport.connection(1);
       second.emitOpen();
       await secondOpening;
 
-      // Verify rejection, socket ownership, and callback/listener cleanup for epoch one.
+      // 最初の接続について、失敗、socket の所有関係、callback と listener の解放を確認します。
       await expect(firstSend).rejects.toThrow();
       expect(first.sent).toEqual([]);
       expect(second.sent).toEqual([]);
@@ -138,13 +138,13 @@ describe("transport epoch isolation", () => {
       expect(first.listenerCount("error")).toBe(0);
       expect(first.listenerCount("close")).toBe(0);
 
-      // Close epoch two and verify all virtual timers were released.
+      // 2つ目の接続を閉じ、すべての仮想 timer が解放されたことを確認します。
       const closing = socket.close();
       second.emitClose({ code: 1000, wasClean: true });
       await closing;
       expect(vi.getTimerCount()).toBe(0);
     } finally {
-      // Restore the process-wide timer implementation even if an assertion fails.
+      // assertion が失敗した場合も実行環境の timer を復元します。
       vi.useRealTimers();
     }
   });
