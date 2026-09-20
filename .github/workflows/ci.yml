@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PNPM_VERSION: 10.4.1
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Contract tests (*.spec.ts)
+        run: pnpm --filter unipls test:contract
+      - name: Unit tests (*.test.ts)
+        run: pnpm --filter unipls test:unit
+
+  build:
+    name: Build (ES2022)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  native-runtime:
+    name: ${{ matrix.runtime }} ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: Node.js
+            command: node
+            version: 22.4.0
+          - runtime: Node.js
+            command: node
+            version: latest
+          - runtime: Deno
+            command: deno
+            version: v2.0.0
+          - runtime: Deno
+            command: deno
+            version: latest
+          - runtime: Bun
+            command: bun
+            version: 1.2.0
+          - runtime: Bun
+            command: bun
+            version: latest
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.runtime == 'Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.version }}
+      - if: matrix.runtime == 'Deno'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ matrix.version }}
+      - if: matrix.runtime == 'Bun'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.version }}
+      - run: ${{ matrix.command }} packages/unipls/tests/runtime/run-abort-signal-any.mjs
+
+  browser-versions:
+    name: Resolve browser generations
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - id: versions
+        name: Select the latest two stable Playwright release lines
+        run: npm view playwright versions --json | node packages/unipls/tests/runtime/select-playwright-versions.mjs >> "$GITHUB_OUTPUT"
+
+  browser-runtime:
+    name: ${{ matrix.browser }} (Playwright ${{ matrix.playwright }})
+    needs: browser-versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+          - webkit
+        playwright: ${{ fromJSON(needs.browser-versions.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install browser generation
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+          PLAYWRIGHT_VERSION: ${{ matrix.playwright }}
+        run: |
+          runtime_dir="$RUNNER_TEMP/unipls-browser-runtime"
+          mkdir -p "$runtime_dir/tests/runtime" "$runtime_dir/tests/support"
+          cp packages/unipls/tests/runtime/run-abort-signal-any-browser.mjs "$runtime_dir/tests/runtime/"
+          cp packages/unipls/tests/support/abort-signal-any.mjs "$runtime_dir/tests/support/"
+          cd "$runtime_dir"
+          npm install --no-package-lock --no-save "playwright@$PLAYWRIGHT_VERSION"
+          npx playwright install --with-deps "$BROWSER_NAME"
+          node tests/runtime/run-abort-signal-any-browser.mjs "$BROWSER_NAME"

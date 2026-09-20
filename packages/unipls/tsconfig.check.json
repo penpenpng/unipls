@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/contract/**/*.spec.ts",
+    "tests/unit/**/*.test.ts",
+    "tests/support/**/*.ts",
+    "tests/support/**/*.mts"
+  ],
+  "exclude": ["tests/reference/**"]
+}

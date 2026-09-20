@@ -1,15 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2022",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": [
-      "ESNext",
-      "DOM",
-    ],
-    "types": [
-      "vitest/importMeta"
-    ],
+    "lib": ["ES2022", "DOM", "ESNext.Disposable"],
+    "types": ["vitest/importMeta"],
     "moduleResolution": "bundler",
     "strict": true,
     "resolveJsonModule": true,
@@ -25,14 +20,6 @@
     "sourceMap": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": [
-    "src/**/*.ts",
-    "next/**/*.ts",
-    "vitest.setup.ts"
-  ],
-  "exclude": [
-    "__test__/**/*.ts",
-    "*.spec.ts",
-    "*.test.ts"
-  ]
+  "include": ["src/**/*.ts", "next/**/*.ts"],
+  "exclude": ["tests/**/*.ts", "*.spec.ts", "*.test.ts"]
 }

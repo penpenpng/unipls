@@ -1148,16 +1148,16 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 1: 静的検査と CI の基礎を修復する
 
-- [ ] Vite+ が `vite.config.ts` を読み込めず `check` が停止する問題を直す。
-- [ ] build targetをES2022へ固定し、Node `22.4.0`、Deno `2.0.0`、Bun `1.2.0`と各最新stable、最新2安定版相当のChromium/Firefox/WebKitをCI matrixへ追加する。
-- [ ] 各最低runtimeでnative `AbortSignal.any`の優先順位、reason identity、後発abort不変性を検証し、polyfillをtest環境から暗黙注入しない。
-- [ ] format check、lint、型検査、test、build を独立した script にする。
-- [ ] test runnerとCIが公開contractの`*.spec.ts`とそれ以外の`*.test.ts`をともに収集し、結果上も区別できるようにする。
-- [ ] `tests/reference/**`をtest runner、型検査、coverage、test件数から除外し、referenceが壊れても修正を要求しない。
-- [ ] 最初のnormativeな`*.spec.ts`/`*.test.ts`を追加した時点で移行用の`passWithNoTests: true`を除去し、収集対象が0件ならCIを失敗させる。
-- [ ] package 単体で型検査を実行できるようにする。
-- [ ] 各検査を CI の独立 job、または失敗を個別に識別できる step にする。
-- [ ] referenceへ退避した旧suiteをgreenにする作業は行わず、Task 0以降に新規作成したnormative testとbuildだけをCI baselineとして維持する。test件数を固定値として完了条件にしない。
+- [x] Vite+ が `vite.config.ts` を読み込めず `check` が停止する問題を直す。
+- [x] build targetをES2022へ固定し、Node `22.4.0`、Deno `2.0.0`、Bun `1.2.0`と各最新stable、最新2安定版相当のChromium/Firefox/WebKitをCI matrixへ追加する。
+- [x] 各最低runtimeでnative `AbortSignal.any`の優先順位、reason identity、後発abort不変性を検証し、polyfillをtest環境から暗黙注入しない。
+- [x] format check、lint、型検査、test、build を独立した script にする。
+- [x] test runnerとCIが公開contractの`*.spec.ts`とそれ以外の`*.test.ts`をともに収集し、結果上も区別できるようにする。
+- [x] `tests/reference/**`をtest runner、型検査、coverage、test件数から除外し、referenceが壊れても修正を要求しない。
+- [x] 最初のnormativeな`*.spec.ts`/`*.test.ts`を追加した時点で移行用の`passWithNoTests: true`を除去し、収集対象が0件ならCIを失敗させる。
+- [x] package 単体で型検査を実行できるようにする。
+- [x] 各検査を CI の独立 job、または失敗を個別に識別できる step にする。
+- [x] referenceへ退避した旧suiteをgreenにする作業は行わず、Task 0以降に新規作成したnormative testとbuildだけをCI baselineとして維持する。test件数を固定値として完了条件にしない。
 
 完了条件:
 

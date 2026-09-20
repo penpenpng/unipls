@@ -6,4 +6,4 @@ pre-commit:
       run: mise exec -- pnpm fmt
     unipls-lint-fix:
       root: packages/unipls
-      run: mise exec -- pnpm exec vp lint --fix src vite.config.ts
+      run: mise exec -- pnpm exec vp lint --fix src tests/contract tests/unit tests/support tests/runtime vite.config.mjs
