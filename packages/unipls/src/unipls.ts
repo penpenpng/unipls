@@ -17,12 +17,18 @@ import { createDropWaitHandler, createRetryingDropHandler } from "./operations/d
 import { SingleOperationScope, StreamOperationScope } from "./operations/operation-scope.ts";
 import { QuerySession } from "./operations/query-session.ts";
 import { createOnReconnectedHandler } from "./operations/reconnect-hook.ts";
-import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
+import type {
+  ReconnectionContext,
+  UniplsReconnectEvent,
+  UniplsReconnector,
+} from "./reconnector/reconnector.ts";
 import type {
   ConnectionId,
   DropDetectorIdentity,
+  ReconnectionEngineOutcome,
   SessionId,
   UniplsConnectionState,
+  UniplsDiagnostic,
   UniplsDrop,
   UniplsDroppedErrorOutcome,
   UniplsLifecycleSnapshot,
@@ -49,6 +55,21 @@ interface ConnectionEventContext {
   readonly connection: ConnectionId;
 }
 
+interface PendingOpen {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+  readonly reject: (cause: unknown) => void;
+  settled: boolean;
+}
+
+interface ReconnectionPolicyRun {
+  readonly context: ReconnectionContext;
+  settled: boolean;
+  outcome?: ReconnectionEngineOutcome;
+  cleanup?: () => void;
+  cleanupCalled: boolean;
+}
+
 type UniplsEvents<TOutput> = {
   /** 接続が ready になったときに通知されます。 */
   open: ConnectionEventContext;
@@ -57,7 +78,7 @@ type UniplsEvents<TOutput> = {
   /** 受信メッセージの変換など、継続可能な処理が失敗したときに通知されます。 */
   error: ConnectionEventContext & { error: unknown };
   /** 論理セッションが終了したときに通知されます。 */
-  closed: ConnectionEventContext & { error?: UniplsDroppedError };
+  closed: ConnectionEventContext & { error?: UniplsOpenError | UniplsDroppedError };
   /** ready だった接続を失ったときに通知されます。 */
   dropped: ConnectionEventContext & { drop: UniplsDrop; error: UniplsDroppedError };
   /** 接続の初期化処理が失敗したときに通知されます。 */
@@ -69,6 +90,8 @@ type UniplsEvents<TOutput> = {
   };
   /** 接続回復が成功したときに通知されます。 */
   reconnect: UniplsReconnectEvent;
+  /** ライブラリが捕捉した型付きの診断情報です。 */
+  diagnostic: UniplsDiagnostic;
 };
 
 /** 論理セッションを維持しながら WebSocket の送受信と回復を管理する client です。 */
@@ -79,7 +102,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #canonicalDrops = new Map<number, UniplsDrop>();
   #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #reconnector?: UniplsReconnector;
-  #reconnectorCleanup?: () => void;
+  #pendingOpen?: PendingOpen;
+  #reconnectionPolicy?: ReconnectionPolicyRun;
   #lifecycle: UniplsLifecycleCoordinator;
   #detectorManager: DropDetectorManager<TInput, TOutput>;
   /** 接続先の WebSocket URL です。 */
@@ -137,51 +161,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     this.#provisioner = provisioner;
     const connection = this.#lifecycle.beginSession();
-
-    let transportEpochId = Number.NaN;
-    let transportSignal: AbortSignal | undefined;
-    const socketOpening = this.#socket.open(async (signal) => {
-      transportSignal = signal;
-      this.#assertCurrentTransport(transportEpochId, signal);
-      this.#lifecycle.markProvisioning(connection);
-      await this.#runProvisioner(transportEpochId, signal);
-      this.#assertCurrentTransport(transportEpochId, signal);
-      this.#detectorManager.start(transportEpochId, (identity) =>
-        this.#createDropDetectorContext(transportEpochId, signal, identity),
-      );
+    let resolve!: () => void;
+    let reject!: (cause: unknown) => void;
+    const promise = new Promise<void>((onResolve, onReject) => {
+      resolve = onResolve;
+      reject = onReject;
     });
-    transportEpochId = this.#socket.transportEpochId;
-    this.#bindTransport(transportEpochId, connection);
-    const promise = socketOpening
-      .then(() => {
-        this.#assertCurrentTransport(transportEpochId, transportSignal);
-        if (!this.#lifecycle.isCurrentAttempt(connection)) {
-          throw transportSignal?.reason ?? new UniplsSocketDroppedError();
-        }
-        this.#lifecycle.markReady(connection);
-        this.events.emit("open", {
-          session: this.#lifecycle.session,
-          connection,
-        });
-      })
-      .catch((error) => {
-        const cause = this.#translateSocketError(error);
-        if (!this.#lifecycle.isCurrentAttempt(connection)) {
-          throw cause;
-        }
-        const stage = this.lifecycle.phase === "provisioning" ? "provisioning" : "connecting";
-        const drop = this.#canonicalDrops.get(transportEpochId);
-        const attempts = this.#lifecycle.failInitialAttempt(connection, cause, drop);
-        this.#canonicalDrops.delete(transportEpochId);
-        throw new UniplsOpenError({
-          outcome: "attempt-failed",
-          stage,
-          attempts,
-          cause,
-          drop,
-        });
-      });
+    this.#pendingOpen = { promise, resolve, reject, settled: false };
     void promise.catch(() => {});
+    this.#startAttempt(connection);
     return promise;
   }
 
@@ -190,13 +178,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    */
   close(): Promise<void> {
     const context = this.#activeSessionContext();
+    const closedError = new UniplsClosedError();
     this.#transportContexts.clear();
     const closing = this.#socket.close();
-    this.#lifecycle.closeByUser();
+    this.#settlePolicy("session-closed");
+    this.#lifecycle.closeByUser(closedError);
     this.#detectorManager.stop();
-    this.#reconnectorCleanup?.();
-    this.#reconnectorCleanup = undefined;
     this.#canonicalDrops.clear();
+    this.#rejectPendingOpen(closedError);
     if (context) {
       this.events.emit("closed", context);
     }
@@ -636,109 +625,174 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
   }
 
-  async #handleDropped(epochId: number): Promise<void> {
-    if (
-      this.intent === "close" ||
-      epochId !== this.#socket.transportEpochId ||
-      !this.#reconnector
-    ) {
+  #startAttempt(connection: ConnectionId): void {
+    let transportEpochId = Number.NaN;
+    let transportSignal: AbortSignal | undefined;
+    const socketOpening = this.#socket.open(async (signal) => {
+      transportSignal = signal;
+      this.#assertCurrentTransport(transportEpochId, signal);
+      this.#lifecycle.markProvisioning(connection);
+      await this.#runProvisioner(transportEpochId, signal);
+      this.#assertCurrentTransport(transportEpochId, signal);
+      this.#detectorManager.start(transportEpochId, (identity) =>
+        this.#createDropDetectorContext(transportEpochId, signal, identity),
+      );
+    });
+    transportEpochId = this.#socket.transportEpochId;
+    this.#bindTransport(transportEpochId, connection);
+
+    void socketOpening.then(
+      () => {
+        if (!this.#lifecycle.isCurrentAttempt(connection)) return;
+        this.#assertCurrentTransport(transportEpochId, transportSignal);
+        const origin = this.#lifecycle.markReady(connection);
+        const context = { session: this.#lifecycle.session, connection };
+        this.events.emit("open", context);
+        if (origin === "initial") {
+          this.#resolvePendingOpen();
+        } else {
+          this.events.emit("reconnect", this.#lifecycle.reconnectSucceeded());
+        }
+        this.#canonicalDrops.delete(transportEpochId);
+      },
+      (error) => {
+        if (!this.#lifecycle.isCurrentAttempt(connection)) return;
+        const cause = this.#translateSocketError(error);
+        const failureDrop = this.#canonicalDrops.get(transportEpochId);
+        const context = this.#lifecycle.failAttempt(connection, cause, failureDrop);
+        this.#canonicalDrops.delete(transportEpochId);
+        if (!this.#reconnector) {
+          if (context.origin === "initial") {
+            this.#terminateInitial("attempt-failed", context);
+          } else {
+            this.#terminateRecovery("recovery-exhausted", cause);
+          }
+          return;
+        }
+        this.#runReconnectionPolicy(context);
+      },
+    );
+  }
+
+  #runReconnectionPolicy(context: ReconnectionContext): void {
+    const reconnector = this.#reconnector;
+    if (!reconnector || !this.#lifecycle.hasActiveSession) return;
+
+    const run: ReconnectionPolicyRun = {
+      context,
+      settled: false,
+      cleanupCalled: false,
+    };
+    this.#reconnectionPolicy = run;
+    const select = (outcome: ReconnectionEngineOutcome, action: () => void) => {
+      if (run.settled || this.#reconnectionPolicy !== run || !this.#lifecycle.hasActiveSession) {
+        return;
+      }
+      run.settled = true;
+      run.outcome = outcome;
+      this.#reconnectionPolicy = undefined;
+      this.#cleanupPolicy(run);
+      action();
+    };
+
+    let setupResult: ReturnType<UniplsReconnector["setup"]>;
+    try {
+      setupResult = reconnector.setup(
+        {
+          reconnect: () =>
+            select("retrying", () => {
+              const connection = this.#lifecycle.beginNextAttempt();
+              this.#startAttempt(connection);
+            }),
+          cancel: () =>
+            select("cancelled", () => {
+              this.#terminateFromPolicy(context, "cancelled");
+            }),
+          exhaust: (cause) =>
+            select("exhausted", () => {
+              this.#terminateFromPolicy(context, "exhausted", cause);
+            }),
+        },
+        context,
+      );
+    } catch (cause) {
+      this.#failReconnector(run, "setup", cause);
       return;
     }
 
-    let settled = false;
-    const cleanup = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      this.#reconnectorCleanup = undefined;
-      registeredCleanup?.();
-    };
-
-    const reconnect = async () => {
-      if (settled || this.intent === "close") {
-        return;
-      }
-      cleanup();
-
-      this.#lifecycle.recordReconnectAttempt();
-      const connection = this.#lifecycle.beginRecoveryAttempt();
-
-      try {
-        let transportEpochId = Number.NaN;
-        let transportSignal: AbortSignal | undefined;
-        const socketOpening = this.#socket.open(async (signal) => {
-          transportSignal = signal;
-          this.#assertCurrentTransport(transportEpochId, signal);
-          this.#lifecycle.markProvisioning(connection);
-          await this.#runProvisioner(transportEpochId, signal);
-          this.#assertCurrentTransport(transportEpochId, signal);
-          this.#detectorManager.start(transportEpochId, (identity) =>
-            this.#createDropDetectorContext(transportEpochId, signal, identity),
-          );
-        });
-        transportEpochId = this.#socket.transportEpochId;
-        this.#bindTransport(transportEpochId, connection);
-        await socketOpening;
-        this.#assertCurrentTransport(transportEpochId, transportSignal);
-        if (!this.#lifecycle.isCurrentAttempt(connection)) {
-          throw transportSignal?.reason ?? new UniplsSocketDroppedError();
-        }
-
-        this.#lifecycle.markReady(connection);
-        this.events.emit("open", {
-          session: this.#lifecycle.session,
-          connection,
-        });
-        const event = this.#lifecycle.reconnectSucceeded();
-        this.events.emit("reconnect", event);
-        this.#canonicalDrops.delete(epochId);
-      } catch (err) {
-        const cause = this.#translateSocketError(err);
-        if (this.#lifecycle.isCurrentAttempt(connection)) {
-          this.#lifecycle.failRecoveryAttempt(connection, cause);
-          this.#lifecycle.reconnectFailed(cause);
-        }
-      }
-    };
-
-    const cancel = () => {
-      if (settled) {
-        return;
-      }
-      cleanup();
-      this.#terminateRecovery("recovery-cancelled");
-    };
-
-    const exhaust = (cause?: unknown) => {
-      if (settled) {
-        return;
-      }
-      cleanup();
-      this.#terminateRecovery("recovery-exhausted", cause);
-    };
-
-    let registeredCleanup: (() => void) | undefined;
-
-    try {
-      const cleanupCallback = this.#reconnector.setup(
-        {
-          reconnect,
-          cancel,
-          exhaust,
-        },
-        this.#lifecycle.buildReconnectionContext(),
+    if (this.#isPromiseLike(setupResult)) {
+      void Promise.resolve(setupResult).then(
+        (cleanup) => this.#registerPolicyCleanup(run, cleanup),
+        (cause) => this.#failReconnector(run, "policy", cause),
       );
-      registeredCleanup = cleanupCallback ?? undefined;
-      if (settled) {
-        registeredCleanup?.();
-        return;
-      }
-      this.#reconnectorCleanup = cleanup;
-    } catch (cause) {
-      cleanup();
-      this.#terminateRecovery("reconnector-failed", cause);
+    } else {
+      this.#registerPolicyCleanup(run, setupResult);
+    }
+  }
+
+  #registerPolicyCleanup(run: ReconnectionPolicyRun, cleanup: void | (() => void)): void {
+    run.cleanup = cleanup ?? undefined;
+    if (run.settled) this.#cleanupPolicy(run);
+  }
+
+  #cleanupPolicy(run: ReconnectionPolicyRun): void {
+    if (run.cleanupCalled || !run.cleanup) return;
+    run.cleanupCalled = true;
+    try {
+      run.cleanup();
+    } catch {
+      // cleanup failure の型付き診断は Task 12 の resource scope で扱います。
+    }
+  }
+
+  #settlePolicy(outcome: ReconnectionEngineOutcome): void {
+    const run = this.#reconnectionPolicy;
+    if (!run || run.settled) return;
+    run.settled = true;
+    run.outcome = outcome;
+    this.#reconnectionPolicy = undefined;
+    this.#cleanupPolicy(run);
+  }
+
+  #failReconnector(
+    run: ReconnectionPolicyRun,
+    failurePoint: "setup" | "policy",
+    cause: unknown,
+  ): void {
+    if (run.settled || this.#reconnectionPolicy !== run || !this.#lifecycle.hasActiveSession)
       return;
+    run.settled = true;
+    run.outcome = "reconnector-failed";
+    this.#reconnectionPolicy = undefined;
+    this.#cleanupPolicy(run);
+
+    const { context } = run;
+    if (context.origin === "initial") {
+      const error = this.#terminateInitial("reconnector-failed", context, cause);
+      this.#emitReconnectorDiagnostic(context, failurePoint, cause, error);
+    } else {
+      const error = this.#terminateRecovery("reconnector-failed", cause);
+      if (error) this.#emitReconnectorDiagnostic(context, failurePoint, cause, error);
+    }
+  }
+
+  #terminateFromPolicy(
+    context: ReconnectionContext,
+    outcome: "cancelled" | "exhausted",
+    cause?: unknown,
+  ): void {
+    const terminalCause = cause ?? context.cause;
+    if (context.origin === "initial") {
+      this.#terminateInitial(
+        outcome === "cancelled" ? "attempts-cancelled" : "attempts-exhausted",
+        context,
+        terminalCause,
+      );
+    } else {
+      this.#terminateRecovery(
+        outcome === "cancelled" ? "recovery-cancelled" : "recovery-exhausted",
+        terminalCause,
+      );
     }
   }
 
@@ -783,14 +837,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
     this.#detectorManager.stop(transportEpochId);
 
-    if (!this.#lifecycle.hasBeenReady) {
-      const error = new UniplsDroppedError({
-        outcome: "operation-failed",
-        drop,
-        attempts: this.#lifecycle.attempts,
-        cause: report.cause,
-      });
-      this.events.emit("dropped", { ...context, drop, error });
+    const snapshot = this.#lifecycle.snapshot;
+    const isAttempting =
+      snapshot.phase === "provisioning" ||
+      (snapshot.phase === "connecting" && snapshot.status === "attempting");
+    if (isAttempting) {
       this.#transportContexts.delete(transportEpochId);
       return;
     }
@@ -810,7 +861,42 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.#terminateRecovery("recovery-exhausted", report.cause, error);
       return;
     }
-    void this.#handleDropped(transportEpochId);
+    this.#runReconnectionPolicy(this.#lifecycle.buildRecoveryContext(report.cause ?? drop));
+  }
+
+  #terminateInitial(
+    outcome: "attempt-failed" | "attempts-cancelled" | "attempts-exhausted" | "reconnector-failed",
+    context: ReconnectionContext,
+    cause: unknown = context.cause,
+  ): UniplsOpenError {
+    const error = new UniplsOpenError({
+      outcome,
+      ...(outcome === "reconnector-failed" ? {} : { stage: context.stage }),
+      attempts: context.attempts,
+      cause,
+      drop: context.drop,
+    });
+    const lastAttempt = context.attempts.at(-1);
+    const connection = lastAttempt?.connection ?? context.drop?.connection;
+    this.#settlePolicy(
+      outcome === "attempts-cancelled"
+        ? "cancelled"
+        : outcome === "attempts-exhausted"
+          ? "exhausted"
+          : outcome === "reconnector-failed"
+            ? "reconnector-failed"
+            : "exhausted",
+    );
+    this.#detectorManager.stop();
+    this.#socket.terminate(this.#socket.transportEpochId);
+    this.#lifecycle.terminateInitial(outcome, error, cause, context.drop);
+    this.#transportContexts.clear();
+    this.#canonicalDrops.clear();
+    if (connection) {
+      this.events.emit("closed", { session: context.session, connection, error });
+    }
+    this.#rejectPendingOpen(error);
+    return error;
   }
 
   #terminateRecovery(
@@ -825,8 +911,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const error =
       existingError ??
       new UniplsDroppedError({ outcome, drop, attempts: this.#lifecycle.attempts, cause });
-    this.#reconnectorCleanup?.();
-    this.#reconnectorCleanup = undefined;
+    this.#settlePolicy(
+      outcome === "recovery-cancelled"
+        ? "cancelled"
+        : outcome === "recovery-exhausted"
+          ? "exhausted"
+          : "reconnector-failed",
+    );
     this.#detectorManager.stop();
     this.#socket.terminate(this.#socket.transportEpochId);
     this.#lifecycle.terminateRecovery(outcome, error, cause);
@@ -837,6 +928,51 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       error,
     });
     return error;
+  }
+
+  #resolvePendingOpen(): void {
+    const pending = this.#pendingOpen;
+    if (!pending || pending.settled) return;
+    pending.settled = true;
+    this.#pendingOpen = undefined;
+    pending.resolve();
+  }
+
+  #rejectPendingOpen(cause: unknown): void {
+    const pending = this.#pendingOpen;
+    if (!pending || pending.settled) return;
+    pending.settled = true;
+    this.#pendingOpen = undefined;
+    pending.reject(cause);
+  }
+
+  #emitReconnectorDiagnostic(
+    context: ReconnectionContext,
+    failurePoint: "setup" | "policy",
+    cause: unknown,
+    error: UniplsOpenError | UniplsDroppedError,
+  ): void {
+    const scope = Object.freeze({ type: "session" as const, session: context.session });
+    const common = {
+      type: "reconnector-failed" as const,
+      severity: "error" as const,
+      scope,
+      occurredAt: Date.now(),
+      failurePoint,
+      cause,
+    };
+    const diagnostic: UniplsDiagnostic =
+      context.origin === "initial"
+        ? Object.freeze({ ...common, context: "initial-open", error: error as UniplsOpenError })
+        : Object.freeze({ ...common, context: "recovery", error: error as UniplsDroppedError });
+    this.events.emitIsolated("diagnostic", diagnostic);
+  }
+
+  #isPromiseLike(value: unknown): value is PromiseLike<void | (() => void)> {
+    return (
+      (typeof value === "object" && value !== null && "then" in value) ||
+      (typeof value === "function" && "then" in value)
+    );
   }
 
   #assertCurrentTransport(transportEpochId: number, signal?: AbortSignal): void {

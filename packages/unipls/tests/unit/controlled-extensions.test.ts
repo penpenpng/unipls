@@ -54,14 +54,17 @@ describe("制御可能な拡張 hook", () => {
       },
       {
         session,
-        sessionAttempts: [],
-        allAttempts: [],
+        origin: "initial",
+        stage: "connecting",
+        attempt: 1,
+        cause: undefined,
+        attempts: Object.freeze([]),
         signal: new AbortController().signal,
       },
     );
     const reconnection = reconnector.invocations.take();
     reconnection.reconnect();
-    cleanup();
+    if (typeof cleanup === "function") cleanup();
 
     // 別の cancel 操作と disposer を実行します。
     const secondCleanup = reconnector.setup(
@@ -72,14 +75,17 @@ describe("制御可能な拡張 hook", () => {
       },
       {
         session,
-        sessionAttempts: [],
-        allAttempts: [],
+        origin: "initial",
+        stage: "connecting",
+        attempt: 2,
+        cause: undefined,
+        attempts: Object.freeze([]),
         signal: new AbortController().signal,
       },
     );
     const cancelledReconnection = reconnector.invocations.take();
     cancelledReconnection.cancel();
-    secondCleanup();
+    if (typeof secondCleanup === "function") secondCleanup();
 
     // detector の drop callback と cleanup を実行します。
     const dropCalls = new CallbackProbe();
@@ -110,8 +116,11 @@ describe("制御可能な拡張 hook", () => {
         { reconnect() {}, cancel() {}, exhaust() {} },
         {
           session,
-          sessionAttempts: [],
-          allAttempts: [],
+          origin: "initial",
+          stage: "connecting",
+          attempt: 1,
+          cause: failure,
+          attempts: Object.freeze([]),
           signal: new AbortController().signal,
         },
       ),

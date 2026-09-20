@@ -35,6 +35,11 @@ export class ControlledReconnectorInvocation {
     this.#act("reconnect", this.#actions.reconnect);
   }
 
+  /** settle 済み action を再送し、client 側の冪等性を検証します。 */
+  replayReconnect(): void {
+    this.#actions.reconnect();
+  }
+
   cancel(): void {
     this.#act("cancel", this.#actions.cancel);
   }
@@ -60,18 +65,34 @@ export class ControlledReconnector implements UniplsReconnector {
   readonly invocations = new ObservationQueue<ControlledReconnectorInvocation>();
   #nextSetupFailure: unknown;
   #hasSetupFailure = false;
+  #nextSetupRejection: unknown;
+  #hasSetupRejection = false;
 
   failNextSetup(cause: unknown): void {
     this.#nextSetupFailure = cause;
     this.#hasSetupFailure = true;
   }
 
-  setup(actions: UniplsReconnectorActions, context: ReconnectionContext): () => void {
+  rejectNextSetup(cause: unknown): void {
+    this.#nextSetupRejection = cause;
+    this.#hasSetupRejection = true;
+  }
+
+  setup(
+    actions: UniplsReconnectorActions,
+    context: ReconnectionContext,
+  ): (() => void) | PromiseLike<void | (() => void)> {
     if (this.#hasSetupFailure) {
       const cause = this.#nextSetupFailure;
       this.#nextSetupFailure = undefined;
       this.#hasSetupFailure = false;
       throw cause;
+    }
+    if (this.#hasSetupRejection) {
+      const cause = this.#nextSetupRejection;
+      this.#nextSetupRejection = undefined;
+      this.#hasSetupRejection = false;
+      return Promise.reject(cause);
     }
 
     const invocation = new ControlledReconnectorInvocation(actions, context);

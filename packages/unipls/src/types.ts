@@ -117,6 +117,47 @@ export type UniplsDroppedErrorOutcome =
   | "recovery-exhausted"
   | "reconnector-failed";
 
+/** 再接続エンジンが1回の判断を確定した結果です。 */
+export type ReconnectionEngineOutcome =
+  | "retrying"
+  | "succeeded"
+  | "cancelled"
+  | "exhausted"
+  | "reconnector-failed"
+  | "session-closed";
+
+/** 診断情報が属する公開リソースの範囲です。 */
+export type UniplsDiagnosticScope = Readonly<{
+  type: "session";
+  session: SessionId;
+}>;
+
+/** reconnector の実行に失敗したことを通知する診断情報です。 */
+export type ReconnectorFailedDiagnostic =
+  | Readonly<{
+      type: "reconnector-failed";
+      severity: "error";
+      scope: UniplsDiagnosticScope;
+      occurredAt: number;
+      context: "initial-open";
+      failurePoint: "setup" | "policy";
+      cause: unknown;
+      error: import("./errors.ts").UniplsOpenError;
+    }>
+  | Readonly<{
+      type: "reconnector-failed";
+      severity: "error";
+      scope: UniplsDiagnosticScope;
+      occurredAt: number;
+      context: "recovery";
+      failurePoint: "setup" | "policy";
+      cause: unknown;
+      error: import("./errors.ts").UniplsDroppedError;
+    }>;
+
+/** Unipls が継続不能または継続可能な内部失敗を通知する診断情報です。 */
+export type UniplsDiagnostic = ReconnectorFailedDiagnostic;
+
 /** 終了した論理セッション、または未開始状態を表す不変なスナップショットです。 */
 export type ClosedLifecycleSnapshot =
   | Readonly<{ phase: "closed"; reason: "idle" }>

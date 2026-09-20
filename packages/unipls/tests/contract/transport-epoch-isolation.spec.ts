@@ -80,6 +80,7 @@ describe("接続試行の分離", () => {
 
     // provisioning 中の接続を drop し、現在の3つ目の試行を開始します。
     scenario.drop(1);
+    await flushMicrotasks();
     scenario.reconnector.invocations.take().reconnect();
     const currentConnecting = scenario.client.lifecycle;
 

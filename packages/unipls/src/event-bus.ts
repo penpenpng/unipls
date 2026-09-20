@@ -46,6 +46,21 @@ export class EventBus<TEvents extends Record<string, any>> {
     }
   }
 
+  /** listener の例外を相互に隔離し、次の microtask で event を通知します。 */
+  emitIsolated<K extends keyof TEvents>(event: K, args: TEvents[K]): void {
+    const listeners = [...this.getListeners(event)];
+    queueMicrotask(() => {
+      for (const [listener, options] of listeners) {
+        if (options.once) this.off(event, listener);
+        try {
+          listener(args);
+        } catch {
+          // 診断 listener の失敗は library の処理へ逆流させません。
+        }
+      }
+    });
+  }
+
   /** この view から登録した listener をまとめて解放できる view を作成します。 */
   spawnEventBusView(): EventBusView<TEvents> {
     return new EventBusView(this);

@@ -280,7 +280,7 @@ describe("Unipls の lifecycle", () => {
 
   it("ready 接続を公開せずに provisioning 失敗を記録する", async () => {
     // 既知の原因で provisioning が失敗する初回接続を用意します。
-    const scenario = new UniplsRaceScenario();
+    const scenario = new UniplsRaceScenario({ reconnectable: false });
     const cause = new Error("authentication rejected");
     const opening = scenario.beginOpen();
     scenario.transport.connection(0).emitOpen();

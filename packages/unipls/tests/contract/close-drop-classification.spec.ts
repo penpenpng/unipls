@@ -77,7 +77,7 @@ describe("close と drop の分類", () => {
 
   it("接続成立前の peer close を初回 open error に記録する", async () => {
     // 初回試行を開始し、接続成立前に peer close を発生させます。
-    const scenario = new UniplsRaceScenario({ detectorCount: 0 });
+    const scenario = new UniplsRaceScenario({ detectorCount: 0, reconnectable: false });
     const opening = scenario.beginOpen();
     scenario.transport.current.emitClose({ code: 1000, reason: "refused", wasClean: true });
     const error = await opening.then(
@@ -262,7 +262,7 @@ describe("回復の終端結果", () => {
     });
     const closedErrors: UniplsDroppedError[] = [];
     scenario.client.on("closed", ({ error }) => {
-      if (error) closedErrors.push(error);
+      if (error instanceof UniplsDroppedError) closedErrors.push(error);
     });
     await openScenario(scenario);
     const firstOpen = scenario.client.lifecycle;

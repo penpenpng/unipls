@@ -1258,15 +1258,15 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 6: reconnection engine に明示的な outcome を導入する
 
-- [ ] connection と provisioning の失敗を 1 回の attempt outcome に統一する。
-- [ ] initial と recovery で同じ engine を使い、policy context に `origin`、`stage`、attempt 番号、原因を渡す。
-- [ ] reconnect policyへcanonicalな`UniplsDrop`を渡し、close code固有のretry/terminal判定をpolicy側で行えるようにする。
-- [ ] `retrying`、`succeeded`、`cancelled`、`exhausted`、`reconnector-failed`、`session-closed`を明示的なoutcomeとして表す。
-- [ ] reconnector setup/policy errorを握りつぶさず`reconnector-failed` terminal outcomeとsession-scoped diagnosticへ変換し、context、failure point、元のcauseを保持する。
-- [ ] cancel/exhaustion、reconnector failureと失敗後の次回 setup を一貫して処理する。
-- [ ] attempt 履歴を immutable snapshot にし、開始・終了・結果・原因を記録する。
-- [ ] cleanup と action を冪等にし、settle 後の `reconnect/cancel` を無効化する。
-- [ ] `cancel` / exhaustion / reconnector failureをsession coordinatorへterminal outcomeとして通知し、同じsessionを再開できないようにする。
+- [x] connection と provisioning の失敗を 1 回の attempt outcome に統一する。
+- [x] initial と recovery で同じ engine を使い、policy context に `origin`、`stage`、attempt 番号、原因を渡す。
+- [x] reconnect policyへcanonicalな`UniplsDrop`を渡し、close code固有のretry/terminal判定をpolicy側で行えるようにする。
+- [x] `retrying`、`succeeded`、`cancelled`、`exhausted`、`reconnector-failed`、`session-closed`を明示的なoutcomeとして表す。
+- [x] reconnector setup/policy errorを握りつぶさず`reconnector-failed` terminal outcomeとsession-scoped diagnosticへ変換し、context、failure point、元のcauseを保持する。
+- [x] cancel/exhaustion、reconnector failureと失敗後の次回 setup を一貫して処理する。
+- [x] attempt 履歴を immutable snapshot にし、開始・終了・結果・原因を記録する。
+- [x] cleanup と action を冪等にし、settle 後の `reconnect/cancel` を無効化する。
+- [x] `cancel` / exhaustion / reconnector failureをsession coordinatorへterminal outcomeとして通知し、同じsessionを再開できないようにする。
 
 完了条件:
 
