@@ -175,6 +175,26 @@ export type MessagePredicateFailedDiagnostic = Readonly<{
   policy: PredicateErrorPolicy;
 }>;
 
+/** stream の callback が同期的に失敗したことを通知する診断情報です。 */
+export type StreamCallbackFailedDiagnostic = Readonly<{
+  type: "stream-callback-failed";
+  severity: "error";
+  scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
+  occurredAt: number;
+  cause: unknown;
+  policy: import("./async-results.ts").StreamCallbackErrorPolicy;
+}>;
+
+/** lossy buffer policy によってメッセージを破棄したことを通知する診断情報です。 */
+export type StreamMessageDroppedDiagnostic = Readonly<{
+  type: "stream-message-dropped";
+  severity: "warning";
+  scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
+  occurredAt: number;
+  strategy: "latest" | "drop-oldest" | "drop-newest";
+  capacity: number;
+}>;
+
 /** reconnector の実行に失敗したことを通知する診断情報です。 */
 export type ReconnectorFailedDiagnostic =
   | Readonly<{
@@ -202,7 +222,9 @@ export type ReconnectorFailedDiagnostic =
 export type UniplsDiagnostic =
   | ReconnectorFailedDiagnostic
   | MessageDeserializationFailedDiagnostic
-  | MessagePredicateFailedDiagnostic;
+  | MessagePredicateFailedDiagnostic
+  | StreamCallbackFailedDiagnostic
+  | StreamMessageDroppedDiagnostic;
 
 /** 終了した論理セッション、または未開始状態を表す不変なスナップショットです。 */
 export type ClosedLifecycleSnapshot =

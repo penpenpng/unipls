@@ -1,5 +1,20 @@
-import { type UniplsSubscriber } from "../async-results.ts";
-import { UniplsTimeoutError } from "../errors.ts";
+import {
+  AsyncStreamDelivery,
+  CallbackStreamDelivery,
+  type AsyncSubscription,
+  type NormalizedStreamBuffer,
+  type StreamCallbackErrorPolicy,
+  type StreamDeliveryAdapter,
+  type StreamFinalization,
+  type SubscriptionHandle,
+} from "../async-results.ts";
+import {
+  UniplsBufferOverflowError,
+  UniplsClosedError,
+  UniplsDroppedError,
+  UniplsOpenError,
+  UniplsTimeoutError,
+} from "../errors.ts";
 import type { EventBus } from "../event-bus.ts";
 import type { OperationId, OperationType, SessionId } from "../types.ts";
 import { MessageDispatcher, type MessageDeliveryMode } from "./message-dispatcher.ts";
@@ -154,7 +169,9 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
 
 export class StreamOperationScope<T, TMessage, TEvents extends Record<string, unknown>> {
   readonly #resources;
-  readonly #subscriber;
+  readonly #closed;
+  readonly #delivery: StreamDeliveryAdapter<T>;
+  #resolveClosed!: (finalization: StreamFinalization<T>) => void;
   #resulted = false;
 
   constructor(params: {
@@ -164,16 +181,49 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
     operationType: OperationType;
     mode: MessageDeliveryMode;
     receive: (message: TMessage) => void;
-    subscriber: UniplsSubscriber<T>;
+    delivery:
+      | Readonly<{
+          type: "callback";
+          next: (message: T) => unknown;
+          policy: StreamCallbackErrorPolicy;
+          onCallbackError: (cause: unknown, policy: StreamCallbackErrorPolicy) => void;
+        }>
+      | Readonly<{
+          type: "iterator";
+          buffer: NormalizedStreamBuffer;
+          onMessageDropped: (
+            strategy: "latest" | "drop-oldest" | "drop-newest",
+            capacity: number,
+          ) => void;
+        }>;
     signal?: AbortSignal;
     timeout?: number;
   }) {
-    this.#subscriber = params.subscriber;
     this.#resources = new OperationResources(params);
+    this.#closed = new Promise<StreamFinalization<T>>((resolve) => {
+      this.#resolveClosed = resolve;
+    });
+    this.#delivery =
+      params.delivery.type === "callback"
+        ? new CallbackStreamDelivery({
+            next: params.delivery.next,
+            policy: params.delivery.policy,
+            unsubscribe: this.unsubscribe,
+            closed: this.#closed,
+            onCallbackError: params.delivery.onCallbackError,
+          })
+        : new AsyncStreamDelivery({
+            buffer: params.delivery.buffer,
+            unsubscribe: this.unsubscribe,
+            closed: this.#closed,
+            onOverflow: () => this.raiseFatalError(new UniplsBufferOverflowError()),
+            onDropped: params.delivery.onMessageDropped,
+          });
     this.#resources.arm({
       signal: params.signal,
       timeout: params.timeout,
-      onAbort: (reason) => this.#finish("aborted", reason),
+      onAbort: (reason) =>
+        this.#finish(Object.freeze({ ok: false, reason: "aborted", error: reason })),
       onTimeout: () => this.raiseFatalError(new UniplsTimeoutError()),
     });
   }
@@ -202,47 +252,52 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
     return this.#resulted;
   }
 
+  get handle(): SubscriptionHandle<StreamFinalization<T>> | AsyncSubscription<T> {
+    return this.#delivery.handle;
+  }
+
   handleMessage = (message: T) => {
-    if (!this.#resulted) this.#subscriber.onMessage?.(message);
+    if (!this.#resulted) this.#delivery.push(message);
   };
 
   handleTerminator = (message: T) => {
-    this.#finish("terminated", undefined, message);
-  };
-
-  handleError = (error: unknown) => {
-    if (!this.#resulted) this.#subscriber.onError?.(error);
+    this.#finish(Object.freeze({ ok: true, reason: "terminated", message }));
   };
 
   raiseFatalError = (error: unknown) => {
-    this.#finish("fatal-error", error);
+    const finalization: StreamFinalization<T> =
+      error instanceof UniplsTimeoutError
+        ? Object.freeze({ ok: false, reason: "timeout", error })
+        : error instanceof UniplsOpenError
+          ? Object.freeze({ ok: false, reason: "open-error", error })
+          : error instanceof UniplsDroppedError
+            ? Object.freeze({ ok: false, reason: "dropped", error })
+            : error instanceof UniplsBufferOverflowError
+              ? Object.freeze({ ok: false, reason: "buffer-overflow", error })
+              : error instanceof UniplsClosedError
+                ? Object.freeze({ ok: true, reason: "closed" })
+                : Object.freeze({ ok: false, reason: "fatal-error", error });
+    this.#finish(finalization);
   };
 
   unsubscribe = () => {
-    this.#finish("unsubscribed");
+    this.#finish(Object.freeze({ ok: true, reason: "unsubscribed" }));
   };
 
-  #finish(
-    reason: "terminated" | "unsubscribed" | "aborted" | "fatal-error",
-    error?: unknown,
-    message?: T,
-  ): void {
-    if (this.#resulted) return;
+  close = () => {
+    this.#finish(Object.freeze({ ok: true, reason: "closed" }));
+  };
+
+  failCallback = (error: unknown) => {
+    this.#finish(Object.freeze({ ok: false, reason: "callback-error", error }));
+  };
+
+  #finish(finalization: StreamFinalization<T>): boolean {
+    if (this.#resulted) return false;
     this.#resulted = true;
-    this.#resources.cleanup(error);
-    try {
-      if (reason === "terminated") this.#subscriber.onTerminated?.(message as T);
-      if (reason === "unsubscribed") this.#subscriber.onUnsubscribed?.();
-      if (reason === "aborted" || reason === "fatal-error") {
-        this.#subscriber.onFatalError?.(error);
-      }
-    } catch (cause) {
-      console.warn("購読の終了 callback でエラーが発生しました:", cause);
-    }
-    try {
-      this.#subscriber.finally?.({ reason, error });
-    } catch (cause) {
-      console.warn("購読の finally callback でエラーが発生しました:", cause);
-    }
+    this.#resources.cleanup(finalization.ok ? undefined : finalization.error);
+    this.#delivery.finish(finalization);
+    this.#resolveClosed(finalization);
+    return true;
   }
 }

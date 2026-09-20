@@ -15,6 +15,11 @@ export class EventBus<TEvents extends Record<string, any>> {
     return (this.#listeners[event] ??= new Map());
   }
 
+  /** 指定した event に登録済み listener がある場合は `true` を返します。 */
+  hasListeners<K extends keyof TEvents>(event: K): boolean {
+    return (this.#listeners[event]?.size ?? 0) > 0;
+  }
+
   /** event listener を登録し、解除関数を返します。 */
   on<K extends keyof TEvents>(
     event: K,
@@ -78,6 +83,7 @@ export class EventBus<TEvents extends Record<string, any>> {
 class EventBusView<TEvents extends Record<string, any>> {
   #events: EventBus<TEvents>;
   #cleanups: Set<() => void> = new Set();
+  #disposed = false;
 
   constructor(events: EventBus<TEvents>) {
     this.#events = events;
@@ -89,6 +95,7 @@ class EventBusView<TEvents extends Record<string, any>> {
     listener: EventListener<TEvents, K>,
     options?: { once?: boolean },
   ): () => void {
+    if (this.#disposed) return () => {};
     const cleanup = this.#events.on(event, listener, options);
     this.#cleanups.add(cleanup);
 
@@ -100,6 +107,8 @@ class EventBusView<TEvents extends Record<string, any>> {
 
   /** この view から登録したすべての listener を解除します。 */
   [Symbol.dispose] = () => {
+    if (this.#disposed) return;
+    this.#disposed = true;
     for (const cleanup of this.#cleanups) {
       cleanup();
     }

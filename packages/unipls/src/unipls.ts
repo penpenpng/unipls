@@ -1,5 +1,11 @@
 import { AsyncResult } from "./async-result.ts";
-import type { UniplsSubscriber } from "./async-results.ts";
+import {
+  normalizeStreamBuffer,
+  type AsyncSubscription,
+  type StreamCallbackErrorPolicy,
+  type StreamFinalization,
+  type SubscriptionHandle,
+} from "./async-results.ts";
 import type { DropDetectorContext } from "./drop-detector";
 import { DropDetectorManager } from "./drop-detector/drop-detector-manager.ts";
 import {
@@ -39,19 +45,23 @@ import type {
   UniplsDroppedErrorOutcome,
   UniplsLifecycleSnapshot,
   PredicateErrorPolicy,
+  StreamCallbackFailedDiagnostic,
+  StreamMessageDroppedDiagnostic,
   WebSocketData,
 } from "./types.ts";
 import { UniplsSocket, type UniplsSocketDropReport } from "./unipls-socket";
 import type {
   UniplsCastParams,
-  UniplsListenOptions,
+  UniplsListenCallbackParams,
+  UniplsListenIteratorParams,
   UniplsMessageFactory,
   UniplsNextParams,
   UniplsParams,
   UniplsProvisioner,
   UniplsProvisioningContext,
   UniplsRequestParams,
-  UniplsSubscribeParams,
+  UniplsSubscribeCallbackParams,
+  UniplsSubscribeIteratorParams,
 } from "./unipls.interface.ts";
 
 /** 公開 event を発生させた論理セッションと接続を識別します。 */
@@ -222,7 +232,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
     validateOperationTimeout(timeout);
-    if (signal?.aborted) throw signal.reason;
     const session = this.#lifecycle.acceptOperation();
 
     let scope!: SingleOperationScope<TOutput, TOutput, UniplsEvents<TOutput>>;
@@ -269,27 +278,42 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * selector に一致する受信メッセージを購読します。
    *
-   * @returns 購読を解除する関数を返します。
+   * callback の `next` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
+   * callback の戻り値や Promise は待機しないため、callback delivery は逐次実行を保証しません。
    *
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
-  listen(params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>): () => void {
+  listen(
+    params: UniplsListenCallbackParams<TOutput>,
+  ): SubscriptionHandle<StreamFinalization<TOutput>>;
+  listen(params: UniplsListenIteratorParams<TOutput>): AsyncSubscription<TOutput>;
+  listen(
+    params: UniplsListenCallbackParams<TOutput> | UniplsListenIteratorParams<TOutput>,
+  ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
     return this.#listen(params, { type: "ready" });
   }
 
   #listen(
-    params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>,
+    params: UniplsListenCallbackParams<TOutput> | UniplsListenIteratorParams<TOutput>,
     mode: MessageDeliveryMode,
-  ): () => void {
+  ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
     const selector = params.selector ?? (() => true);
     const terminator = params.terminator ?? (() => false);
     const signal = params.signal;
     const timeout = params.timeout;
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
+    const callback = params.next;
+    if (callback !== undefined && typeof callback !== "function") {
+      throw new TypeError("next には callback 関数を指定してください。");
+    }
+    const callbackError = params.callbackError ?? "continue";
+    if (callback !== undefined && callbackError !== "continue" && callbackError !== "unsubscribe") {
+      throw new TypeError("callbackError に未対応の値が指定されました。");
+    }
+    const buffer = callback === undefined ? normalizeStreamBuffer(params.buffer) : undefined;
     validateOperationTimeout(timeout);
-    if (signal?.aborted) throw signal.reason;
     const session = this.#lifecycle.acceptOperation();
 
     let scope!: StreamOperationScope<TOutput, TOutput, UniplsEvents<TOutput>>;
@@ -320,7 +344,24 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           onPredicateFailure: scope.raiseFatalError,
         });
       },
-      subscriber: params,
+      delivery:
+        callback === undefined
+          ? {
+              type: "iterator",
+              buffer: buffer as ReturnType<typeof normalizeStreamBuffer>,
+              onMessageDropped: (strategy, capacity) => {
+                this.#emitStreamMessageDroppedDiagnostic(scope, strategy, capacity);
+              },
+            }
+          : {
+              type: "callback",
+              next: callback,
+              policy: callbackError as StreamCallbackErrorPolicy,
+              onCallbackError: (cause, policy) => {
+                if (policy === "unsubscribe") scope.failCallback(cause);
+                this.#emitStreamCallbackFailedDiagnostic(scope, cause, policy);
+              },
+            },
       signal,
       timeout,
     });
@@ -337,10 +378,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
     events.on("closed", ({ session: closedSession, error }) => {
       if (closedSession !== scope.session) return;
-      scope.raiseFatalError(error ?? new UniplsClosedError());
+      if (error) scope.raiseFatalError(error);
+      else scope.close();
     });
 
-    return scope.unsubscribe;
+    return scope.handle;
   }
 
   /**
@@ -392,7 +434,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
     validateOperationTimeout(timeout);
-    if (signal?.aborted) throw signal.reason;
     const session = this.#lifecycle.acceptOperation();
 
     let scope!: SingleOperationScope<TOutput, TOutput, UniplsEvents<TOutput>>;
@@ -404,7 +445,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       operationType: "request",
       mode,
       receive: (message) => {
-        if (!requestSession.sent) return;
+        if (!requestSession.observing) return;
         this.#processMessage({
           scope,
           message,
@@ -435,26 +476,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       query: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
-      requestSession.send(query, {
+      return requestSession.send(query, {
         selector,
         isDone: () => scope.resulted,
+        canSend: () => this.#canSend(scope.session, mode),
       });
     };
 
     const sendInitial = () => {
-      if (!requestSession.sent) request(query, { selector });
+      if (!requestSession.attempted) void request(query, { selector });
     };
-    if (mode.type === "transport" || this.#isSessionReady(session)) sendInitial();
-    else {
+    if (mode.type === "ready") {
       events.on("open", ({ session: openedSession }) => {
         if (openedSession === session) sendInitial();
       });
     }
+    if (mode.type === "transport" || this.#isSessionReady(session)) sendInitial();
 
     const onReconnected = createOnReconnectedHandler({
       events,
       isDone: () => scope.resulted,
-      reset: () => requestSession.resetForReconnect(),
       request,
       onError: scope.reject,
     });
@@ -465,11 +506,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       isDone: () => scope.resulted,
       onFatal: scope.reject,
       onReconnected,
+      pauseForReconnect: () => requestSession.pauseForReconnect(),
+      resumeWithoutResend: () => requestSession.resumeWithoutResend(),
       getQuery: () => requestSession.currentQuery,
       getSelector: () => requestSession.currentSelector,
     });
     events.on("dropped", (event) => {
-      if (event.session === scope.session) onDropped(event);
+      if (event.session === scope.session && requestSession.attempted) onDropped(event);
     });
 
     events.on("closed", ({ session: closedSession, error }) => {
@@ -485,7 +528,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const signal = params.signal;
     const timeout = params.timeout;
     validateOperationTimeout(timeout);
-    if (signal?.aborted) throw signal.reason;
     const session = this.#lifecycle.acceptOperation();
 
     const scope = new SingleOperationScope<void, TOutput, UniplsEvents<TOutput>>({
@@ -497,12 +539,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       timeout,
     });
     const { events } = scope;
+    let attempted = false;
 
     const sendOnce = () => {
-      if (scope.resulted) return;
+      if (scope.resulted || attempted) return;
       try {
         const payload = Unipls.#evaluateQuery(query);
         if (scope.resulted) return;
+        if (!force && !this.#isSessionReady(session)) return;
+        attempted = true;
         this.#socket
           .enqueue(payload, { force, signal: scope.signal })
           .then(() => scope.resolve())
@@ -514,13 +559,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
     };
 
-    if (force || this.#isSessionReady(session)) {
-      sendOnce();
-    } else {
+    if (!force) {
       events.on("open", ({ session: openedSession }) => {
         if (openedSession === session) sendOnce();
       });
     }
+    if (force || this.#isSessionReady(session)) sendOnce();
 
     events.on("closed", ({ session: closedSession, error }) => {
       if (closedSession !== scope.session) return;
@@ -549,14 +593,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         this.#assertCurrentTransport(transportEpochId, signal);
         return this.#request({ ...params, signal: operationSignal }, mode);
       },
-      listen: (params) => {
+      listen: ((
+        params: UniplsListenCallbackParams<TOutput> | UniplsListenIteratorParams<TOutput>,
+      ) => {
         this.#assertCurrentTransport(transportEpochId, signal);
-        this.#listen({ ...params, signal: operationSignal }, mode);
-      },
-      subscribe: (params) => {
+        return this.#listen({ ...params, signal: operationSignal }, mode);
+      }) as UniplsProvisioningContext<TInput, TOutput>["listen"],
+      subscribe: ((
+        params:
+          | UniplsSubscribeCallbackParams<TInput, TOutput>
+          | UniplsSubscribeIteratorParams<TInput, TOutput>,
+      ) => {
         this.#assertCurrentTransport(transportEpochId, signal);
         return this.#subscribe({ ...params, signal: operationSignal }, mode);
-      },
+      }) as UniplsProvisioningContext<TInput, TOutput>["subscribe"],
       session: sessionId,
       isSessionBeginning,
     };
@@ -1066,14 +1116,21 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * メッセージを1件送信し、selector に一致する受信メッセージを購読します。初期化中の場合は ready になるまで送信を待ちます。
    *
-   * @returns 購読を解除する関数を返します
+   * callback の `next` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
+   * callback の戻り値や Promise は待機しないため、callback delivery は逐次実行を保証しません。
    *
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
   subscribe(
-    params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
-  ): () => void {
+    params: UniplsSubscribeCallbackParams<TInput, TOutput>,
+  ): SubscriptionHandle<StreamFinalization<TOutput>>;
+  subscribe(params: UniplsSubscribeIteratorParams<TInput, TOutput>): AsyncSubscription<TOutput>;
+  subscribe(
+    params:
+      | UniplsSubscribeCallbackParams<TInput, TOutput>
+      | UniplsSubscribeIteratorParams<TInput, TOutput>,
+  ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
     return this.#subscribe(params, { type: "ready" });
   }
 
@@ -1081,15 +1138,25 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * {@link Unipls.subscribe} と同じですが、WebSocket が開いた時点で初期化の完了を待たずに送信します。
    */
   subscribeForce(
-    params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
-  ): () => void {
+    params: UniplsSubscribeCallbackParams<TInput, TOutput>,
+  ): SubscriptionHandle<StreamFinalization<TOutput>>;
+  subscribeForce(
+    params: UniplsSubscribeIteratorParams<TInput, TOutput>,
+  ): AsyncSubscription<TOutput>;
+  subscribeForce(
+    params:
+      | UniplsSubscribeCallbackParams<TInput, TOutput>
+      | UniplsSubscribeIteratorParams<TInput, TOutput>,
+  ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
     return this.#subscribe(params, this.#activeTransportMode());
   }
 
   #subscribe(
-    params: UniplsSubscriber<TOutput> & UniplsSubscribeParams<TInput, TOutput>,
+    params:
+      | UniplsSubscribeCallbackParams<TInput, TOutput>
+      | UniplsSubscribeIteratorParams<TInput, TOutput>,
     mode: MessageDeliveryMode,
-  ): () => void {
+  ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
     const query = params.query;
     const selector = params.selector;
     const terminator = params.terminator ?? (() => false);
@@ -1097,8 +1164,16 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const timeout = params.timeout;
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
+    const callback = params.next;
+    if (callback !== undefined && typeof callback !== "function") {
+      throw new TypeError("next には callback 関数を指定してください。");
+    }
+    const callbackError = params.callbackError ?? "continue";
+    if (callback !== undefined && callbackError !== "continue" && callbackError !== "unsubscribe") {
+      throw new TypeError("callbackError に未対応の値が指定されました。");
+    }
+    const buffer = callback === undefined ? normalizeStreamBuffer(params.buffer) : undefined;
     validateOperationTimeout(timeout);
-    if (signal?.aborted) throw signal.reason;
     const session = this.#lifecycle.acceptOperation();
 
     let scope!: StreamOperationScope<TOutput, TOutput, UniplsEvents<TOutput>>;
@@ -1110,7 +1185,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       operationType: "subscribe",
       mode,
       receive: (message) => {
-        if (!requestSession.sent) return;
+        if (!requestSession.observing) return;
         const terminatorResult = this.#processMessage({
           scope,
           message,
@@ -1131,7 +1206,24 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           onPredicateFailure: scope.raiseFatalError,
         });
       },
-      subscriber: params,
+      delivery:
+        callback === undefined
+          ? {
+              type: "iterator",
+              buffer: buffer as ReturnType<typeof normalizeStreamBuffer>,
+              onMessageDropped: (strategy, capacity) => {
+                this.#emitStreamMessageDroppedDiagnostic(scope, strategy, capacity);
+              },
+            }
+          : {
+              type: "callback",
+              next: callback,
+              policy: callbackError as StreamCallbackErrorPolicy,
+              onCallbackError: (cause, policy) => {
+                if (policy === "unsubscribe") scope.failCallback(cause);
+                this.#emitStreamCallbackFailedDiagnostic(scope, cause, policy);
+              },
+            },
       signal,
       timeout,
     });
@@ -1153,26 +1245,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       query: UniplsMessageFactory<TInput>,
       { selector }: { selector: (data: TOutput) => boolean },
     ) => {
-      requestSession.send(query, {
+      return requestSession.send(query, {
         selector,
         isDone: () => scope.resulted,
+        canSend: () => this.#canSend(scope.session, mode),
       });
     };
 
     const sendInitial = () => {
-      if (!requestSession.sent) request(query, { selector });
+      if (!requestSession.attempted) void request(query, { selector });
     };
-    if (mode.type === "transport" || this.#isSessionReady(session)) sendInitial();
-    else {
+    if (mode.type === "ready") {
       events.on("open", ({ session: openedSession }) => {
         if (openedSession === session) sendInitial();
       });
     }
+    if (mode.type === "transport" || this.#isSessionReady(session)) sendInitial();
 
     const onReconnected = createOnReconnectedHandler({
       events,
       isDone: () => scope.resulted,
-      reset: () => requestSession.resetForReconnect(),
       request,
       onError: scope.raiseFatalError,
     });
@@ -1183,19 +1275,22 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       isDone: () => scope.resulted,
       onFatal: scope.raiseFatalError,
       onReconnected,
+      pauseForReconnect: () => requestSession.pauseForReconnect(),
+      resumeWithoutResend: () => requestSession.resumeWithoutResend(),
       getQuery: () => requestSession.currentQuery,
       getSelector: () => requestSession.currentSelector,
     });
     events.on("dropped", (event) => {
-      if (event.session === scope.session) onDropped(event);
+      if (event.session === scope.session && requestSession.attempted) onDropped(event);
     });
 
     events.on("closed", ({ session: closedSession, error }) => {
       if (closedSession !== scope.session) return;
-      scope.raiseFatalError(error ?? new UniplsClosedError());
+      if (error) scope.raiseFatalError(error);
+      else scope.close();
     });
 
-    return scope.unsubscribe;
+    return scope.handle;
   }
 
   static #evaluateQuery<TInput>(query: UniplsMessageFactory<TInput>): TInput {
@@ -1240,6 +1335,70 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #isSessionReady(session: SessionId): boolean {
     const snapshot = this.#lifecycle.snapshot;
     return snapshot.phase === "open" && snapshot.session === session;
+  }
+
+  #canSend(session: SessionId, mode: MessageDeliveryMode): boolean {
+    if (mode.type === "ready") return this.#isSessionReady(session);
+    const snapshot = this.#lifecycle.snapshot;
+    if (snapshot.phase === "closed" || snapshot.session !== session) return false;
+    return (
+      (snapshot.phase === "open" ||
+        snapshot.phase === "provisioning" ||
+        (snapshot.phase === "connecting" && snapshot.status === "attempting")) &&
+      snapshot.connection === mode.connection
+    );
+  }
+
+  #emitStreamCallbackFailedDiagnostic(
+    scope: Readonly<{
+      operation: import("./types.ts").OperationId;
+      operationType: import("./types.ts").OperationType;
+      session: SessionId;
+    }>,
+    cause: unknown,
+    policy: StreamCallbackErrorPolicy,
+  ): void {
+    if (!this.events.hasListeners("diagnostic")) return;
+    const diagnostic: StreamCallbackFailedDiagnostic = Object.freeze({
+      type: "stream-callback-failed",
+      severity: "error",
+      scope: Object.freeze({
+        type: "operation",
+        session: scope.session,
+        operation: scope.operation,
+        operationType: scope.operationType,
+      }),
+      occurredAt: Date.now(),
+      cause,
+      policy,
+    });
+    this.events.emitIsolated("diagnostic", diagnostic);
+  }
+
+  #emitStreamMessageDroppedDiagnostic(
+    scope: Readonly<{
+      operation: import("./types.ts").OperationId;
+      operationType: import("./types.ts").OperationType;
+      session: SessionId;
+    }>,
+    strategy: "latest" | "drop-oldest" | "drop-newest",
+    capacity: number,
+  ): void {
+    if (!this.events.hasListeners("diagnostic")) return;
+    const diagnostic: StreamMessageDroppedDiagnostic = Object.freeze({
+      type: "stream-message-dropped",
+      severity: "warning",
+      scope: Object.freeze({
+        type: "operation",
+        session: scope.session,
+        operation: scope.operation,
+        operationType: scope.operationType,
+      }),
+      occurredAt: Date.now(),
+      strategy,
+      capacity,
+    });
+    this.events.emitIsolated("diagnostic", diagnostic);
   }
 
   #processMessage({

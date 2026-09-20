@@ -43,6 +43,8 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
   isDone: () => boolean;
   onFatal: (error: unknown) => void;
   onReconnected: OnReconnected<TInput, TOutput>;
+  pauseForReconnect: () => void;
+  resumeWithoutResend: () => void;
   getQuery: () => UniplsMessageFactory<TInput>;
   getSelector: () => (data: TOutput) => boolean;
 }): (event: { error: UniplsDroppedError }) => void {
@@ -60,6 +62,7 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
     }
 
     waitingForReconnect = true;
+    if (retry !== "wait") params.pauseForReconnect();
     const query = params.getQuery();
     const selector = params.getSelector();
 
@@ -87,6 +90,7 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
           request,
           query,
           selector,
+          resumeWithoutResend: params.resumeWithoutResend,
         },
         error,
       );
@@ -100,10 +104,12 @@ async function runRecoveryDecision<TInput, TOutput>(
     request: RetryRequest<TInput, TOutput>;
     query: UniplsMessageFactory<TInput>;
     selector: (data: TOutput) => boolean;
+    resumeWithoutResend: () => void;
   },
   dropError: UniplsDroppedError,
 ): Promise<void> {
   if (decision === undefined || decision === "wait") {
+    params.resumeWithoutResend();
     return;
   }
 

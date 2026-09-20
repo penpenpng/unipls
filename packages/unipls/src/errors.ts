@@ -94,8 +94,19 @@ export class UniplsDroppedError extends UniplsError {
 
 /** 指定された待機時間内に操作が完了しなかったことを表します。 */
 export class UniplsTimeoutError extends UniplsError {
+  override readonly name = "UniplsTimeoutError";
+
   constructor() {
-    super("UniplsTimeoutError: The operation timed out.");
+    super("The operation timed out.");
+  }
+}
+
+/** stream の未処理メッセージが指定された buffer capacity を超えたことを表します。 */
+export class UniplsBufferOverflowError extends UniplsError {
+  override readonly name = "UniplsBufferOverflowError";
+
+  constructor() {
+    super("The stream buffer capacity was exceeded.");
   }
 }
 

@@ -1317,19 +1317,19 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 8: 単発 operation を共通 lifecycle へ移行する
 
-- [ ] `cast`、`next`、`request` を Task 7 の primitive へ移行する。
-- [ ] active recovery 中に開始した初回送信・受信待機を次の ready connection へ接続する。
-- [ ] 未送信の初回送信と、送達不明になったpayloadの再送を状態として区別する。
-- [ ] `fail`、`wait`、`resend`、custom recovery を reconnection outcome と統合する。
-- [ ] resend 時だけ factory を再評価し、初回送信と再送を区別する。
-- [ ] cancel/exhaustion、reconnector failure、close、timeout、abort、factory error の結果を test する。
-- [ ] cancel/exhaustion/reconnector failureではpending operationをoutcomeと最後の原因を持つ`UniplsDroppedError`で一度だけrejectする。
-- [ ] `UniplsDroppedError`から、原因となったcanonicalな`UniplsDrop`を`drop` propertyで参照できるようにする。
-- [ ] 同一 message に複数 selector が一致する broadcast contract を維持する。
-- [ ] `cast`、`next`、`request`はopen intent外でPromiseを作らず、同期的に`UniplsInvalidUsageError`をthrowする。
-- [ ] ready前・初回送信後・recovery/retry待機中それぞれのwall-clock timeoutをclock制御下でtestする。
-- [ ] `next`はprovisioning中のmessageを無視して次のready後から観測し、待機中もD7のdeadlineが進むことをtestする。
-- [ ] `next` / `request`でpredicate errorの既定継続と明示failをtestし、他operationへの同一message fan-outが止まらないことを確認する。
+- [x] `cast`、`next`、`request` を Task 7 の primitive へ移行する。
+- [x] active recovery 中に開始した初回送信・受信待機を次の ready connection へ接続する。
+- [x] 未送信の初回送信と、送達不明になったpayloadの再送を状態として区別する。
+- [x] `fail`、`wait`、`resend`、custom recovery を reconnection outcome と統合する。
+- [x] resend 時だけ factory を再評価し、初回送信と再送を区別する。
+- [x] cancel/exhaustion、reconnector failure、close、timeout、abort、factory error の結果を test する。
+- [x] cancel/exhaustion/reconnector failureではpending operationをoutcomeと最後の原因を持つ`UniplsDroppedError`で一度だけrejectする。
+- [x] `UniplsDroppedError`から、原因となったcanonicalな`UniplsDrop`を`drop` propertyで参照できるようにする。
+- [x] 同一 message に複数 selector が一致する broadcast contract を維持する。
+- [x] `cast`、`next`、`request`はopen intent外でPromiseを作らず、同期的に`UniplsInvalidUsageError`をthrowする。
+- [x] ready前・初回送信後・recovery/retry待機中それぞれのwall-clock timeoutをclock制御下でtestする。
+- [x] `next`はprovisioning中のmessageを無視して次のready後から観測し、待機中もD7のdeadlineが進むことをtestする。
+- [x] `next` / `request`でpredicate errorの既定継続と明示failをtestし、他operationへの同一message fan-outが止まらないことを確認する。
 
 完了条件:
 
@@ -1343,29 +1343,29 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 9: stream operation を共通 lifecycle へ移行する
 
-- [ ] 冪等な`unsubscribe()`と非rejectingな`closed`を持つfirst-class subscription handleを実装する。
-- [ ] 全終了経路を共通settle gateへ流し、cleanup完了後にfrozenなfinalization unionで`closed`を一度だけresolveする。
-- [ ] `listen` と `subscribe` を同じ終了・unsubscribe・deadline model へ移行する。
-- [ ] `next`の有無でcallback handleとsingle-consumerなAsyncSubscriptionを返し分ける型安全なoverloadを実装する。
-- [ ] callbackの同期throwをoperation-scopedな`stream-callback-failed` diagnosticへ隔離し、`severity: "error"`、cause、policyを通知する。既定の継続と`callbackError: "unsubscribe"`をtestする。
-- [ ] callbackが返すPromiseを待機・観測せず、非同期rejectをlibrary diagnosticに変換しないことと逐次性を保証しないことをdocumentする。
-- [ ] active recovery中に作られたstreamを次のready connectionから開始し、terminal outcome前にfinalizeしない。
-- [ ] finalizationをliteral booleanの`ok`と`reason`によるdiscriminated unionにし、`terminated`、`unsubscribed`、`closed`だけを`ok: true`、その他を`ok: false`かつ`error`必須にする。
-- [ ] `callbackError: "unsubscribe"`は`callback-error`として利用者自身のunsubscribeと区別し、AsyncIterator/Promiseとfinalizationが同じerror値を参照するようにする。
-- [ ] cancel/exhaustion/reconnector failureでは全streamを一度だけfinalizeし、古いsessionのstreamを次の`open()`へ引き継がない。
-- [ ] user callback error を cleanup と他 subscriber から隔離する。
-- [ ] terminatorをselectorより先に評価し、一致時はterminal messageをcallback/yieldせず`closed`の`terminated.message`だけに保持することをtestする。
-- [ ] 既存 callback API を残す場合は adapter として実装し、互換性 test を付ける。
-- [ ] `listen`、`subscribe`はopen intent外でterminal handleを作らず、同期的に`UniplsInvalidUsageError`をthrowする。
-- [ ] streamのtimeoutはtransport epochごとにリセットせず、受付からの一つのdeadlineで一度だけfinalizeする。
-- [ ] `listen`はprovisioning中とdrop中に観測を停止し、次epochのready後にだけ再開する。
-- [ ] AsyncIterable adapterをoperation開始時に作り、有限の既定buffer、数値指定、`latest`、3種のoverflow policy、message-loss診断を実装する。
-- [ ] 実装前に既定buffer capacityの具体値をpublic documentationへ記録し、capacityちょうど、capacity超過、`0`/負数/非有限値のvalidationをcontract testで固定する。
-- [ ] lossy buffer policyで破棄したmessageごとに`stream-message-dropped` warningを通知し、strategyとcapacityだけを公開する。listener不在時のfast pathと、overflow `"error"`で重複診断しないことをtestする。
-- [ ] iterationのbreak/returnをunsubscribeへ写像し、terminator/close/unsubscribeは正常終了、operation failureはthrow、`closed`は常にresolveとなることをtestする。
-- [ ] subscriptionへ`Symbol.dispose`/`Symbol.asyncDispose`を追加せず、frameworkのdisposer引数には`() => subscription.unsubscribe()`を渡す移行例をdocumentする。
-- [ ] coreがtransport backpressureを保証しないこととsingle-consumer制約をdocumentする。
-- [ ] streamのselector/terminator throwで既定継続と明示failをtestし、terminator評価に失敗したmessageをyield/callbackしない。
+- [x] 冪等な`unsubscribe()`と非rejectingな`closed`を持つfirst-class subscription handleを実装する。
+- [x] 全終了経路を共通settle gateへ流し、cleanup完了後にfrozenなfinalization unionで`closed`を一度だけresolveする。
+- [x] `listen` と `subscribe` を同じ終了・unsubscribe・deadline model へ移行する。
+- [x] `next`の有無でcallback handleとsingle-consumerなAsyncSubscriptionを返し分ける型安全なoverloadを実装する。
+- [x] callbackの同期throwをoperation-scopedな`stream-callback-failed` diagnosticへ隔離し、`severity: "error"`、cause、policyを通知する。既定の継続と`callbackError: "unsubscribe"`をtestする。
+- [x] callbackが返すPromiseを待機・観測せず、非同期rejectをlibrary diagnosticに変換しないことと逐次性を保証しないことをdocumentする。
+- [x] active recovery中に作られたstreamを次のready connectionから開始し、terminal outcome前にfinalizeしない。
+- [x] finalizationをliteral booleanの`ok`と`reason`によるdiscriminated unionにし、`terminated`、`unsubscribed`、`closed`だけを`ok: true`、その他を`ok: false`かつ`error`必須にする。
+- [x] `callbackError: "unsubscribe"`は`callback-error`として利用者自身のunsubscribeと区別し、AsyncIterator/Promiseとfinalizationが同じerror値を参照するようにする。
+- [x] cancel/exhaustion/reconnector failureでは全streamを一度だけfinalizeし、古いsessionのstreamを次の`open()`へ引き継がない。
+- [x] user callback error を cleanup と他 subscriber から隔離する。
+- [x] terminatorをselectorより先に評価し、一致時はterminal messageをcallback/yieldせず`closed`の`terminated.message`だけに保持することをtestする。
+- [x] 既存 callback API を残す場合は adapter として実装し、互換性 test を付ける。
+- [x] `listen`、`subscribe`はopen intent外でterminal handleを作らず、同期的に`UniplsInvalidUsageError`をthrowする。
+- [x] streamのtimeoutはtransport epochごとにリセットせず、受付からの一つのdeadlineで一度だけfinalizeする。
+- [x] `listen`はprovisioning中とdrop中に観測を停止し、次epochのready後にだけ再開する。
+- [x] AsyncIterable adapterをoperation開始時に作り、有限の既定buffer、数値指定、`latest`、3種のoverflow policy、message-loss診断を実装する。
+- [x] 実装前に既定buffer capacityの具体値をpublic documentationへ記録し、capacityちょうど、capacity超過、`0`/負数/非有限値のvalidationをcontract testで固定する。
+- [x] lossy buffer policyで破棄したmessageごとに`stream-message-dropped` warningを通知し、strategyとcapacityだけを公開する。listener不在時のfast pathと、overflow `"error"`で重複診断しないことをtestする。
+- [x] iterationのbreak/returnをunsubscribeへ写像し、terminator/close/unsubscribeは正常終了、operation failureはthrow、`closed`は常にresolveとなることをtestする。
+- [x] subscriptionへ`Symbol.dispose`/`Symbol.asyncDispose`を追加せず、frameworkのdisposer引数には`() => subscription.unsubscribe()`を渡す移行例をdocumentする。
+- [x] coreがtransport backpressureを保証しないこととsingle-consumer制約をdocumentする。
+- [x] streamのselector/terminator throwで既定継続と明示failをtestし、terminator評価に失敗したmessageをyield/callbackしない。
 
 完了条件:
 

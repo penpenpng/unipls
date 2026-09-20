@@ -1,4 +1,5 @@
 export {
+  UniplsBufferOverflowError,
   UniplsClosedError,
   UniplsDroppedError,
   UniplsDuplicatedConnectionError,
@@ -10,6 +11,16 @@ export {
   UniplsSocketError,
   UniplsTimeoutError,
 } from "./errors";
+export type {
+  AsyncSubscription,
+  StreamBufferOptions,
+  StreamBufferOverflowPolicy,
+  StreamCallbackDelivery,
+  StreamCallbackErrorPolicy,
+  StreamFinalization,
+  StreamIteratorDelivery,
+  SubscriptionHandle,
+} from "./async-results.ts";
 export {
   ImmediateReconnector,
   type ReconnectionContext,
@@ -30,6 +41,8 @@ export type {
   ReconnectionEngineOutcome,
   ReconnectorFailedDiagnostic,
   SessionId,
+  StreamCallbackFailedDiagnostic,
+  StreamMessageDroppedDiagnostic,
   UniplsConnectionIntent,
   UniplsConnectionState,
   UniplsDrop,
@@ -44,4 +57,10 @@ export type {
 } from "./types";
 export { Unipls } from "./unipls";
 export { UniplsSocket, UniplsWebSocketCloseCode } from "./unipls-socket";
-export type { UniplsProvisioner } from "./unipls.interface";
+export type {
+  UniplsListenCallbackParams,
+  UniplsListenIteratorParams,
+  UniplsProvisioner,
+  UniplsSubscribeCallbackParams,
+  UniplsSubscribeIteratorParams,
+} from "./unipls.interface";

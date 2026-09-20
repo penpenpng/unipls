@@ -11,7 +11,6 @@ export function createOnReconnectedHandler<
 >(params: {
   events: Pick<EventBus<TEvents>, "on">;
   isDone: () => boolean;
-  reset: () => void;
   request: (
     data: UniplsMessageFactory<TInput>,
     params: { selector: (data: TOutput) => boolean },
@@ -35,8 +34,6 @@ export function createOnReconnectedHandler<
           params.onSettled?.();
           return;
         }
-
-        params.reset();
 
         try {
           await callback({

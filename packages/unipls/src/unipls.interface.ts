@@ -1,4 +1,10 @@
-import { type UniplsSubscriber } from "./async-results.ts";
+import type {
+  AsyncSubscription,
+  StreamCallbackDelivery,
+  StreamFinalization,
+  StreamIteratorDelivery,
+  SubscriptionHandle,
+} from "./async-results.ts";
 import type { UniplsDropDetector } from "./drop-detector";
 import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
 import type {
@@ -77,8 +83,12 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
    * - {@link UniplsListenOptions.retry|retry} は指定できず、購読が失敗すると provisioner と現在の接続試行が失敗します。
    */
   listen(
-    params: UniplsSubscriber<TOutput> & Omit<UniplsListenOptions<TOutput>, "signal" | "retry">,
-  ): void;
+    params: StreamCallbackDelivery<TOutput> &
+      Omit<UniplsListenOptions<TOutput>, "signal" | "retry">,
+  ): SubscriptionHandle<StreamFinalization<TOutput>>;
+  listen(
+    params: StreamIteratorDelivery & Omit<UniplsListenOptions<TOutput>, "signal" | "retry">,
+  ): AsyncSubscription<TOutput>;
 
   /**
    * {@link Unipls.subscribe|unipls.subscribe()} とほとんど同様ですが、以下が異なります:
@@ -87,9 +97,13 @@ export interface UniplsProvisioningContext<TInput = WebSocketData, TOutput = Web
    * - {@link UniplsSubscribeParams.retry|retry} は指定できず、通信に失敗すると provisioner と現在の接続試行が失敗します。
    */
   subscribe(
-    params: UniplsSubscriber<TOutput> &
+    params: StreamCallbackDelivery<TOutput> &
       Omit<UniplsSubscribeParams<TInput, TOutput>, "signal" | "retry">,
-  ): () => void;
+  ): SubscriptionHandle<StreamFinalization<TOutput>>;
+  subscribe(
+    params: StreamIteratorDelivery &
+      Omit<UniplsSubscribeParams<TInput, TOutput>, "signal" | "retry">,
+  ): AsyncSubscription<TOutput>;
 
   /** 現在の論理セッションです。 */
   session: SessionId;
@@ -136,6 +150,14 @@ export interface UniplsListenOptions<TOutput = WebSocketData> {
   /** selector または terminator が例外を投げた場合に購読を継続するか終了するかを指定します。 */
   predicateError?: PredicateErrorPolicy;
 }
+
+/** callback で {@link Unipls.listen} のメッセージを受け取る指定です。 */
+export type UniplsListenCallbackParams<TOutput = WebSocketData> = UniplsListenOptions<TOutput> &
+  StreamCallbackDelivery<TOutput>;
+
+/** AsyncIterable で {@link Unipls.listen} のメッセージを受け取る指定です。 */
+export type UniplsListenIteratorParams<TOutput = WebSocketData> = UniplsListenOptions<TOutput> &
+  StreamIteratorDelivery;
 
 /**
  * {@link Unipls.cast} で送信する値と待機条件を指定します。
@@ -245,3 +267,15 @@ export interface UniplsSubscribeParams<TInput = WebSocketData, TOutput = WebSock
   /** selector または terminator が例外を投げた場合に購読を継続するか終了するかを指定します。 */
   predicateError?: PredicateErrorPolicy;
 }
+
+/** callback で {@link Unipls.subscribe} のメッセージを受け取る指定です。 */
+export type UniplsSubscribeCallbackParams<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> = UniplsSubscribeParams<TInput, TOutput> & StreamCallbackDelivery<TOutput>;
+
+/** AsyncIterable で {@link Unipls.subscribe} のメッセージを受け取る指定です。 */
+export type UniplsSubscribeIteratorParams<
+  TInput = WebSocketData,
+  TOutput = WebSocketData,
+> = UniplsSubscribeParams<TInput, TOutput> & StreamIteratorDelivery;
