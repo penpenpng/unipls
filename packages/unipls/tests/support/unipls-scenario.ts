@@ -1,0 +1,69 @@
+import { Unipls } from "../../src/index.ts";
+import {
+  ControlledWebSocketServer,
+  type ControlledCloseEventInit,
+} from "./controlled-websocket.ts";
+import {
+  ControlledDropDetector,
+  ControlledProvisioner,
+  ControlledReconnector,
+  type ControlledReconnectorInvocation,
+} from "./controllers.ts";
+
+export type RaceWinner = "close" | "reconnect";
+
+export class UniplsRaceScenario {
+  readonly transport = new ControlledWebSocketServer();
+  readonly provisioner = new ControlledProvisioner();
+  readonly reconnector = new ControlledReconnector();
+  readonly detectors: ControlledDropDetector[];
+  readonly client: Unipls<string, string>;
+
+  constructor({ detectorCount = 2 }: { detectorCount?: number } = {}) {
+    this.detectors = Array.from({ length: detectorCount }, () => new ControlledDropDetector());
+    this.client = new Unipls<string, string>({
+      url: "wss://unipls.test/socket",
+      WebSocket: this.transport.WebSocket,
+      reconnector: this.reconnector,
+      dropDetectors: this.detectors,
+    });
+  }
+
+  beginOpen(): Promise<void> {
+    return this.client.open(this.provisioner);
+  }
+
+  attemptSecondOpen(): Promise<void> {
+    return this.client.open(this.provisioner);
+  }
+
+  emitStaleOpen(connection: number): void {
+    this.transport.connection(connection).emitOpen();
+  }
+
+  emitStaleMessage(connection: number, message: string): void {
+    this.transport.connection(connection).emitMessage(message);
+  }
+
+  emitStaleClose(connection: number, init?: ControlledCloseEventInit): void {
+    this.transport.connection(connection).emitClose(init);
+  }
+
+  drop(connection = this.transport.connections.length - 1): void {
+    this.transport.connection(connection).emitClose({ code: 3001, wasClean: false });
+  }
+
+  raceCloseAndReconnect(
+    invocation: ControlledReconnectorInvocation,
+    winner: RaceWinner,
+  ): Promise<void> {
+    if (winner === "close") {
+      const closing = this.client.close();
+      invocation.reconnect();
+      return closing;
+    }
+
+    invocation.reconnect();
+    return this.client.close();
+  }
+}

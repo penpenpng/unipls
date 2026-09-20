@@ -1171,13 +1171,13 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 2: race を再現できる contract test harness を整備する
 
-- [ ] WebSocket の open/message/close と close code を任意の順序で制御できるようにする。
-- [ ] provisioning と reconnector を resolve/reject/cancel の各地点で停止できるようにする。
-- [ ] callback 回数、listener/timer/disposer の解放を観測できる test utility を用意する。
-- [ ] stale connection event、二重 open、close/reconnect 競合を組み立てられる scenario helper と harness 自体の test を追加する。
-- [ ] 同じepochへ複数detectorとsocket close/errorを任意順で報告し、最初のdropだけが採用されるrace scenarioを追加する。
-- [ ] implementation class ではなく public API 経由で検証する。
-- [ ] harness自体のtestは`*.test.ts`、harnessを使って公開APIの契約を検証するscenarioは`*.spec.ts`に置く。
+- [x] WebSocket の open/message/close と close code を任意の順序で制御できるようにする。
+- [x] provisioning と reconnector を resolve/reject/cancel の各地点で停止できるようにする。
+- [x] callback 回数、listener/timer/disposer の解放を観測できる test utility を用意する。
+- [x] stale connection event、二重 open、close/reconnect 競合を組み立てられる scenario helper と harness 自体の test を追加する。
+- [x] 同じepochへ複数detectorとsocket close/errorを任意順で報告し、最初のdropだけが採用されるrace scenarioを追加する。
+- [x] implementation class ではなく public API 経由で検証する。
+- [x] harness自体のtestは`*.test.ts`、harnessを使って公開APIの契約を検証するscenarioは`*.spec.ts`に置く。
 
 完了条件:
 
