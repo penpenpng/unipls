@@ -19,7 +19,6 @@
   },
   "files": [
     "dist",
-    "docs/migration.md",
     "docs/support.md"
   ],
   "type": "module",
@@ -42,13 +41,12 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "benchmark:correlation": "vp test bench benchmarks/message-dispatcher.bench.ts --project unit --run",
     "build": "vp pack",
-    "check": "vp check benchmarks src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs",
-    "format": "vp fmt --config vite.config.mjs benchmarks src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs tsconfig.json tsconfig.api.json tsconfig.check.json package.json --write",
-    "format:check": "vp fmt --config vite.config.mjs benchmarks src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs tsconfig.json tsconfig.api.json tsconfig.check.json package.json --check",
+    "check": "vp check src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs",
+    "format": "vp fmt --config vite.config.mjs src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs tsconfig.json tsconfig.api.json tsconfig.check.json package.json --write",
+    "format:check": "vp fmt --config vite.config.mjs src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs tsconfig.json tsconfig.api.json tsconfig.check.json package.json --check",
     "fmt": "pnpm format",
-    "lint": "vp lint benchmarks src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs",
+    "lint": "vp lint src tests/api tests/contract tests/package tests/unit tests/support tests/runtime vite.config.mjs",
     "typecheck": "tsc --project tsconfig.check.json && pnpm typecheck:api",
     "typecheck:api": "pnpm build && tsc --project tsconfig.api.json",
     "test": "vp test run",

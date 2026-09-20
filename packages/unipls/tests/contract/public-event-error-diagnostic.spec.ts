@@ -23,6 +23,49 @@ import {
 describe("public event、error、diagnostic", () => {
   /**
    * ```ts
+   * const stop = client.on("open", observeOnce, { once: true });
+   * const stopBeforeOpen = client.on("open", shouldNotRun);
+   * stopBeforeOpen();
+   * client.off("open", anotherListener);
+   * // ! clientが複数回openしてもobserveOnceは最初の1回だけ呼ばれる
+   * ```
+   */
+  it("onceと2種類の解除方法で公開event listenerの有効期間を制御する", async () => {
+    // once、戻り値による解除、offによる解除のlistenerを同時に登録します。
+    const scenario = new UniplsRaceScenario({ detectorCount: 0 });
+    const calls: string[] = [];
+    scenario.client.on("open", () => calls.push("once"), { once: true });
+    const stop = scenario.client.on("open", () => calls.push("stop"));
+    const removed = () => calls.push("off");
+    scenario.client.on("open", removed);
+    stop();
+    scenario.client.off("open", removed);
+
+    // ! 最初のsessionがreadyになり、once listenerだけを1回呼びます。
+    const firstOpening = scenario.beginOpen();
+    const first = scenario.transport.current;
+    first.emitOpen();
+    scenario.provisioner.succeed(scenario.provisioner.invocations.take());
+    await firstOpening;
+    expect(calls).toEqual(["once"]);
+    const firstClosing = scenario.client.close();
+    first.emitClose();
+    await firstClosing;
+
+    // ! 2回目のsessionがreadyになっても、解除済みlistenerはどれも呼びません。
+    const secondOpening = scenario.beginOpen();
+    const second = scenario.transport.current;
+    second.emitOpen();
+    scenario.provisioner.succeed(scenario.provisioner.invocations.take());
+    await secondOpening;
+    expect(calls).toEqual(["once"]);
+    const secondClosing = scenario.client.close();
+    second.emitClose();
+    await secondClosing;
+  });
+
+  /**
+   * ```ts
    * client.on("open", (event) => observe(event));
    * client.on("message", (event) => consume(event.message));
    * client.on("unknown", () => {}); // 型エラー

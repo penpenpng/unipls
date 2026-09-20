@@ -121,11 +121,14 @@ describe("接続試行の分離", () => {
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
     expect(opened).toHaveLength(2);
+    expect(scenario.detectors[0].invocations.size).toBe(1);
+    const currentDetector = scenario.detectors[0].invocations.take();
 
     // 有効な接続を終了します。
     const closing = scenario.client.close();
     current.emitClose({ code: 1000, wasClean: true });
     await closing;
+    expect(currentDetector.cleanupCount).toBe(1);
   });
 
   /**

@@ -307,6 +307,43 @@ describe("再接続エンジン", () => {
 
   /**
    * ```ts
+   * await client.open();
+   * // ! 1回目のdropから回復に成功する
+   * // ! 回復後の接続もdropする
+   * // 2回目のreconnector contextは同じsessionと、それまでの全attempt履歴を持つ
+   * ```
+   */
+  it("回復成功後の次のdropへ同じsessionと累積attempt履歴を渡す", async () => {
+    // 初回接続をreadyにして、最初のrecovery cycleを開始します。
+    const scenario = new UniplsRaceScenario({ detectorCount: 0 });
+    await openReady(scenario);
+    const initial = scenario.client.lifecycle;
+    if (initial.phase !== "open") throw new Error("open状態が必要です");
+    scenario.drop(0);
+    const firstPolicy = scenario.reconnector.invocations.take();
+    firstPolicy.reconnect();
+    const firstReplacement = scenario.transport.connection(1);
+    firstReplacement.emitOpen();
+    scenario.provisioner.succeed(scenario.provisioner.invocations.take());
+    await scenario.waitForLifecycle(({ phase }) => phase === "open");
+
+    // ! 回復済みの接続が再びdropし、次のpolicy contextが作られます。
+    scenario.drop(1);
+    const secondPolicy = scenario.reconnector.invocations.take();
+    expect(secondPolicy.context.origin).toBe("recovery");
+    expect(secondPolicy.context.session).toBe(initial.session);
+    expect(secondPolicy.context.attempts).toMatchObject([
+      { sequence: 1, cycle: 0, attempt: 1, outcome: "ready" },
+      { sequence: 2, cycle: 1, attempt: 1, outcome: "ready" },
+    ]);
+    expect(Object.isFrozen(secondPolicy.context.attempts)).toBe(true);
+    expect(firstPolicy.cleanupCount).toBe(1);
+
+    secondPolicy.cancel();
+  });
+
+  /**
+   * ```ts
    * const reconnector = {
    *   async setup() {
    *     throw policyError;

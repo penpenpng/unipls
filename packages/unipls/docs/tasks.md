@@ -8,26 +8,23 @@
 - 振る舞いを変えるタスクでは、先に black-box の contract test を書き、そのタスク内で green にする。
 - 公開パッケージとしての契約を検証するtest fileは`*.spec.ts`とする。公開entry pointから観測できるruntime behavior、型、export、error/event、package consumerとしての利用可否が該当する。
 - 公開契約ではない内部実装、utility、test harnessなどのtest fileは`*.test.ts`とする。実装を公開契約として固定しないため、`*.spec.ts`からprivate/internal moduleを直接検証しない。
-- `tests/reference/legacy-implementation`以下の`*.reference.ts`とsupport codeは、決定前の旧実装に付属していたtestを凍結した非規範的な参考資料である。test runnerと型検査の対象にせず、本書の決定、公開仕様、互換性、完了条件の根拠にしてはならない。
-- 旧referenceから再利用してよいのはscenario、race、mockの着想だけである。期待値をコピーしたりreferenceを修正してgreenにしたりせず、本書から期待値を導出した新しい`*.spec.ts`または`*.test.ts`として書き直す。新しいtest/sourceからreferenceをimportしない。
 - 現在の内部クラスや event bus の形ではなく、公開された振る舞いを固定する。
-- D1〜D13と「意図的にTask内で確定する詳細」にない新たな公開判断が必要になったら、実装で既成事実を作らずdecision recordへ追記する。
+- D1〜D12と「意図的にTask内で確定する詳細」にない新たな公開判断が必要になったら、実装で既成事実を作らずdecision recordへ追記する。
 - P2 の拡張は、P0/P1 の公開契約と lifecycle が安定してから着手する。
 
 ## 後続実装者への引き継ぎ
 
-この文書は、設計時の会話履歴を読まずに実装を開始するための正本である。D1〜D13は合意済みであり、現在の実装や既存testが異なる場合は、既存挙動ではなく本書の決定を優先する。
+この文書は、設計時の会話履歴を読まずに実装を開始するための正本である。D1〜D12は合意済みであり、現在の実装や既存testが異なる場合は、既存挙動ではなく本書の決定を優先する。
 
 参照時の優先順位:
 
 1. `overview.md`の変化させないコアコンセプト。
-2. 本書D1〜D13の決定本文と公開contract。
+2. 本書D1〜D12の決定本文と公開contract。
 3. 本書のタスク順序、checklist、完了条件。
 4. `plan.md`の現状分析。これは問題の由来を説明する資料であり、後から確定した決定を上書きしない。
 5. 現在のsourceとtest。既存挙動の把握には使うが、決定と矛盾する挙動を仕様として固定しない。
-6. `tests/reference/legacy-implementation`。旧実装で扱っていたscenarioを探すためだけに使い、assertionやAPI形状には仕様上の権威がない。
 
-`公開形の概略`、`公開形の方向性`と明記したcodeは型設計の意図を示す。後のDで確定した語彙やvariantが優先されるため、そのまま転記せず、Task 0とTask 12で一貫した最終declarationへ正規化する。D13の「将来の公開形の例」は初期releaseでは実装・exportしない。
+`公開形の概略`、`公開形の方向性`と明記したcodeは型設計の意図を示す。後のDで確定した語彙やvariantが優先されるため、そのまま転記せず、Task 0とTask 12で一貫した最終declarationへ正規化する。
 
 実装を始める前にTask 0の用語、状態遷移表、operation matrixを完成させる。実装中に公開挙動の選択が新たに必要になった場合は、既存codeに合わせて暗黙決定せず、このdecision recordへ追記してからcontract testを書く。
 
@@ -71,7 +68,7 @@ callback subscriptionは失敗をthrowする呼出元を持たないため、`cl
 - Task 13: 4 runtimeで共通に使えるWebSocket structural interfaceの最小field集合。
 - Task 13: 既存`state`/`intent`、legacy callback lifecycle、provisioner function shorthandを残すか。`0.0.0`の初期contractでは互換layerを既定で追加せず、残す場合だけ理由、deprecation方針、adapter testを要求する。
 
-これら以外のD1〜D13の事項を、実装上便利という理由で再選択しない。
+これら以外のD1〜D12の事項を、実装上便利という理由で再選択しない。
 
 ## 横断的な決定事項
 
@@ -100,7 +97,6 @@ callback subscriptionは失敗をthrowする呼出元を持たないため、`cl
 - 高レベルの内部実装が `UniplsSocket` を利用していても、その concrete 型を root の event payload や public declaration に漏らさない。
 - `unipls/socket` は正式な public API なので、低レベル state、event、error、serializer/deserializer、接続・送信 semantics も contract test の対象にする。
 - force method の単純な移動ではなく、provisioning context が失効後に利用できず、古い transport epoch へ送信できない capability として実装する。
-- 既存 root import から移動する低レベル symbol は breaking change として migration note に記録する。
 
 影響するタスク: 10、13、14。
 
@@ -117,7 +113,7 @@ callback subscriptionは失敗をthrowする呼出元を持たないため、`cl
 - reconnect/provisioning などの extension context には完全な mutable state を渡さず、その extension に必要な phase の snapshot または必要フィールドだけを readonly で渡す。
 - 高レベル API の snapshot に低レベル `UniplsSocket` object や内部 state holder を含めない。
 - `unipls/socket` は transport の関心だけを表す独立した low-level lifecycle snapshot を公開する。高レベルの provisioning/recovery phase と低レベル WebSocket state を同じ union に混ぜない。
-- 既存の `state` / `intent` を互換性のために残す場合も snapshot から導出する getter とし、状態の正本にはしない。将来的に除去するなら migration note と deprecation を付ける。
+- 既存の `state` / `intent` を互換性のために残さず、公開状態は `lifecycle` に一本化する。
 
 公開形の概略:
 
@@ -357,7 +353,6 @@ interface UniplsDrop {
 - session coordinatorに同期的な`acceptOperation`相当の入口を設け、active sessionの確認とoperationのsessionへの束縛を一つの同期処理にする。transportへの実送信はその後でもよい。
 - QuerySessionは`created`、`sent/attempted`、`settled`を区別し、retry policyを`sent/attempted`以降にだけ適用する。
 - factory評価時点、ready待機、retry適用境界、open intent内外の同期throw境界を5 operationのcontract testで固定する。
-- 現実装のoperationごとに異なるclosed時の挙動は破壊的変更として統一し、移行時には`open()`前・`close()`後の呼び出しが同期throwになることをrelease noteに明記する。
 
 影響するタスク: 7、8、9。
 
@@ -384,7 +379,6 @@ interface UniplsDrop {
 - timeout validationは全operationの共通入力処理で同期的に行い、operation固有の非同期errorへ変換しない。
 - timeoutとresponse、abort、closeなどが同じevent-loop turnで競合しても、共通settle gateを最初に通過したoutcomeだけを採用し、cleanupと通知をexactly onceにする。
 - 後から待機中に停止するdeadlineが必要になった場合は、既存timeoutの意味を変更せず別の明示的policyとして追加する。
-- timeoutの不正値を黙って無期限または即時timeoutとして扱っている既存経路があれば破壊的変更になるため、移行メモへ記載する。
 
 影響するタスク: 7、8、9、13。
 
@@ -411,7 +405,6 @@ interface UniplsDrop {
 - ready遷移、通常listenerの有効化、provisioning用の一時receive operationの失効を同じcoordinatorで順序付ける。
 - `next` / `listen`のtimeoutはD7どおり受付から進み、readiness待機中も停止しない。
 - 初回provisioning、recovery後の再provisioning、provisioning失敗、ready境界直前直後のmessageについてcontract testを作り、通常selectorがprovisioning messageに対して評価されないことも検証する。
-- 現実装で通常listenerがprovisioning messageを観測できる場合は破壊的変更として移行メモへ記載し、protocol初期化処理をprovisioning contextへ移すよう案内する。
 
 影響するタスク: 7、8、9、10。
 
@@ -462,7 +455,6 @@ interface ResourceScope {
 - setup transaction、detector、operationはそれぞれ適切な親scopeに属する子`ResourceScope`を持ち、rollbackでは対象子scopeだけをdisposeする。単一のglobal stackへcheckpoint indexを混在させない。
 - runtimeが標準`AsyncDisposableStack`を十分にsupportする場合も、採用は`ResourceScope`内部の交換可能な実装詳細に限定し、公開挙動やerror modelを標準stackの既定throw semanticsへ依存させない。
 - session setup成功済みという事実を論理session stateに保持し、物理connection IDのSetから推測しない。
-- `isSessionBeginning`の削除、function shorthandの意味、disposer ownershipをmigration noteへ記載する。
 - 初回成功、session setup途中失敗、connection setup途中失敗、recovery後の再setup、close/loss競合、async disposer errorをclock/event制御下でtestする。
 
 影響するタスク: 4、10、11。
@@ -847,37 +839,9 @@ interface DropDetectorContext<TInput = unknown, TOutput = unknown>
 
 影響するタスク: 1、11、13、14。
 
-### D13: correlation helper を core release に含めるか（決定済み）
-
-決定:
-
-- 初期releaseのpublic APIにcorrelation helper、key extractor、router optionを追加しない。selectorによるbroadcast semanticsを先に安定させ、計測または実利用の要求が得られるまでTask 15のoptional workとする。
-- 一方、現行のように各operationがraw message eventへ直接listenerを登録する構造は廃止し、Task 7でoperation lifecycleとmessage dispatchを内部interfaceに分離する。後付けhelperがtimeout、drop/recovery、cleanupを再実装しなくてよいことを初期releaseの内部設計要件とする。
-- defaultは全active operationを候補とする`BroadcastDispatcher`相当とする。将来のkeyed dispatcherはcandidate setを絞るだけで、最終的なselector/terminator評価とoperation lifecycleは共通primitiveを使う。
-- 同じkeyを待つ複数operationにはbucket内で従来どおりfan-outし、一つのmessageが複数operationに一致できる性質を維持する。key routingを一対一responseの意味へ暗黙に変更しない。
-- dispatcher interfaceとroute hintは初期releaseではinternalに保ち、未確定なpublic extension pointや予約optionを公開しない。将来は既存APIを壊さない追加APIとしてcorrelated view/helperを構築できる形にする。
-
-将来の公開形の例（未決定）:
-
-```ts
-const correlated = unipls.correlate({
-  key: (message) => message.requestId,
-});
-
-await correlated.request({
-  key: request.id,
-  query: request,
-  selector: isExpectedResponse,
-});
-```
-
-この例の命名、key欠落・抽出失敗・重複keyの契約はTask 15で決め、初期releaseのpublic contractには含めない。
-
-影響するタスク: 7、15。
-
 ## Task 0 decision record: 用語、状態遷移、operation contract
 
-この節はD1〜D13を実装とcontract testへ落とす際の正規化済みの語彙とbehavior matrixである。前節の「公開形の概略」「公開形の方向性」と細部が異なる場合は、この節の最終形を優先する。
+この節はD1〜D12を実装とcontract testへ落とす際の正規化済みの語彙とbehavior matrixである。前節の「公開形の概略」「公開形の方向性」と細部が異なる場合は、この節の最終形を優先する。
 
 ### 用語とidentity
 
@@ -1128,7 +1092,6 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - [x] D9 について採用案、却下案、理由、公開形、実装上の帰結、互換性への影響を記録する。
 - [x] D10 について採用案、却下案、理由、公開形、実装上の帰結、互換性への影響を記録する。
 - [x] D11〜D12 について採用案、却下案、理由、互換性への影響を記録する。
-- [x] D13について初期releaseでの非採用、内部dispatcher境界、将来追加時の互換条件を記録する。
 - [x] session、connection attempt/transport epoch、recovery cycle、operation の用語を定義する。
 - [x] `open`、ready、drop、retry、cancel/exhaust、reconnector failure、close の状態遷移表を作る。
 - [x] 5 operation について、各 state での開始可否、drop 時の既定動作、settle 結果を matrix にする。
@@ -1142,7 +1105,7 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 完了条件:
 
 - 後続タスクのテスト期待値を、実装を見ずに決められる。
-- D6〜D13 に未決事項が残っていない。
+- D6〜D12 に未決事項が残っていない。
 
 依存: なし。
 
@@ -1153,11 +1116,9 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - [x] 各最低runtimeでnative `AbortSignal.any`の優先順位、reason identity、後発abort不変性を検証し、polyfillをtest環境から暗黙注入しない。
 - [x] format check、lint、型検査、test、build を独立した script にする。
 - [x] test runnerとCIが公開contractの`*.spec.ts`とそれ以外の`*.test.ts`をともに収集し、結果上も区別できるようにする。
-- [x] `tests/reference/**`をtest runner、型検査、coverage、test件数から除外し、referenceが壊れても修正を要求しない。
 - [x] 最初のnormativeな`*.spec.ts`/`*.test.ts`を追加した時点で移行用の`passWithNoTests: true`を除去し、収集対象が0件ならCIを失敗させる。
 - [x] package 単体で型検査を実行できるようにする。
 - [x] 各検査を CI の独立 job、または失敗を個別に識別できる step にする。
-- [x] referenceへ退避した旧suiteをgreenにする作業は行わず、Task 0以降に新規作成したnormative testとbuildだけをCI baselineとして維持する。test件数を固定値として完了条件にしない。
 
 完了条件:
 
@@ -1489,7 +1450,6 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - [x] `castForce` / `requestForce` / `subscribeForce` を高レベル `Unipls` の public declaration から除く。
 - [x] public declaration に private/internal 型が漏れていないことを API test で確認する。
 - [x] public declarationが`Symbol.dispose`/`Symbol.asyncDispose`や`esnext.disposable`型libraryを要求せず、`Unipls`から現行の`Symbol.asyncDispose`を除去する。
-- [x] breaking change を移行メモに記録する。
 - [x] testの`await using`を`try/finally`と明示的な`await close()`へ置き換え、cleanup完了を省略しない共通test helperを用意する。
 
 完了条件:
@@ -1532,39 +1492,16 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 依存: Task 13。
 
-### Phase 5: optional ergonomics と release 確認
+### Phase 5: release 確認
 
-#### Task 15: correlation helper の要否を検証する（optional）
-
-- [x] 同時 request/subscription 数に対する selector fan-out の負荷を計測する。
-- [x] request ID/topic を使う具体的な利用例から重複実装を収集する。
-- [x] 計測と利用例が必要性を示さなかったため、初期releaseへkey extractor/routerを追加しないと記録する。
-- [x] 将来のkeyed dispatcherはkey bucketをcandidate reductionにだけ使い、bucket内の複数operationへfan-outして最終selectorを共通primitiveで評価すると確認する。
-- [x] 将来のhelperがTask 7のinternal dispatcher境界を再利用し、timeout、drop/recovery、cleanup、diagnosticを独自実装しない条件を記録する。
-- [x] public API候補としてcorrelated viewとoperationごとのroute hintを比較し、key欠落、抽出失敗、重複key、recovery中のregistration semanticsを整理する。
-- [x] core の broadcast semantics と特定 message envelope 非依存性を維持する。
-
-検証結果と非採用理由は[correlation helper検証記録](./correlation.md)に記録する。
-
-完了条件:
-
-- helper を追加する場合は、測定または利用例で必要性を説明できる。
-- 必要性がなければ、非採用理由を記録して終了する。
-- helper追加時にも既存selector-only operationと同じmessageを共有でき、初期releaseのbroadcast semanticsを破壊しない。
-
-適用する決定: D13。
-
-依存: Task 14。初期 release の blocker にはしない。
-
-#### Task 16: release candidate を総合検証する
+#### Task 15: release candidate を総合検証する
 
 - [x] behavior matrix の全行が contract test に対応しているか監査する。
 - [x] 公開パッケージの契約testが`*.spec.ts`、それ以外が`*.test.ts`に分類され、公開contract testがinternal moduleへ依存していないことを監査する。
-- [x] 新しいsource/testが`tests/reference/**`をimportせず、referenceのassertionを現仕様の根拠として引用していないことを監査する。
 - [x] format、lint、型検査、unit/contract test、build、consumer smoke test を実行する。
 - [x] timer、listener、AbortSignal、detector、reconnector cleanup の leak test を実行する。
 - [x] supported runtime ごとの最小 integration test を実行する。
-- [x] `overview.md`、public API docs、migration note を実装と照合する。
+- [x] `overview.md`とpublic API docsを実装と照合する。
 - [x] `plan.md` と本書の完了項目を更新し、残課題を次期 milestone へ移す。
 
 完了条件:
@@ -1573,17 +1510,15 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - public contract と package artifact の双方を consumer 視点で検証済みである。
 - optional task を除き、未決の設計判断がない。
 
-適用する決定: D1〜D13すべて。
+適用する決定: D1〜D12すべて。
 
-依存: Task 14。Task 15 とは独立。
+依存: Task 14。
 
 ## 依存関係の要約
 
 ```text
-Task 0 → Task 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 ─┬→ 14 → 16
+Task 0 → Task 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 ─┬→ 14 → 15
 Task 1 ──────────────────────────────────────────────────────────────┘
-
-Task 14 → Task 15 (optional)
 ```
 
 Task 1 は早期に独立して進められます。Task 3 以降は lifecycle の前提を共有するため、原則として順番を入れ替えません。Task 7〜9 と Task 10 で公開 API が変わり得るため、package exports を先に固定しないことが重要です。

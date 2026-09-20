@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { UniplsSocket } from "../../src/socket.ts";
+import {
+  UniplsSocket,
+  UniplsSocketClosedError,
+  UniplsSocketDroppedError,
+} from "../../src/socket.ts";
 import { ControlledWebSocketServer } from "../support/index.ts";
 
 describe("低レベルsocketの公開契約", () => {
@@ -61,5 +65,31 @@ describe("低レベルsocketの公開契約", () => {
     ]);
     expect([...opened, ...messages, ...closed].every((event) => Object.isFrozen(event))).toBe(true);
     expect([...opened, ...messages, ...closed].every((event) => !("epoch" in event))).toBe(true);
+  });
+
+  /**
+   * ```ts
+   * await socket.enqueue(payload); // 未接続なのでUniplsSocketClosedError
+   * const opening = socket.open();
+   * // ! 接続成立前にpeerが接続を閉じる
+   * await opening; // UniplsSocketDroppedError
+   * ```
+   */
+  it("未接続の送信をclosed error、接続中の切断をdropped errorにする", async () => {
+    // まだopenしていない低レベルsocketでは送信を開始できません。
+    const transport = new ControlledWebSocketServer();
+    const client = new UniplsSocket<string, string>({
+      url: "wss://unipls.test/socket",
+      WebSocket: transport.WebSocket,
+    });
+    await expect(client.enqueue("message")).rejects.toBeInstanceOf(UniplsSocketClosedError);
+
+    // ! 接続試行中にpeer closeが届くと、openはdropとして終了します。
+    const opening = client.open();
+    transport.current.emitClose({ code: 4100, wasClean: false });
+    await expect(opening).rejects.toBeInstanceOf(UniplsSocketDroppedError);
+
+    // 明示closeによってdrop後の接続資源も解放します。
+    await client.close();
   });
 });

@@ -57,7 +57,6 @@ CIは同じtarballをNode.js、Deno、Bunの最低版と最新stable、および
 
 次の項目は初期releaseのblockerではなく、実利用または測定結果が得られた場合に追加APIとして検討します。
 
-- request IDやtopic向けのcorrelation helper。現時点の非採用理由とbenchmarkは[correlation helper検証記録](./correlation.md)に記録する。
 - 特定message schema、RPC envelope、exactly-once、永続queue、server replayなどのprotocol layer。これらはcoreの対象外を維持する。
 - runtime matrixのversion更新と長期負荷測定。公開契約を変えず継続的なrelease maintenanceとして扱う。
 
