@@ -1,4 +1,5 @@
 import type { ReconnectionContext, UniplsReconnectEvent } from "./reconnector/reconnector.ts";
+import { UniplsInvalidUsageError } from "./errors.ts";
 import type {
   ConnectionAttemptOrigin,
   ConnectionAttemptSnapshot,
@@ -93,6 +94,16 @@ export class UniplsLifecycleCoordinator {
     const drop = this.#requireSession().recoveryDrop;
     if (!drop) throw new Error("Recovery drop is missing");
     return drop;
+  }
+
+  /** active な論理セッションへ operation を同期的に受け付けます。 */
+  acceptOperation(): SessionId {
+    if (!this.#session) {
+      throw new UniplsInvalidUsageError(
+        "通信操作は open intent が有効な論理セッション内でのみ開始できます。",
+      );
+    }
+    return this.#session.id;
   }
 
   get isSessionBeginning(): boolean {

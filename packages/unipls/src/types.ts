@@ -14,6 +14,12 @@ export type ConnectionId = string & { readonly [connectionIdBrand]: "ConnectionI
 /** 1回の通信操作を識別する値です。 */
 export type OperationId = string & { readonly [operationIdBrand]: "OperationId" };
 
+/** 通信操作の公開 API 上の種類です。 */
+export type OperationType = "cast" | "next" | "request" | "listen" | "subscribe";
+
+/** selector または terminator が例外を投げた場合の扱いです。 */
+export type PredicateErrorPolicy = "continue" | "fail";
+
 /** Unipls が WebSocket を生成するときに使用するコンストラクターです。 */
 export type WebSocketConstructor = new (url: string) => WebSocket;
 
@@ -127,9 +133,46 @@ export type ReconnectionEngineOutcome =
   | "session-closed";
 
 /** 診断情報が属する公開リソースの範囲です。 */
-export type UniplsDiagnosticScope = Readonly<{
-  type: "session";
-  session: SessionId;
+export type UniplsDiagnosticScope =
+  | Readonly<{
+      type: "session";
+      session: SessionId;
+    }>
+  | Readonly<{
+      type: "connection";
+      session: SessionId;
+      connection: ConnectionId;
+      messageSequence?: number;
+    }>
+  | Readonly<{
+      type: "operation";
+      session: SessionId;
+      operation: OperationId;
+      operationType: OperationType;
+    }>;
+
+/** 受信メッセージの変換に失敗したことを通知する診断情報です。 */
+export type MessageDeserializationFailedDiagnostic = Readonly<{
+  type: "message-deserialization-failed";
+  severity: "warning";
+  scope: Extract<UniplsDiagnosticScope, { type: "connection" }>;
+  occurredAt: number;
+  cause: unknown;
+  input: Readonly<{
+    kind: "text" | "array-buffer" | "typed-array" | "blob";
+    size?: number;
+  }>;
+}>;
+
+/** operation の selector または terminator が失敗したことを通知する診断情報です。 */
+export type MessagePredicateFailedDiagnostic = Readonly<{
+  type: "message-predicate-failed";
+  severity: "error";
+  scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
+  occurredAt: number;
+  cause: unknown;
+  predicate: "selector" | "terminator";
+  policy: PredicateErrorPolicy;
 }>;
 
 /** reconnector の実行に失敗したことを通知する診断情報です。 */
@@ -137,7 +180,7 @@ export type ReconnectorFailedDiagnostic =
   | Readonly<{
       type: "reconnector-failed";
       severity: "error";
-      scope: UniplsDiagnosticScope;
+      scope: Extract<UniplsDiagnosticScope, { type: "session" }>;
       occurredAt: number;
       context: "initial-open";
       failurePoint: "setup" | "policy";
@@ -147,7 +190,7 @@ export type ReconnectorFailedDiagnostic =
   | Readonly<{
       type: "reconnector-failed";
       severity: "error";
-      scope: UniplsDiagnosticScope;
+      scope: Extract<UniplsDiagnosticScope, { type: "session" }>;
       occurredAt: number;
       context: "recovery";
       failurePoint: "setup" | "policy";
@@ -156,7 +199,10 @@ export type ReconnectorFailedDiagnostic =
     }>;
 
 /** Unipls が継続不能または継続可能な内部失敗を通知する診断情報です。 */
-export type UniplsDiagnostic = ReconnectorFailedDiagnostic;
+export type UniplsDiagnostic =
+  | ReconnectorFailedDiagnostic
+  | MessageDeserializationFailedDiagnostic
+  | MessagePredicateFailedDiagnostic;
 
 /** 終了した論理セッション、または未開始状態を表す不変なスナップショットです。 */
 export type ClosedLifecycleSnapshot =

@@ -1,7 +1,12 @@
 import { type UniplsSubscriber } from "./async-results.ts";
 import type { UniplsDropDetector } from "./drop-detector";
 import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
-import type { SessionId, WebSocketConstructor, WebSocketData } from "./types.ts";
+import type {
+  PredicateErrorPolicy,
+  SessionId,
+  WebSocketConstructor,
+  WebSocketData,
+} from "./types.ts";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- JSDoc のリンクで使用します。
 import type { Unipls } from "./unipls.ts";
 
@@ -106,6 +111,9 @@ export interface UniplsNextParams<TOutput = WebSocketData> {
 
   /** レスポンス待機中に drop が発生した場合の待機継続戦略を指定します。 */
   retry?: UniplsDropRetryStrategy;
+
+  /** selector が例外を投げた場合に操作を継続するか終了するかを指定します。 */
+  predicateError?: PredicateErrorPolicy;
 }
 
 /** {@link Unipls.listen} の受信条件と終了条件を指定します。 */
@@ -119,8 +127,14 @@ export interface UniplsListenOptions<TOutput = WebSocketData> {
   /** 購読を中断するための {@link AbortSignal} を指定します。 */
   signal?: AbortSignal;
 
+  /** 購読を続ける最大時間をミリ秒単位で指定します。省略した場合は無制限に待ちます。 */
+  timeout?: number;
+
   /** 購読中に drop が発生した場合の待機継続戦略を指定します。 */
   retry?: UniplsDropRetryStrategy;
+
+  /** selector または terminator が例外を投げた場合に購読を継続するか終了するかを指定します。 */
+  predicateError?: PredicateErrorPolicy;
 }
 
 /**
@@ -150,6 +164,9 @@ export interface UniplsRequestParams<TInput = WebSocketData, TOutput = WebSocket
 
   /** レスポンスを待つまでの間に再接続が発生した場合のための再送戦略を指定します。 */
   retry?: UniplsRetryStrategy<TInput, TOutput>;
+
+  /** selector が例外を投げた場合に操作を継続するか終了するかを指定します。 */
+  predicateError?: PredicateErrorPolicy;
 }
 
 /**
@@ -224,4 +241,7 @@ export interface UniplsSubscribeParams<TInput = WebSocketData, TOutput = WebSock
 
   /** 購読の終端を待つまでの間に再接続が発生した場合のための再送戦略を指定します。 */
   retry?: UniplsRetryStrategy<TInput, TOutput>;
+
+  /** selector または terminator が例外を投げた場合に購読を継続するか終了するかを指定します。 */
+  predicateError?: PredicateErrorPolicy;
 }

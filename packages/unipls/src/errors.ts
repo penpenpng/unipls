@@ -9,6 +9,15 @@ import type {
 /** Unipls の公開 API が通知するエラーの基底クラスです。 */
 export abstract class UniplsError extends Error {}
 
+/** 公開 API が現在の lifecycle では受け付けられない方法で呼ばれたことを表します。 */
+export class UniplsInvalidUsageError extends UniplsError {
+  override readonly name = "UniplsInvalidUsageError";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 /** 論理セッションが ready になる前に接続試行が終了したことを表します。 */
 export class UniplsOpenError extends UniplsError {
   override readonly name = "UniplsOpenError";

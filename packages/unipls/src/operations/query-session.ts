@@ -42,7 +42,16 @@ export class QuerySession<TInput, TOutput> {
       return;
     }
 
-    const payload = this.#evaluate(query);
+    let payload: TInput;
+    try {
+      payload = this.#evaluate(query);
+    } catch (error) {
+      this.#onError(error);
+      return;
+    }
+    if (params.isDone()) {
+      return;
+    }
 
     this.#sendPayload(payload)
       .then(() => {

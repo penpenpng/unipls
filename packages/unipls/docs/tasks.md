@@ -1284,23 +1284,23 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 7: operation 共通 lifecycle を導入する
 
-- [ ] operation を論理 session、deadline、AbortSignal、readiness に束縛する共通 primitive を作る。
-- [ ] operation lifecycleとmessage dispatchを分離し、operation registration、unregistration、message deliveryを担うinternal `MessageDispatcher`境界を導入する。
-- [ ] 初期dispatcherはactive operationを候補にするbroadcast実装とし、各operationがraw message eventへ直接listenerを登録する現行構造を廃止する。
-- [ ] dispatcherは候補選択だけを担当し、selector/terminator評価、predicate error policy、settle gate、timeout、drop/recovery、cleanupをoperation共通primitiveに残す。
-- [ ] ready 待機、session close、recovery terminal outcome を一つの終了経路へ正規化する。
-- [ ] timeoutを受付時から進むmonotonicなwall-clock deadlineとして統一し、provisioning/recovery/retry待機を含める。
-- [ ] `undefined`だけを無期限とし、有限の正数でないtimeoutをoperation登録前に同期throwする。
-- [ ] message factoryとserializerの例外を元のcauseを保ったoperation resultへ変換する。
-- [ ] deserializer failureは該当messageだけを破棄し、active operationを終了させずconnection-scoped diagnosticを通知する。
-- [ ] selector/terminator throwは該当operationについてmessageを破棄し、operation-scoped diagnosticを通知して既定では継続する。`predicateError: "fail"`だけをterminal outcomeへ流す。
-- [ ] predicate diagnosticを`message-predicate-failed` variantとして型付けし、`severity: "error"`、predicate種別、policy、causeを持たせる一方、message本体や取得不能な相関IDを含めない。
-- [ ] cleanup を user callback より先に確定し、全終了経路で exactly once にする。
-- [ ] 通常receive operationをready-gated受信経路へ、provisioning contextのreceive operationをtransport-epoch-bound受信経路へ分離する。
-- [ ] provisioning messageを通常receive operationへbuffer/replayせず、通常selectorも評価しないことをcontract testにする。
-- [ ] active recovery中に開始したoperationをsessionの次のready/terminal outcomeへ接続し、socket stateだけを理由に失敗させない。
-- [ ] active sessionの確認とoperationのsessionへの登録を同期的なlinearization pointにまとめ、登録前にuser codeへ再入しない。
-- [ ] open intent外からの5 operationは同期的な`UniplsInvalidUsageError`、受付後の終了は非同期のoperation outcomeになることを共通contract testにする。
+- [x] operation を論理 session、deadline、AbortSignal、readiness に束縛する共通 primitive を作る。
+- [x] operation lifecycleとmessage dispatchを分離し、operation registration、unregistration、message deliveryを担うinternal `MessageDispatcher`境界を導入する。
+- [x] 初期dispatcherはactive operationを候補にするbroadcast実装とし、各operationがraw message eventへ直接listenerを登録する現行構造を廃止する。
+- [x] dispatcherは候補選択だけを担当し、selector/terminator評価、predicate error policy、settle gate、timeout、drop/recovery、cleanupをoperation共通primitiveに残す。
+- [x] ready 待機、session close、recovery terminal outcome を一つの終了経路へ正規化する。
+- [x] timeoutを受付時から進むmonotonicなwall-clock deadlineとして統一し、provisioning/recovery/retry待機を含める。
+- [x] `undefined`だけを無期限とし、有限の正数でないtimeoutをoperation登録前に同期throwする。
+- [x] message factoryとserializerの例外を元のcauseを保ったoperation resultへ変換する。
+- [x] deserializer failureは該当messageだけを破棄し、active operationを終了させずconnection-scoped diagnosticを通知する。
+- [x] selector/terminator throwは該当operationについてmessageを破棄し、operation-scoped diagnosticを通知して既定では継続する。`predicateError: "fail"`だけをterminal outcomeへ流す。
+- [x] predicate diagnosticを`message-predicate-failed` variantとして型付けし、`severity: "error"`、predicate種別、policy、causeを持たせる一方、message本体や取得不能な相関IDを含めない。
+- [x] cleanup を user callback より先に確定し、全終了経路で exactly once にする。
+- [x] 通常receive operationをready-gated受信経路へ、provisioning contextのreceive operationをtransport-epoch-bound受信経路へ分離する。
+- [x] provisioning messageを通常receive operationへbuffer/replayせず、通常selectorも評価しないことをcontract testにする。
+- [x] active recovery中に開始したoperationをsessionの次のready/terminal outcomeへ接続し、socket stateだけを理由に失敗させない。
+- [x] active sessionの確認とoperationのsessionへの登録を同期的なlinearization pointにまとめ、登録前にuser codeへ再入しない。
+- [x] open intent外からの5 operationは同期的な`UniplsInvalidUsageError`、受付後の終了は非同期のoperation outcomeになることを共通contract testにする。
 
 完了条件:
 

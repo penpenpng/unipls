@@ -101,6 +101,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       if (!this.#isCurrent(epoch)) {
         return;
       }
+      const messageSequence = epoch.nextMessageSequence();
       try {
         const message = this.deserialize(data);
         this.#events.emit("message", {
@@ -111,6 +112,8 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
         this.#events.emit("error", {
           epoch,
           error,
+          messageSequence,
+          input: describeRawInput(data),
         });
       }
     });
@@ -450,7 +453,12 @@ export interface UniplsSocketPublicEvents<TOutput> {
   /** 変換済みのメッセージを受信したときの情報です。 */
   message: { epoch: UniplsTransportEpoch; message: TOutput };
   /** メッセージ変換に失敗したときの情報です。 */
-  error: { epoch: UniplsTransportEpoch; error: unknown };
+  error: {
+    epoch: UniplsTransportEpoch;
+    error: unknown;
+    messageSequence: number;
+    input: UniplsSocketInputMetadata;
+  };
   /** 明示的な close が完了したときの情報です。 */
   closed: { epoch: UniplsTransportEpoch; close?: Readonly<UniplsSocketCloseMetadata> };
   /** open intent 中に接続を失ったときの情報です。 */
@@ -492,6 +500,12 @@ export interface UniplsSocketDropReport {
   readonly cause?: unknown;
 }
 
+/** 変換に失敗した受信データについて公開できる安全なメタデータです。 */
+export interface UniplsSocketInputMetadata {
+  readonly kind: "text" | "array-buffer" | "typed-array" | "blob";
+  readonly size?: number;
+}
+
 type UniplsProvisioner = (signal: AbortSignal) => Promise<void>;
 
 /** @internal 1回の WebSocket 接続試行に属する状態と callback をまとめます。 */
@@ -512,11 +526,17 @@ class UniplsTransportEpoch {
   connection: UniplsTransportConnection;
   readonly #controller = new AbortController();
   #dropReport?: UniplsSocketDropReport;
+  #messageSequence = 0;
   get dropReport(): UniplsSocketDropReport | undefined {
     return this.#dropReport;
   }
   get signal(): AbortSignal {
     return this.#controller.signal;
+  }
+
+  nextMessageSequence(): number {
+    this.#messageSequence += 1;
+    return this.#messageSequence;
   }
 
   deactivate(reason: unknown): void {
@@ -562,6 +582,22 @@ class UniplsTransportEpoch {
     this.#provisioner = provisioner;
     this.connection = new UniplsTransportConnection(epochId);
   }
+}
+
+function describeRawInput(data: WebSocketData): Readonly<UniplsSocketInputMetadata> {
+  if (typeof data === "string") {
+    return Object.freeze({ kind: "text", size: new TextEncoder().encode(data).byteLength });
+  }
+  if (data instanceof ArrayBuffer) {
+    return Object.freeze({ kind: "array-buffer", size: data.byteLength });
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Object.freeze({ kind: "typed-array", size: data.byteLength });
+  }
+  if ("size" in data) {
+    return Object.freeze({ kind: "blob", size: data.size });
+  }
+  return Object.freeze({ kind: "array-buffer", size: data.byteLength });
 }
 
 /** @internal 1回の接続試行が所有する WebSocket と状態を保持します。 */
