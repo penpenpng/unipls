@@ -1,208 +1,98 @@
-# unipls のコアコンセプト
+# コアコンセプト
 
-## 解決する問題
+`unipls`は、WebSocketを使うアプリケーションで曖昧になりやすい「いつ通信できるか」「切断後に何をやり直すか」「進行中の処理をどう終えるか」を、明示的な契約として扱います。
 
-WebSocket が提供するのは、接続と双方向のメッセージストリームです。アプリケーションで必要になる次の関心事は提供しません。
+## protocolはアプリケーションが決める
 
-- 送信と応答、購読開始と通知を対応付ける
-- 接続直後に認証や状態同期を済ませてから通常通信を始める
-- 通信断を検知し、いつ再接続するかを決める
-- 接続が入れ替わったとき、進行中の操作を失敗、継続、再送のどれにするかを決める
-- 切断中の処理を中断し、利用者が接続を閉じた後に古い処理が復活しないようにする
+`unipls`は、特定のRPC形式やmessage schemaを要求しません。次の要素はアプリケーション側のprotocolに残します。
 
-`unipls` は、これらを個々のアプリケーションに散在させず、型付きの操作と明示的なライフサイクルとして表現する WebSocket クライアントを目指します。特定のメッセージ形式や RPC プロトコルは強制せず、アプリケーション固有のプロトコルを載せるための土台になります。
+- JSONやbinaryなどのwire format
+- request IDとresponseの対応付け
+- topicや購読解除messageの形式
+- 認証方法と再開token
+- 冪等性、重複排除、順序保証
 
-## 型付きメッセージ境界
+送信値と受信値は型parameterで表し、wire dataとの変換を`serializer`と`deserializer`へ渡します。どのmessageがoperationに属するかは`selector`で指定します。同じmessageが複数のselectorに一致すれば、該当するすべてのoperationが観測できます。
 
-ライブラリの利用者が扱う送信型 `TInput` と受信型 `TOutput` は、WebSocket が実際に運べるデータから分離されます。接続単位の serializer と deserializer が両者の境界です。
+## sessionとconnectionを分ける
 
-この境界より上では、接続管理、メッセージ選択、再送判断などがアプリケーションの型を保ったまま動作します。JSON、バイナリ、独自エンベロープといった wire format はライブラリのコアには含めません。
+`open()`からterminalな終了までが一つの論理sessionです。その途中で通信が切れ、WebSocketへ接続し直すと、物理connectionだけが入れ替わります。
 
-## 5 種類の通信操作
-
-単一の受信ストリームに対する操作を、入力の有無と結果の個数で整理します。
-
-| 操作        | 送信 | 結果 | 意味                                                     |
-| ----------- | ---- | ---- | -------------------------------------------------------- |
-| `cast`      | 1    | 0    | メッセージを送信し、送信完了までを扱う                   |
-| `next`      | 0    | 1    | 条件に合う次のメッセージを 1 件待つ                      |
-| `request`   | 1    | 1    | 送信後、条件に合う最初の応答を待つ                       |
-| `listen`    | 0    | N    | 条件に合う受信メッセージを継続的に観測する               |
-| `subscribe` | 1    | N    | 購読要求を送信後、条件に合うメッセージを継続的に観測する |
-
-`request` と `subscribe` は、送信が完了する前に届いたメッセージをその操作の結果にしません。単発操作は結果、timeout、abort、接続終了のいずれかで完了します。ストリーム操作は明示的な解除、terminator、abort、接続終了のいずれかまで継続します。
-
-### selector はプロトコルとの接点
-
-どの受信メッセージがどの操作に属するかは selector が決めます。ライブラリが request ID やトピック形式を仮定することはありません。
-
-受信メッセージは、一致するすべての操作から観測できるブロードキャストです。同じ selector を持つ複数の操作を排他的に振り分ける仕組みではありません。相関 ID の発行、一意性、重複排除、順序保証は、必要に応じて上位プロトコルが担います。
-
-### 遅延評価される送信値
-
-送信値は値そのもの、または送信時に評価される factory として表せます。factory は、再接続後の再送時に新しい相関 ID や期限付きトークンを作り直すためのものです。
-
-## 論理セッションと物理接続
-
-`open()`によってopen intentと論理セッションが始まります。利用者の意図はこの期間を通して「接続を維持する」です。明示的な`close()`、初回openの回復不能な失敗、または再接続のcancel/exhaustionやreconnector自体の失敗などのterminal outcomeでopen intentと論理セッションは終わります。
-
-一方、WebSocket の物理接続は通信断のたびに入れ替わります。1 つの論理セッションは、最初の接続と、必要に応じてそれに続く複数回の物理接続から構成されます。
-
-この区別には次の意味があります。
-
-- `close()` は論理セッションを終了し、再接続待機と進行中の操作を終わらせる
-- 予期しない切断で物理接続を失っても、論理セッションは直ちには終了しない
-- セッション ID とセッション単位の再接続履歴は、物理接続が替わっても維持される
-- 古い物理接続から遅れて届いたイベントは、現在の接続や操作に影響させない
-
-接続状態は観測された現在地、接続 intent は利用者が望む行き先です。通信断の最中には「物理接続はないが、接続を維持したい」という状態が成立します。
-
-## provisioning は readiness の境界
-
-物理接続が開いたことと、アプリケーションがその接続を利用できることは同じではありません。認証、プロトコル上の handshake、状態同期、必要な購読の復元などが終わって初めて ready になります。この接続ごとの準備処理を provisioning と呼びます。
-
-接続準備には、論理セッションで一度だけ行うsession setupと、物理接続ごとに行うconnection setupがあります。後者がreadyになるためのprovisioningを担います。
-
-接続準備には次の原則があります。
-
-- session setupは論理セッションで一度だけ成功させ、connection setupは初回接続と各再接続で実行する
-- `open()` と再接続成功は、provisioning の完了後に確定する
-- 通常の送信操作は ready になるまで保留する
-- connection setupには、readiness barrierを越えて現在の物理接続だけで通信するための限定されたcontextを渡す
-- provisioning の失敗は接続確立の失敗として扱い、通常操作を未準備の接続へ流さない
-- session/connection setupが登録したresourceはそれぞれの所有期間に束縛し、失敗時と終了時に破棄する
-
-二つのsetup hookとcontextを型で分けることで、「物理接続ごとにやり直す処理」と「論理セッションで一度だけ登録する処理」を、実行時のflagに依存せず区別します。
-
-### setup と resource の例
-
-```ts
-const client = new Unipls<ClientMessage, ServerMessage>({
-  url: "wss://example.com/socket",
-  reconnector,
-});
-
-await client.open({
-  setupSession(ctx) {
-    const stop = credentials.onChange(invalidateApplicationState);
-    ctx.defer(stop, { name: "credentials-listener" });
-  },
-
-  async setupConnection(ctx) {
-    const authenticated = await ctx.request({
-      query: { type: "authenticate", token: credentials.currentToken() },
-      selector: (message) => message.type === "authenticated",
-    });
-    connectionState.setAuthenticatedUser(authenticated.user);
-
-    ctx.defer(() => connectionState.clear(), { name: "connection-state" });
-    return () => metrics.finishConnection(ctx.connection);
-  },
-});
+```text
+logical session
+├── initial connection
+├── replacement connection 1
+└── replacement connection 2
 ```
 
-`setupSession`は同じ論理セッションで一度だけ成功し、登録したcredential listenerはsession終了時に解放されます。`setupConnection`は初回接続と各再接続で実行され、登録または返却したdisposerはその物理接続を失った時点で逆順に解放されます。非同期disposerも順番に待機してから回復処理へ進みます。
+この区別によって、session全体で一度だけ行う処理と、connectionが替わるたびに必要な処理を分けられます。明示的な`close()`はsessionを終了します。一方、dropは現在のconnectionを失ったという事実であり、回復中は同じsessionが続きます。
 
-`setupConnection`の`cast`、`request`、`listen`、`subscribe`は、現在準備している物理接続だけに有効です。setupが完了するか接続を失うと、そのcontextと未完了の一時的な受信操作は失効します。ready後も残すlistenerは、通常のclient APIで作成し、その解除処理を適切なscopeへ`defer()`してください。
+実際のsetupとresource管理は[接続とreadiness](./lifecycle.md)を参照してください。
 
-setup途中で例外が発生した場合は、そのsetupで登録済みのresourceだけを逆順にrollbackします。cleanupの失敗は残りのcleanupを止めず、元のsetup errorを置き換えずにdiagnosticとして通知されます。同じscopeでresourceを診断上区別したい場合は、一意な`name`を指定できます。
+## openとreadyを分ける
 
-## 障害回復を 3 つの判断に分ける
+WebSocketのopen eventは、transportが通信可能になったことしか示しません。認証、handshake、状態同期、購読の復元が必要なアプリケーションでは、その完了後をreadyと考える必要があります。
 
-通信断からの回復は、独立した 3 層の判断として扱います。
+`unipls`はconnectionごとの準備をprovisioningとして扱います。
 
-### 1. drop detector: 接続を失ったと判断する
+1. WebSocketが開く
+2. `setupConnection`が認証や同期を行う
+3. setupが成功するとconnectionがreadyになる
+4. 待機中の通常operationが送受信を始める
 
-WebSocket の close だけでなく、heartbeat timeout やブラウザの offline 通知なども接続喪失の根拠になり得ます。drop detector は ready な物理接続ごとに動作し、接続喪失を報告します。
+通常operationのtimeoutにはreadyを待つ時間も含まれます。準備が終わらないconnectionへ通常のmessageが先に流れることはありません。
 
-detectorは接続ごとの`signal`とresource scopeを受け取ります。host eventへ渡すcallbackは`ctx.guard(callback)`、background taskは`ctx.run((signal) => task(signal))`で開始してください。これらの監督境界が同期throwまたはPromiseのrejectを捕捉すると、失敗したdetectorだけを停止してdiagnosticを通知し、接続と他のdetectorは継続します。`guard()`を通さず登録したcallbackや、`run()`を使わず開始したtaskはライブラリの監督対象にはなりません。
+## 通信を5つの形で表す
 
-setupが返すdisposerと`ctx.defer()`へ登録したresourceは、接続終了時にLIFO順で一度ずつ解放されます。setup途中の失敗ではそのdetectorの部分resourceを先にrollbackし、それ以前に開始したdetectorとconnection setupのresourceも逆順に解放します。
+受信件数と送信の有無に応じて、通信を5種類のoperationとして表します。
 
-runtime非依存の`HeartbeatDropDetector`は`unipls`から利用できます。`window`のoffline eventを利用する`NetworkDropDetector`はブラウザ専用であり、`unipls/browser`から明示的にimportします。
+| operation   | 送信 | 結果 |
+| ----------- | ---: | ---: |
+| `cast`      |    1 |    0 |
+| `next`      |    0 |    1 |
+| `request`   |    1 |    1 |
+| `listen`    |    0 |    N |
+| `subscribe` |    1 |    N |
 
-### 2. reconnector: 次の物理接続をいつ試すか決める
+単発operationはPromise、継続的なoperationはcallbackまたはAsyncIterableで結果を受け取ります。timeout、abort、drop、closeなどの終了経路は、競合しても一度だけ確定します。
 
-reconnector は、直前の失敗、現在の論理セッションとその試行履歴、セッション終了を通知する signal を材料に、再接続するか、待機するか、断念するかを決めます。即時再接続、指数バックオフ、online 復帰待ちなどはこのポリシーの差です。
+詳しいoptionと例は[5つの通信操作](./operations.md)を参照してください。
 
-### 3. operation recovery: 進行中の操作をどうするか決める
+## 回復を3つの判断に分ける
 
-接続自体を再確立する判断と、個々の操作を再送する判断は別です。操作は切断時に次の方針を選びます。
+通信断への対応を一つの「自動再接続」機能にまとめず、次の判断に分けます。
 
-| 方針            | 挙動                                                                       |
-| --------------- | -------------------------------------------------------------------------- |
-| `fail`          | drop を操作の失敗として確定する                                            |
-| `wait`          | 再送せず、新しい接続でも結果の待機だけを継続する                           |
-| `resend`        | ready になった新しい接続で送信をやり直す                                   |
-| custom recovery | 再接続の履歴を見て、送信値や selector を差し替えるか、待機または失敗を選ぶ |
+1. **drop detector**: 現在のconnectionを失ったと何を根拠に判断するか
+2. **reconnector**: 次のconnectionをいつ試し、いつ断念するか
+3. **operation retry**: 進行中のoperationを失敗、待機、再送のどれにするか
 
-送信が相手に届いたかを WebSocket クライアントだけで確定することはできません。そのため、自動再送は重複実行を起こし得ます。再送を安全にするには、上位プロトコルの冪等性や重複排除が必要です。ライブラリは暗黙に安全性を仮定せず、再送を操作ごとの明示的な判断にします。
+connectionを再確立できることと、送信済みのcommandを安全に再送できることは別の問題です。WebSocket clientだけでは、切断直前のmessageがpeerへ届いたかを確定できません。そのため、`request`と`subscribe`は既定で再送せず、`resend`を選ぶ場合は上位protocolで冪等性や重複排除を用意します。
 
-## 終了とエラー
+具体的なpolicyは[dropと回復](./recovery.md)を参照してください。
 
-ライブラリは少なくとも次の終了原因を区別します。
+## 終了と診断を分ける
 
-- 利用者が論理セッションを閉じた
-- 物理接続が drop し、操作を回復しない、または回復できなかった
-- 操作の deadline を超えた
-- 呼び出し元の `AbortSignal` が中断された
-- ストリームの terminator を受信した
-- ストリームを明示的に解除した
-- serializerやmessage factoryなど、操作を続行不能にする処理でエラーが起きた
+operationを続けられない失敗は、Promiseのrejectまたはstreamの終了結果になります。一方、一つのmessageの変換失敗やobserver callbackの例外など、他の処理を継続できる失敗は`diagnostic` eventで通知されます。
 
-単発操作はPromiseの解決またはrejectとして表します。ストリーム操作はcallbackまたはsingle-consumerのAsyncIterableでmessageを配送し、共通のsubscription handleから明示解除と一度だけの終了結果を観測します。terminator messageは通常messageとして重複配送せず、終了結果に保持します。
+diagnosticにはapplication message本体を含めません。監視先へ機密情報が意図せず流れないよう、operation ID、処理方針、raw inputの種類やsizeなど、診断に必要なmetadataだけを公開します。
 
-AsyncIterable の未処理メッセージは既定で最大64件を保持し、65件目を受け取るとbuffer overflowとして終了します。`buffer`でcapacityやlossy policyを明示できますが、このbufferはconsumerの速度差をlibrary内で吸収するだけで、WebSocket peerへのbackpressureは保証しません。一つのsubscriptionから取得できるiteratorは一つだけです。
+詳しくは[エラーと診断](./errors.md)を参照してください。
 
-subscriptionは`Symbol.dispose`や`Symbol.asyncDispose`を実装しません。解除関数を要求するframeworkには`const stop = () => subscription.unsubscribe()`のような明示的adapterを渡してください。callback deliveryはcallbackが返すPromiseを待機・監視せず、実行順や完了順を逐次化しません。逐次処理が必要な場合はAsyncIterableを使用します。
+## 高レベルと低レベルを使い分ける
 
-すべての処理エラーがoperationを終了させるわけではありません。個々のmessageのdeserialization、selector、terminator、observer callbackで発生したerrorは、型付きdiagnosticとして所有scopeへ通知し、既定ではその失敗をoperationと他consumerから隔離して後続messageの処理を継続します。fail-fastが必要な箇所だけ明示的なpolicyを選びます。
+- `unipls`の`Unipls`: session、readiness、5つのoperation、回復、resource管理を使う通常のclient
+- `unipls/socket`の`UniplsSocket`: 1回の物理接続とwire dataを直接扱う低レベルclient
+- `unipls/browser`: browser固有の`NetworkDropDetector`
 
-どの終了経路でもoperationのlistener、timer、再接続待機を確実に解放し、終了後にcallbackを再実行しません。cleanup自体の失敗は元の終了理由を上書きせず、別のdiagnosticとして観測できます。
-
-### 公開event、診断、ドメインerror
-
-高レベルclientで購読できるevent名は`open`、`message`、`failed`、`dropped`、`closed`、`lifecycle`、`reconnect`、`diagnostic`に限定されます。event payloadと、その中でlibraryが所有するlifecycle、attempt、drop、closeなどのmetadataは実行時にも不変です。利用者が受け取った値を変更しても、clientの状態や後続eventには影響しません。
-
-diagnosticはmessage処理、callback、拡張処理、cleanupなどでlibraryが捕捉した失敗を、元の処理結果とは別に観測するための有限な型付きunionです。内部処理の結果が確定した後のmicrotaskでlistenerへ通知し、あるlistenerの例外を他のlistenerやclient lifecycleから隔離します。listenerがない場合にconsoleへ代替出力しません。
-
-messageに関係するdiagnosticへapplication message本体は含めません。deserialization failureは接続内のmessage sequenceとraw inputのkind/sizeだけを公開し、selector、terminator、callback、lossy bufferのdiagnosticはoperation scopeと処理方針だけを公開します。これにより、診断収集先へmessageの機密情報が意図せず流れることを避けられます。
-
-通常の利用コードは、次の6種類の高レベルなドメインerrorだけで失敗を分類できます。
-
-- `UniplsInvalidUsageError`: 現在のlifecycleでは受け付けられないAPI呼び出し
-- `UniplsOpenError`: 論理セッションがreadyになる前のterminal failure
-- `UniplsClosedError`: 利用者によるsession終了
-- `UniplsDroppedError`: drop後にoperationまたはsession recoveryを継続できない状態
-- `UniplsTimeoutError`: operationの期限超過
-- `UniplsBufferOverflowError`: streamの未処理messageがbuffer capacityを超過した状態
-
-`UniplsOpenError`と`UniplsDroppedError`は、終了理由、接続試行履歴、canonicalなdrop、元の`cause`を必要に応じて保持します。これらのerrorとmetadataも不変ですが、利用者が作成したopaqueな`cause`自体をcloneまたはfreezeすることはありません。
-
-## 公開インターフェイスの境界
-
-コアとなる公開面は、型付きクライアントと、その振る舞いを差し替える小さな契約です。
-
-- 型付きクライアント: lifecycle、5 種類の通信操作、状態とイベント
-- データ境界: serializer、deserializer、WebSocket 実装の注入
-- 接続準備: provisioner と provisioning context
-- 障害検知: drop detector
-- 再接続: reconnector と再接続 context
-- 操作回復: retry preset と custom recovery
-- 制御と結果: `AbortSignal`、timeout、購読終了理由、ドメインエラー
-
-高レベルの型付きclientと拡張契約はpackage root `unipls`から公開します。readinessやrecoveryを必要とせずwire-levelの制御を直接行う低レベルclientは、別entry point `unipls/socket`から公開します。
-
-低レベルのイベントバス、操作スコープ、物理接続の状態オブジェクトなどは、この契約を実現する手段であってコアコンセプトではありません。公開する場合でも、内部表現を露出させず、安定した値オブジェクトまたは interface を境界にします。
+接続管理を自分で構築する必要がなければ、package rootの`Unipls`を使用してください。
 
 ## 対象外
 
-次の機能は上位プロトコルまたは別レイヤーの責務です。
+次の保証は上位protocolまたは別のstorage・messaging layerの責務です。
 
-- メッセージ schema、request ID、topic の形式
-- exactly-once 配信
-- 永続キュー、オフライン中の無期限な送信保存
-- サーバー側の再開 token や履歴 replay の仕様
-- アプリケーション固有の認証方法
+- exactly-once配信
+- 永続queueとoffline中の無期限な送信保存
+- server側の履歴replayや再開token
+- application固有の認証方式
 
-`unipls` はこれらを組み込むための lifecycle と回復ポイントを提供しますが、特定の方式を決めません。
+`unipls`は、これらを実装するためのlifecycle境界と回復pointを提供しますが、方式そのものは規定しません。

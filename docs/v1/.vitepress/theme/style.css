@@ -1,0 +1,28 @@
+:root {
+  --vp-c-brand-1: #2563eb;
+  --vp-c-brand-2: #1d4ed8;
+  --vp-c-brand-3: #1e40af;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #2563eb 20%, #06b6d4);
+}
+
+.vp-doc {
+  line-height: 1.9;
+}
+
+.vp-doc p,
+.vp-doc li {
+  text-wrap: pretty;
+}
+
+.vp-doc h2 {
+  margin-top: 2.5rem;
+}
+
+.vp-doc h3 {
+  margin-top: 2rem;
+}
+
+.vp-doc code {
+  overflow-wrap: anywhere;
+}

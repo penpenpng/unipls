@@ -1,32 +1,55 @@
-# 対応runtime
+# 対応環境
 
-uniplsのJavaScript配布物はES2022をtargetとし、次のruntimeを公式にサポートします。
+`unipls`のJavaScript配布物はES2022をtargetとしています。
 
-| runtime | support policy |
-| --- | --- |
-| Chrome | 最新2安定版 |
-| Firefox | 最新2安定版 |
-| Safari | 最新2安定版。CIでは対応するWebKitを検証 |
-| Node.js | `>=22.4.0` |
-| Deno | `>=2.0.0` |
-| Bun | `>=1.2.0` |
+## 対応runtime
 
-CIではNode.js、Deno、Bunの最低版と最新stableを検証します。browserは最新2系統のPlaywright releaseごとにChromium、Firefox、WebKitを検証します。
+| runtime | support policy                          |
+| ------- | --------------------------------------- |
+| Chrome  | 最新2安定版                             |
+| Firefox | 最新2安定版                             |
+| Safari  | 最新2安定版。CIでは対応するWebKitを検証 |
+| Node.js | `>=22.4.0`                              |
+| Deno    | `>=2.0.0`                               |
+| Bun     | `>=1.2.0`                               |
 
-## WebSocket
+CIではNode.js、Deno、Bunの最低版と最新stableを検証します。browserは最新2系統のPlaywright releaseについて、Chromium、Firefox、WebKitでpackageの動作を確認します。
 
-4runtimeすべてで`globalThis.WebSocket`を既定transportとして使用します。moduleをimportしただけではglobalを参照せず、`Unipls`または`UniplsSocket`を構築した時点で解決します。
+## 必要なplatform API
 
-実行環境にglobal WebSocketがない場合やtest double、任意のtransport実装を使う場合は、constructor optionへ`WebSocket`を注入してください。注入したconstructorはglobalより優先されます。polyfillや`ws` packageはuniplsにbundleしません。
+### WebSocket
 
-## AbortSignal
+すべての対応runtimeで`globalThis.WebSocket`を既定のtransportとして使います。moduleをimportしただけではglobalへアクセスせず、`Unipls`または`UniplsSocket`を構築した時点で解決します。
 
-operationのuser signal、resource scope、timeoutを合成するため、nativeの`AbortSignal.any`を必須とします。library独自のpolyfillは提供しません。合成signalは最初にabortしたsourceの`reason`を同じobject identityで保持します。
+実行環境にglobal WebSocketがない場合や、test double、任意のtransport実装を使う場合は、constructor optionへ`WebSocket`を注入してください。注入したconstructorがglobalより優先されます。
 
-## platform別entry point
+```ts
+const client = new Unipls({
+  url,
+  WebSocket: MyWebSocket,
+});
+```
 
-- `unipls`: 高レベルclientとruntime非依存の拡張契約
-- `unipls/socket`: 低レベルWebSocket client
-- `unipls/browser`: browser固有の`NetworkDropDetector`
+WebSocket polyfillや`ws` packageはbundleしません。
 
-root importは`window`へアクセスせず、browser固有moduleを読み込みません。`unipls/browser`をBrowser以外で利用した場合の動作は保証しません。
+### AbortSignal.any
+
+operationのuser signal、resource scope、timeoutを合成するため、nativeの`AbortSignal.any`を必要とします。library独自のpolyfillは提供しません。
+
+合成したsignalがabortされた場合、最初にabortしたsourceの`reason`を同じobject identityで保持します。
+
+## entry point
+
+| import先         | 内容                                    | 利用環境            |
+| ---------------- | --------------------------------------- | ------------------- |
+| `unipls`         | 高レベルclientとruntime非依存の拡張契約 | すべての対応runtime |
+| `unipls/socket`  | 低レベルWebSocket client                | すべての対応runtime |
+| `unipls/browser` | `NetworkDropDetector`                   | browser             |
+
+package rootは`window`へアクセスせず、browser固有moduleを読み込みません。`unipls/browser`をbrowser以外で利用した場合の動作は保証しません。
+
+## CIで確認する範囲
+
+公開packageを一度tarballにし、isolatedなconsumerへinstallしてから検証します。これにより、repository内のsourceを偶然参照できる状態ではなく、実際に配布されるentry point、型定義、runtime dependencyを確認します。
+
+browser検証も同じtarballを使います。ただし、CIで確認できるのは選択したruntimeとbrowser engine上の互換性です。application固有のWebSocket server、network環境、proxy、切断条件まで保証するものではありません。

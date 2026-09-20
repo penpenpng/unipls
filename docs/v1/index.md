@@ -1,6 +1,7 @@
-# unipls Docs
+# unipls v1 ドキュメント
 
-Choose a language and version.
+現在は日本語版を公開しています。
 
-- [English v1](./en/)
-- [日本語 v1](./ja/)
+- [日本語ドキュメントを読む](./ja/)
+
+英語版は、日本語版の内容を確定したあとに追加します。
