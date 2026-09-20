@@ -130,9 +130,63 @@ describe("operation の共通 lifecycle", () => {
 
   /**
    * ```ts
-   * const opening = client.open(async (ctx) => {
-   *   ctx.listen({ selector: isChallenge, next: consumeChallenge });
-   *   await authenticate();
+   * // JavaScriptから必須selectorを省略した呼び出し
+   * client.request({ query }); // session状態に関係なく同期的にTypeError
+   * client.listen({ selector: "topic" }); // callbackではないselectorも同期的にTypeError
+   * ```
+   */
+  it("必須値と入力型の不正を session 確認より先に同期的に拒否する", () => {
+    // open前のclientへ型検査を迂回したJavaScript相当の入力を渡します。
+    const transport = new ControlledWebSocketServer();
+    const client = new Unipls<string, string>({
+      url: "wss://unipls.test/socket",
+      WebSocket: transport.WebSocket,
+    });
+    const idle = client.lifecycle;
+    const unsafe = client as unknown as {
+      cast(params: unknown): unknown;
+      next(params: unknown): unknown;
+      request(params: unknown): unknown;
+      listen(params: unknown): unknown;
+      subscribe(params: unknown): unknown;
+    };
+
+    // 5種類すべてで、必須propertyやcallback型の不正をinvalid usageより先に検出します。
+    const invalidOperations = [
+      () => unsafe.cast({}),
+      () => unsafe.next({ selector: "response" }),
+      () => unsafe.request({ query: "request" }),
+      () => unsafe.listen({ selector: "topic" }),
+      () => unsafe.subscribe({ selector: () => true }),
+    ];
+    for (const operation of invalidOperations) {
+      expect(operation).toThrow(TypeError);
+      expect(operation).not.toThrow(UniplsInvalidUsageError);
+    }
+
+    // policy、delivery、signalの不正もoperationを登録する前に拒否します。
+    const invalidOptions = [
+      () => unsafe.next({ selector: () => true, predicateError: "ignore" }),
+      () => unsafe.next({ selector: () => true, retry: "resend" }),
+      () => unsafe.request({ query: "request", selector: () => true, retry: {} }),
+      () => unsafe.listen({ callbackError: "continue" }),
+      () => unsafe.listen({ next: () => {}, buffer: 1 }),
+      () => unsafe.subscribe({ query: "subscribe", selector: () => true, signal: {} }),
+    ];
+    for (const operation of invalidOptions) expect(operation).toThrow(TypeError);
+
+    // 不正入力はsessionやtransportを作りません。
+    expect(client.lifecycle).toBe(idle);
+    expect(transport.connections).toHaveLength(0);
+  });
+
+  /**
+   * ```ts
+   * const opening = client.open({
+   *   async setupConnection(ctx) {
+   *     ctx.listen({ selector: isChallenge, next: consumeChallenge });
+   *     await authenticate();
+   *   },
    * });
    * const applicationMessage = client.next({ selector: isApplicationMessage });
    * // ! authenticate() の完了前に challenge が WebSocket から届く
@@ -657,7 +711,9 @@ describe("operation の共通 lifecycle", () => {
 
   /**
    * ```ts
-   * const opening = client.open(async () => waitForProvisioning());
+   * const opening = client.open({
+   *   setupConnection: () => waitForProvisioning(),
+   * });
    * const response = client.next({ selector, timeout: 100 });
    * // ! provisioning が完了しないまま受付から100msが経過する
    * await response; // ready 待機中でも UniplsTimeoutError で reject する

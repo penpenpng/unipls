@@ -24,6 +24,18 @@ import {
   validateOperationTimeout,
 } from "./operations/operation-scope.ts";
 import { MessageDispatcher, type MessageDeliveryMode } from "./operations/message-dispatcher.ts";
+import {
+  validateDropRetryStrategy,
+  validateOperationParams,
+  validateOperationSignal,
+  validateOptionalCallback,
+  validatePredicateErrorPolicy,
+  validateProvisioner,
+  validateRequiredCallback,
+  validateRequiredProperty,
+  validateRetryStrategy,
+  validateStreamDelivery,
+} from "./operations/operation-input.ts";
 import { QuerySession } from "./operations/query-session.ts";
 import { createOnReconnectedHandler } from "./operations/reconnect-hook.ts";
 import { OwnedResourceScope, type Disposer, type MaybePromise } from "./resource-scope.ts";
@@ -170,9 +182,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @param provisioner WebSocket 接続後、ready になる前に行う初期化処理です。
    * @returns WebSocket 接続と初期化が完了すると解決する Promise です。
    *
+   * @throws {TypeError} provisionerが公開されたhook形式に一致しない場合に例外を投げます。
    * @throws {UniplsInvalidUsageError} 論理セッションが既に有効な場合に例外を投げます。
    */
   open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
+    validateProvisioner(provisioner);
     if (this.#lifecycle.hasActiveSession) {
       throw new UniplsInvalidUsageError("論理セッションは既に有効です。");
     }
@@ -227,15 +241,21 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * selector に最初に一致する受信メッセージを待ちます。
    *
    * @returns 一致するメッセージで解決し、受付後に session が終了した場合や timeout、中断時にはその理由で reject する Promise です。
+   * @throws {TypeError} 必須のselectorまたはoptionの型が不正な場合に同期的に投げます。
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
   next(params: UniplsNextParams<TOutput>): Promise<TOutput> {
+    validateOperationParams(params, "next");
     const selector = params.selector;
     const signal = params.signal;
     const timeout = params.timeout;
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
+    validateRequiredCallback(selector, "selector", "next");
+    validateOperationSignal(signal);
+    validateDropRetryStrategy(retry);
+    validatePredicateErrorPolicy(params.predicateError);
     validateOperationTimeout(timeout);
     const session = this.#lifecycle.acceptOperation();
 
@@ -286,6 +306,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * callback の `next` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
    * callback の戻り値や Promise は待機しないため、callback delivery は逐次実行を保証しません。
    *
+   * @throws {TypeError} selector、terminator、delivery、policyの型が不正な場合に同期的に投げます。
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
@@ -303,6 +324,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     params: UniplsListenCallbackParams<TOutput> | UniplsListenIteratorParams<TOutput>,
     mode: MessageDeliveryMode,
   ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
+    validateOperationParams(params, "listen");
     const selector = params.selector ?? (() => true);
     const terminator = params.terminator ?? (() => false);
     const signal = params.signal;
@@ -310,13 +332,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
     const callback = params.next;
-    if (callback !== undefined && typeof callback !== "function") {
-      throw new TypeError("next には callback 関数を指定してください。");
-    }
+    validateOptionalCallback(params.selector, "selector", "listen");
+    validateOptionalCallback(params.terminator, "terminator", "listen");
+    validateOperationSignal(signal);
+    validateDropRetryStrategy(retry);
+    validatePredicateErrorPolicy(params.predicateError);
+    validateStreamDelivery(params, "listen");
     const callbackError = params.callbackError ?? "continue";
-    if (callback !== undefined && callbackError !== "continue" && callbackError !== "unsubscribe") {
-      throw new TypeError("callbackError に未対応の値が指定されました。");
-    }
     const buffer = callback === undefined ? normalizeStreamBuffer(params.buffer) : undefined;
     validateOperationTimeout(timeout);
     const session = this.#lifecycle.acceptOperation();
@@ -395,6 +417,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @returns メッセージの送信が完了すると解決する Promise です。
    *
+   * @throws {TypeError} 必須のqueryまたはoptionの型が不正な場合に同期的に投げます。
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
@@ -407,6 +430,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @returns selector に一致するメッセージで解決する Promise です。
    *
+   * @throws {TypeError} 必須のquery、selectorまたはoptionの型が不正な場合に同期的に投げます。
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
@@ -418,12 +442,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     params: UniplsRequestParams<TInput, TOutput>,
     mode: MessageDeliveryMode,
   ): Promise<TOutput> {
+    validateOperationParams(params, "request");
+    validateRequiredProperty(params, "query", "request");
     const query = params.query;
     const selector = params.selector;
     const signal = params.signal;
     const timeout = params.timeout;
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
+    validateRequiredCallback(selector, "selector", "request");
+    validateOperationSignal(signal);
+    validateRetryStrategy(retry);
+    validatePredicateErrorPolicy(params.predicateError);
     validateOperationTimeout(timeout);
     const session = this.#lifecycle.acceptOperation();
 
@@ -515,9 +545,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   #cast(params: UniplsCastParams<TInput>, mode: MessageDeliveryMode): Promise<void> {
+    validateOperationParams(params, "cast");
+    validateRequiredProperty(params, "query", "cast");
     const query = params.query;
     const signal = params.signal;
     const timeout = params.timeout;
+    validateOperationSignal(signal);
     validateOperationTimeout(timeout);
     const session = this.#lifecycle.acceptOperation();
 
@@ -1303,6 +1336,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * callback の `next` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
    * callback の戻り値や Promise は待機しないため、callback delivery は逐次実行を保証しません。
    *
+   * @throws {TypeError} 必須値、deliveryまたはpolicyの型が不正な場合に同期的に投げます。
    * @throws {UniplsInvalidUsageError} active な open intent がない場合に同期的に投げます。
    * @throws {RangeError} `timeout` が有限の正数でない場合に同期的に投げます。
    */
@@ -1324,6 +1358,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       | UniplsSubscribeIteratorParams<TInput, TOutput>,
     mode: MessageDeliveryMode,
   ): SubscriptionHandle<StreamFinalization<TOutput>> | AsyncSubscription<TOutput> {
+    validateOperationParams(params, "subscribe");
+    validateRequiredProperty(params, "query", "subscribe");
     const query = params.query;
     const selector = params.selector;
     const terminator = params.terminator ?? (() => false);
@@ -1332,13 +1368,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
     const callback = params.next;
-    if (callback !== undefined && typeof callback !== "function") {
-      throw new TypeError("next には callback 関数を指定してください。");
-    }
+    validateRequiredCallback(selector, "selector", "subscribe");
+    validateOptionalCallback(params.terminator, "terminator", "subscribe");
+    validateOperationSignal(signal);
+    validateRetryStrategy(retry);
+    validatePredicateErrorPolicy(params.predicateError);
+    validateStreamDelivery(params, "subscribe");
     const callbackError = params.callbackError ?? "continue";
-    if (callback !== undefined && callbackError !== "continue" && callbackError !== "unsubscribe") {
-      throw new TypeError("callbackError に未対応の値が指定されました。");
-    }
     const buffer = callback === undefined ? normalizeStreamBuffer(params.buffer) : undefined;
     validateOperationTimeout(timeout);
     const session = this.#lifecycle.acceptOperation();

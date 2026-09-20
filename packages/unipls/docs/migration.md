@@ -29,6 +29,8 @@ if (client.lifecycle.phase === "open") {
 
 通信operationはactiveな論理sessionへ同期的に登録されます。`open()`より前またはsession終了後に呼ぶと`UniplsInvalidUsageError`を同期的に投げます。明示した`timeout`には有限の正数だけを指定できます。
 
+必須のqueryやselectorを省略した入力、callbackやpolicyの型が不正な入力は、session状態を確認する前に`TypeError`として拒否します。削除済みのAPI形状が暗黙に受理されることはありません。
+
 ## 接続準備
 
 単一のprovisioner callbackと`isSessionBeginning`による分岐は削除しました。論理sessionで一度だけ行う処理を`setupSession`、物理接続ごとに行う処理を`setupConnection`へ分けます。
@@ -47,6 +49,17 @@ await client.open({
 通常operationはprovisioning中のmessageを観測しません。認証やhandshakeで送受信する場合は`setupConnection`へ渡される接続限定の`cast`、`request`、`listen`、`subscribe`を使用します。
 
 高レベルclientの`castForce`、`requestForce`、`subscribeForce`は削除しました。ready前の限定通信は`setupConnection`のcapabilityへ、任意のwire-level制御は`unipls/socket`へ移してください。
+
+functionだけを渡す旧provisioner shorthandは削除しました。`open()`には必須の`setupConnection`と、必要に応じた`setupSession`を持つobjectを渡してください。不正な形はsessionを開始せず同期的に`TypeError`となります。
+
+## drop detectorのentry point
+
+runtime非依存の`HeartbeatDropDetector`はpackage root、`window`へ依存する`NetworkDropDetector`はbrowser専用entryからimportします。
+
+```ts
+import { HeartbeatDropDetector } from "unipls";
+import { NetworkDropDetector } from "unipls/browser";
+```
 
 ## streamとcleanup
 

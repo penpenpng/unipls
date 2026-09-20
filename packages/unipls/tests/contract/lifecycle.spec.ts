@@ -347,9 +347,11 @@ describe("Unipls の lifecycle", () => {
    * client.on("open", () => {
    *   // provisioning が失敗した場合は呼ばれない
    * });
-   * await client.open(async () => {
-   *   // ! WebSocket が接続し、provisioning が開始される
-   *   throw authenticationError;
+   * await client.open({
+   *   setupConnection() {
+   *     // ! WebSocket が接続し、provisioning が開始される
+   *     throw authenticationError;
+   *   },
    * }); // cause と stage: "provisioning" を持つ UniplsOpenError を投げる
    * ```
    */

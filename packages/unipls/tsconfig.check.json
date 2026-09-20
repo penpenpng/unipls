@@ -7,6 +7,7 @@
     "noEmit": true
   },
   "include": [
+    "benchmarks/**/*.bench.ts",
     "src/**/*.ts",
     "tests/contract/**/*.spec.ts",
     "tests/unit/**/*.test.ts",

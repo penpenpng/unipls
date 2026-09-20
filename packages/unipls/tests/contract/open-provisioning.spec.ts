@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { UniplsInvalidUsageError } from "../../src/index.ts";
 import { flushMicrotasks, UniplsRaceScenario } from "../support/index.ts";
 
 describe("Unipls.open の ready 契約", () => {
   /**
    * ```ts
-   * const opening = client.open(async () => {
-   *   // ! WebSocket が接続し、provisioning が開始される
-   *   await authenticate(); // この処理が完了するまで opening は未完了
+   * const opening = client.open({
+   *   async setupConnection() {
+   *     // ! WebSocket が接続し、provisioning が開始される
+   *     await authenticate(); // この処理が完了するまで opening は未完了
+   *   },
    * });
    * await opening; // WebSocket 接続と provisioning の両方が成功済み
    * ```
@@ -38,5 +41,35 @@ describe("Unipls.open の ready 契約", () => {
     const closing = scenario.client.close();
     transport.emitClose({ code: 1000, wasClean: true });
     await closing;
+  });
+
+  /**
+   * ```ts
+   * // 削除済みのfunction shorthandや必須hookのないobjectは受け付けない
+   * client.open(async () => authenticate()); // 同期的にTypeError
+   * client.open({ setupSession }); // 同期的にTypeError
+   * ```
+   */
+  it("provisioner の公開形を session 作成前に同期的に検証する", () => {
+    // 型検査を迂回したJavaScript相当の入力と、まだidleなclientを用意します。
+    const scenario = new UniplsRaceScenario();
+    const idle = scenario.client.lifecycle;
+    const unsafe = scenario.client as unknown as { open(provisioner: unknown): unknown };
+
+    // function shorthand、必須hook欠落、hook型不正をTypeErrorとして拒否します。
+    const invalidProvisioners = [
+      () => unsafe.open(() => {}),
+      () => unsafe.open({ setupSession() {} }),
+      () => unsafe.open({ setupConnection: true }),
+      () => unsafe.open({ setupConnection() {}, setupSession: true }),
+    ];
+    for (const open of invalidProvisioners) {
+      expect(open).toThrow(TypeError);
+      expect(open).not.toThrow(UniplsInvalidUsageError);
+    }
+
+    // 不正入力は論理sessionもWebSocket接続も作りません。
+    expect(scenario.client.lifecycle).toBe(idle);
+    expect(scenario.transport.connections).toHaveLength(0);
   });
 });

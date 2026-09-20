@@ -84,7 +84,9 @@ describe("再接続エンジン", () => {
    *   },
    * };
    * const client = new Unipls({ url, reconnector });
-   * const opening = client.open(async () => provisionConnection());
+   * const opening = client.open({
+   *   setupConnection: () => provisionConnection(),
+   * });
    * // ! WebSocket 接続後、初回の provisionConnection() が失敗する
    * // ! reconnector が開始した次の接続では provisioning が成功する
    * await opening;

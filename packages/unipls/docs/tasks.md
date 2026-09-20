@@ -1536,13 +1536,15 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 15: correlation helper の要否を検証する（optional）
 
-- [ ] 同時 request/subscription 数に対する selector fan-out の負荷を計測する。
-- [ ] request ID/topic を使う実利用例から重複実装を収集する。
-- [ ] 必要なら key extractor/router を selector 上の opt-in helper として設計する。
-- [ ] keyed dispatcherはkey bucketをcandidate reductionにだけ使い、bucket内の複数operationへfan-outして最終selectorを共通primitiveで評価する。
-- [ ] helperがTask 7のinternal dispatcher境界を再利用し、timeout、drop/recovery、cleanup、diagnosticを独自実装しないことを確認する。
-- [ ] public API候補としてcorrelated viewとoperationごとのroute hintを比較し、key欠落、抽出失敗、重複key、recovery中のregistration semanticsを決定する。
-- [ ] core の broadcast semantics と特定 message envelope 非依存性を維持する。
+- [x] 同時 request/subscription 数に対する selector fan-out の負荷を計測する。
+- [x] request ID/topic を使う具体的な利用例から重複実装を収集する。
+- [x] 計測と利用例が必要性を示さなかったため、初期releaseへkey extractor/routerを追加しないと記録する。
+- [x] 将来のkeyed dispatcherはkey bucketをcandidate reductionにだけ使い、bucket内の複数operationへfan-outして最終selectorを共通primitiveで評価すると確認する。
+- [x] 将来のhelperがTask 7のinternal dispatcher境界を再利用し、timeout、drop/recovery、cleanup、diagnosticを独自実装しない条件を記録する。
+- [x] public API候補としてcorrelated viewとoperationごとのroute hintを比較し、key欠落、抽出失敗、重複key、recovery中のregistration semanticsを整理する。
+- [x] core の broadcast semantics と特定 message envelope 非依存性を維持する。
+
+検証結果と非採用理由は[correlation helper検証記録](./correlation.md)に記録する。
 
 完了条件:
 
@@ -1556,14 +1558,14 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 16: release candidate を総合検証する
 
-- [ ] behavior matrix の全行が contract test に対応しているか監査する。
-- [ ] 公開パッケージの契約testが`*.spec.ts`、それ以外が`*.test.ts`に分類され、公開contract testがinternal moduleへ依存していないことを監査する。
-- [ ] 新しいsource/testが`tests/reference/**`をimportせず、referenceのassertionを現仕様の根拠として引用していないことを監査する。
-- [ ] format、lint、型検査、unit/contract test、build、consumer smoke test を実行する。
-- [ ] timer、listener、AbortSignal、detector、reconnector cleanup の leak test を実行する。
-- [ ] supported runtime ごとの最小 integration test を実行する。
-- [ ] `overview.md`、public API docs、migration note を実装と照合する。
-- [ ] `plan.md` と本書の完了項目を更新し、残課題を次期 milestone へ移す。
+- [x] behavior matrix の全行が contract test に対応しているか監査する。
+- [x] 公開パッケージの契約testが`*.spec.ts`、それ以外が`*.test.ts`に分類され、公開contract testがinternal moduleへ依存していないことを監査する。
+- [x] 新しいsource/testが`tests/reference/**`をimportせず、referenceのassertionを現仕様の根拠として引用していないことを監査する。
+- [x] format、lint、型検査、unit/contract test、build、consumer smoke test を実行する。
+- [x] timer、listener、AbortSignal、detector、reconnector cleanup の leak test を実行する。
+- [x] supported runtime ごとの最小 integration test を実行する。
+- [x] `overview.md`、public API docs、migration note を実装と照合する。
+- [x] `plan.md` と本書の完了項目を更新し、残課題を次期 milestone へ移す。
 
 完了条件:
 
