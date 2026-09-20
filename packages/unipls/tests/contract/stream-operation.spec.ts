@@ -138,6 +138,15 @@ describe("stream operation の共通 lifecycle", () => {
       { type: "stream-callback-failed", severity: "error", cause, policy: "continue" },
       { type: "stream-callback-failed", severity: "error", cause, policy: "unsubscribe" },
     ]);
+    expect(
+      diagnostics.every(
+        (diagnostic) =>
+          diagnostic.type === "stream-callback-failed" &&
+          Object.isFrozen(diagnostic) &&
+          Object.isFrozen(diagnostic.scope) &&
+          !("message" in diagnostic),
+      ),
+    ).toBe(true);
 
     // 残ったstreamを終了します。
     continued.unsubscribe();
@@ -586,6 +595,14 @@ describe("stream operation の共通 lifecycle", () => {
       { severity: "warning", strategy: "drop-oldest", capacity: 2, hasMessage: false },
       { severity: "warning", strategy: "drop-newest", capacity: 2, hasMessage: false },
     ]);
+    expect(
+      diagnostics.every(
+        (diagnostic) =>
+          diagnostic.type === "stream-message-dropped" &&
+          Object.isFrozen(diagnostic) &&
+          Object.isFrozen(diagnostic.scope),
+      ),
+    ).toBe(true);
 
     // 3つのstreamを正常終了します。
     latest.unsubscribe();

@@ -2,7 +2,6 @@ export {
   UniplsBufferOverflowError,
   UniplsClosedError,
   UniplsDroppedError,
-  UniplsDuplicatedConnectionError,
   UniplsError,
   UniplsInvalidUsageError,
   UniplsOpenError,

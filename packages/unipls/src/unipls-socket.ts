@@ -1,6 +1,6 @@
 import { AsyncResult } from "./async-result.ts";
 import {
-  UniplsDuplicatedConnectionError,
+  UniplsInvalidUsageError,
   UniplsSocketClosedError,
   UniplsSocketDroppedError,
   UniplsTimeoutError,
@@ -148,11 +148,11 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
    * WebSocket 接続が未確立ならば新規の接続を試みて、接続とプロビジョニングに成功したときに解決する Promise を返します。
    *
    * @param provisioner WebSocket が開いた後、`open()` の解決前に行う初期化処理です。
-   * @throws {@link UniplsDuplicatedConnectionError} 接続済み、または接続試行中の場合に投げます。
+   * @throws {@link UniplsInvalidUsageError} 接続済み、または接続試行中の場合に投げます。
    */
   open(provisioner?: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.intent === "open" && this.state !== "dropped") {
-      throw new UniplsDuplicatedConnectionError();
+      throw new UniplsInvalidUsageError("WebSocket は既に接続済みか接続試行中です。");
     }
     this.#epoch.deactivate(new UniplsSocketDroppedError());
     const epoch = UniplsTransportEpoch.create(provisioner);

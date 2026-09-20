@@ -1445,25 +1445,25 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 12: public event、error、診断モデルを確定する
 
-- [ ] 任意文字列を許す public event 型を有限 event map に置き換える。
-- [ ] event payload から mutable internal session object を除く。
-- [ ] lifecycle event の previous/current と extension context に、D2 の frozen snapshot または用途別に絞った readonly view だけを渡す。
-- [ ] session/connection/attempt/close metadata を immutable snapshot にする。
-- [ ] `UniplsDrop`をreconnector、lifecycle、operation error、診断eventで共有し、生の`CloseEvent`やsocketを公開しない。
-- [ ] detector identityをregistration indexと任意の一意nameで型付けし、detector failure diagnosticとdetector由来`UniplsDrop.source`で同じfrozen recordを共有する。
-- [ ] rootのdomain errorをD11の6種類へ整理し、`UniplsOpenError`と`UniplsDroppedError`へattempt/drop outcomeと元のcauseを保持する。
-- [ ] domain error に安定した `name`、必要な `cause` と metadata を与える。
-- [ ] extension/callback error の診断経路を実装し、callback同期throwをmessage本体を含まない`stream-callback-failed` variantとして公開する。
-- [ ] finiteなdiagnostic unionとsession/connection/operation scopeを公開し、deserialization failureにはmessage sequenceとraw inputのkind/sizeだけを含める。
-- [ ] selector/terminator failureをoperation-scopedな`message-predicate-failed` variantとして公開し、message本体やconnection/message sequenceを含めない。
-- [ ] lossy bufferによるmessage破棄をoperation-scopedな`stream-message-dropped` warningとして一件ずつ通知し、message本体を含めず、overflow `"error"`では重複通知しない。
-- [ ] reconnector failureをsession-scoped diagnosticとして一度だけ通知し、contextとfailure pointを含め、terminal errorそのものと元のcauseを各consumer outcomeと同じobject identityで共有する。
-- [ ] detector runtime failureをidentityと監督boundary付きのconnection-scoped `drop-detector-failed` diagnosticとして通知し、setup failureはattempt error側だけへ流す。
-- [ ] cleanup failureを所有scope、発生時刻、元のerror、任意name、`defer`/`setup-return`/`internal`の登録元を持つ`resource-cleanup-failed` diagnosticとして一件ずつ通知し、resource object、disposer function、登録順indexは公開しない。
-- [ ] cleanup diagnosticは元のsetup/close/drop/operation outcomeを変更せず、`close()`やsubscriptionの`closed`をrejectさせない。cleanup完了は全disposerを成功・失敗にかかわらず一度ずつ試行した時点とする。
-- [ ] diagnosticを内部処理確定後のmicrotaskでdispatchし、listener throwをfan-out/lifecycleから隔離する。listener不在時にconsoleへ出力しない。
-- [ ] Promise/AsyncIteratorのerrorとstream finalizationの語彙・object identityを揃え、failure variantの`error`に同じ値を保持する。
-- [ ] streamのcanonicalな終了通知を非rejectingな`closed`とfrozen finalization unionにする。legacy終了callbackを明示的に残す判断をした場合だけ、`closed`から一方向に通知するadapterとして定義する。
+- [x] 任意文字列を許す public event 型を有限 event map に置き換える。
+- [x] event payload から mutable internal session object を除く。
+- [x] lifecycle event の previous/current と extension context に、D2 の frozen snapshot または用途別に絞った readonly view だけを渡す。
+- [x] session/connection/attempt/close metadata を immutable snapshot にする。
+- [x] `UniplsDrop`をreconnector、lifecycle、operation error、診断eventで共有し、生の`CloseEvent`やsocketを公開しない。
+- [x] detector identityをregistration indexと任意の一意nameで型付けし、detector failure diagnosticとdetector由来`UniplsDrop.source`で同じfrozen recordを共有する。
+- [x] rootのdomain errorをD11の6種類へ整理し、`UniplsOpenError`と`UniplsDroppedError`へattempt/drop outcomeと元のcauseを保持する。
+- [x] domain error に安定した `name`、必要な `cause` と metadata を与える。
+- [x] extension/callback error の診断経路を実装し、callback同期throwをmessage本体を含まない`stream-callback-failed` variantとして公開する。
+- [x] finiteなdiagnostic unionとsession/connection/operation scopeを公開し、deserialization failureにはmessage sequenceとraw inputのkind/sizeだけを含める。
+- [x] selector/terminator failureをoperation-scopedな`message-predicate-failed` variantとして公開し、message本体やconnection/message sequenceを含めない。
+- [x] lossy bufferによるmessage破棄をoperation-scopedな`stream-message-dropped` warningとして一件ずつ通知し、message本体を含めず、overflow `"error"`では重複通知しない。
+- [x] reconnector failureをsession-scoped diagnosticとして一度だけ通知し、contextとfailure pointを含め、terminal errorそのものと元のcauseを各consumer outcomeと同じobject identityで共有する。
+- [x] detector runtime failureをidentityと監督boundary付きのconnection-scoped `drop-detector-failed` diagnosticとして通知し、setup failureはattempt error側だけへ流す。
+- [x] cleanup failureを所有scope、発生時刻、元のerror、任意name、`defer`/`setup-return`/`internal`の登録元を持つ`resource-cleanup-failed` diagnosticとして一件ずつ通知し、resource object、disposer function、登録順indexは公開しない。
+- [x] cleanup diagnosticは元のsetup/close/drop/operation outcomeを変更せず、`close()`やsubscriptionの`closed`をrejectさせない。cleanup完了は全disposerを成功・失敗にかかわらず一度ずつ試行した時点とする。
+- [x] diagnosticを内部処理確定後のmicrotaskでdispatchし、listener throwをfan-out/lifecycleから隔離する。listener不在時にconsoleへ出力しない。
+- [x] Promise/AsyncIteratorのerrorとstream finalizationの語彙・object identityを揃え、failure variantの`error`に同じ値を保持する。
+- [x] streamのcanonicalな終了通知を非rejectingな`closed`とfrozen finalization unionにする。legacy終了callbackを明示的に残す判断をした場合だけ、`closed`から一方向に通知するadapterとして定義する。
 
 完了条件:
 

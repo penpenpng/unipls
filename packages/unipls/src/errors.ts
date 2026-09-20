@@ -6,6 +6,54 @@ import type {
   UniplsOpenErrorOutcome,
 } from "./types.ts";
 
+function isFrozenDrop(drop: UniplsDrop): boolean {
+  return (
+    Object.isFrozen(drop) &&
+    Object.isFrozen(drop.source) &&
+    (drop.source.type !== "detector" || Object.isFrozen(drop.source.detector)) &&
+    (drop.close === undefined || Object.isFrozen(drop.close))
+  );
+}
+
+function freezeDrop(drop: UniplsDrop): UniplsDrop {
+  if (isFrozenDrop(drop)) return drop;
+  const source =
+    drop.source.type === "detector"
+      ? Object.freeze({
+          type: "detector" as const,
+          detector: Object.freeze({ ...drop.source.detector }),
+        })
+      : Object.freeze({ ...drop.source });
+  return Object.freeze({
+    ...drop,
+    source,
+    ...(drop.close === undefined ? {} : { close: Object.freeze({ ...drop.close }) }),
+  });
+}
+
+function freezeAttempts(
+  attempts: readonly ConnectionAttemptSnapshot[],
+): readonly ConnectionAttemptSnapshot[] {
+  if (
+    Object.isFrozen(attempts) &&
+    attempts.every(
+      (attempt) =>
+        Object.isFrozen(attempt) &&
+        (!("drop" in attempt) || attempt.drop === undefined || isFrozenDrop(attempt.drop)),
+    )
+  ) {
+    return attempts;
+  }
+  return Object.freeze(
+    attempts.map((attempt) =>
+      Object.freeze({
+        ...attempt,
+        ...("drop" in attempt && attempt.drop ? { drop: freezeDrop(attempt.drop) } : {}),
+      }),
+    ),
+  );
+}
+
 /** Unipls の公開 API が通知するエラーの基底クラスです。 */
 export abstract class UniplsError extends Error {}
 
@@ -15,6 +63,7 @@ export class UniplsInvalidUsageError extends UniplsError {
 
   constructor(message: string) {
     super(message);
+    Object.freeze(this);
   }
 }
 
@@ -48,16 +97,20 @@ export class UniplsOpenError extends UniplsError {
     super("The logical session could not become ready.", { cause });
     this.outcome = outcome;
     this.stage = stage;
-    this.attempts = attempts;
+    this.attempts = freezeAttempts(attempts);
     this.cause = cause;
-    this.drop = drop;
+    this.drop = drop === undefined ? undefined : freezeDrop(drop);
+    Object.freeze(this);
   }
 }
 
 /** 利用者が終了した論理セッションに対して操作を継続できないことを表します。 */
 export class UniplsClosedError extends UniplsError {
+  override readonly name = "UniplsClosedError";
+
   constructor() {
-    super("UniplsClosedError: The WebSocket was disconnected.");
+    super("The logical session was closed by the user.");
+    Object.freeze(this);
   }
 }
 
@@ -86,9 +139,10 @@ export class UniplsDroppedError extends UniplsError {
   }) {
     super("The logical session could not remain ready.", { cause });
     this.outcome = outcome;
-    this.drop = drop;
-    this.attempts = attempts;
+    this.drop = freezeDrop(drop);
+    this.attempts = freezeAttempts(attempts);
     this.cause = cause;
+    Object.freeze(this);
   }
 }
 
@@ -98,6 +152,7 @@ export class UniplsTimeoutError extends UniplsError {
 
   constructor() {
     super("The operation timed out.");
+    Object.freeze(this);
   }
 }
 
@@ -107,13 +162,7 @@ export class UniplsBufferOverflowError extends UniplsError {
 
   constructor() {
     super("The stream buffer capacity was exceeded.");
-  }
-}
-
-/** active な論理セッションがある状態で `open()` が再度呼ばれたことを表します。 */
-export class UniplsDuplicatedConnectionError extends UniplsError {
-  constructor() {
-    super("UniplsDuplicatedConnectionError: The WebSocket was already connected or connecting.");
+    Object.freeze(this);
   }
 }
 
@@ -122,15 +171,21 @@ export abstract class UniplsSocketError extends Error {}
 
 /** 低レベルの WebSocket 操作が明示的な close によって終了したことを表します。 */
 export class UniplsSocketClosedError extends UniplsSocketError {
+  override readonly name = "UniplsSocketClosedError";
+
   constructor() {
-    super("UniplsSocketClosedError: The WebSocket was disconnected.");
+    super("The WebSocket was disconnected.");
+    Object.freeze(this);
   }
 }
 
 /** 低レベルの WebSocket 接続が open intent 中に失われたことを表します。 */
 export class UniplsSocketDroppedError extends UniplsSocketError {
+  override readonly name = "UniplsSocketDroppedError";
+
   constructor() {
-    super("UniplsSocketDroppedError: The WebSocket connection was dropped.");
+    super("The WebSocket connection was dropped.");
+    Object.freeze(this);
   }
 }
 

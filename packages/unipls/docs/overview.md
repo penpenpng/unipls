@@ -160,6 +160,25 @@ subscriptionは`Symbol.dispose`や`Symbol.asyncDispose`を実装しません。�
 
 どの終了経路でもoperationのlistener、timer、再接続待機を確実に解放し、終了後にcallbackを再実行しません。cleanup自体の失敗は元の終了理由を上書きせず、別のdiagnosticとして観測できます。
 
+### 公開event、診断、ドメインerror
+
+高レベルclientで購読できるevent名は`open`、`message`、`failed`、`dropped`、`closed`、`lifecycle`、`reconnect`、`diagnostic`に限定されます。event payloadと、その中でlibraryが所有するlifecycle、attempt、drop、closeなどのmetadataは実行時にも不変です。利用者が受け取った値を変更しても、clientの状態や後続eventには影響しません。
+
+diagnosticはmessage処理、callback、拡張処理、cleanupなどでlibraryが捕捉した失敗を、元の処理結果とは別に観測するための有限な型付きunionです。内部処理の結果が確定した後のmicrotaskでlistenerへ通知し、あるlistenerの例外を他のlistenerやclient lifecycleから隔離します。listenerがない場合にconsoleへ代替出力しません。
+
+messageに関係するdiagnosticへapplication message本体は含めません。deserialization failureは接続内のmessage sequenceとraw inputのkind/sizeだけを公開し、selector、terminator、callback、lossy bufferのdiagnosticはoperation scopeと処理方針だけを公開します。これにより、診断収集先へmessageの機密情報が意図せず流れることを避けられます。
+
+通常の利用コードは、次の6種類の高レベルなドメインerrorだけで失敗を分類できます。
+
+- `UniplsInvalidUsageError`: 現在のlifecycleでは受け付けられないAPI呼び出し
+- `UniplsOpenError`: 論理セッションがreadyになる前のterminal failure
+- `UniplsClosedError`: 利用者によるsession終了
+- `UniplsDroppedError`: drop後にoperationまたはsession recoveryを継続できない状態
+- `UniplsTimeoutError`: operationの期限超過
+- `UniplsBufferOverflowError`: streamの未処理messageがbuffer capacityを超過した状態
+
+`UniplsOpenError`と`UniplsDroppedError`は、終了理由、接続試行履歴、canonicalなdrop、元の`cause`を必要に応じて保持します。これらのerrorとmetadataも不変ですが、利用者が作成したopaqueな`cause`自体をcloneまたはfreezeすることはありません。
+
 ## 公開インターフェイスの境界
 
 コアとなる公開面は、型付きクライアントと、その振る舞いを差し替える小さな契約です。

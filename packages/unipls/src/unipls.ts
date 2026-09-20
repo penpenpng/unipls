@@ -10,7 +10,6 @@ import { DropDetectorManager } from "./drop-detector/drop-detector-manager.ts";
 import {
   UniplsClosedError,
   UniplsDroppedError,
-  UniplsDuplicatedConnectionError,
   UniplsInvalidUsageError,
   UniplsOpenError,
   UniplsSocketClosedError,
@@ -69,7 +68,7 @@ import type {
 } from "./unipls.interface.ts";
 
 /** 公開 event を発生させた論理セッションと接続を識別します。 */
-interface ConnectionEventContext {
+export interface ConnectionEventContext {
   /** event が属する論理セッションです。 */
   readonly session: SessionId;
   /** event が属する WebSocket 接続試行です。 */
@@ -91,7 +90,7 @@ interface ReconnectionPolicyRun {
   cleanupCalled: boolean;
 }
 
-type UniplsEvents<TOutput> = {
+export type UniplsEvents<TOutput> = {
   /** 接続が ready になったときに通知されます。 */
   open: ConnectionEventContext;
   /** メッセージを受信して変換できたときに通知されます。 */
@@ -174,11 +173,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * @param provisioner WebSocket 接続後、ready になる前に行う初期化処理です。
    * @returns WebSocket 接続と初期化が完了すると解決する Promise です。
    *
-   * @throws {UniplsDuplicatedConnectionError} WebSocket が既に接続されているか、接続を試行中の場合に例外を投げます。
+   * @throws {UniplsInvalidUsageError} 論理セッションが既に有効な場合に例外を投げます。
    */
   open(provisioner?: UniplsProvisioner<TInput, TOutput>): Promise<void> {
     if (this.#lifecycle.hasActiveSession) {
-      throw new UniplsDuplicatedConnectionError();
+      throw new UniplsInvalidUsageError("論理セッションは既に有効です。");
     }
 
     this.#provisioner = provisioner;
@@ -749,10 +748,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   #bindTransport(transportEpochId: number, connection: ConnectionId): void {
     this.#transportContexts.clear();
-    this.#transportContexts.set(transportEpochId, {
-      session: this.#lifecycle.session,
-      connection,
-    });
+    this.#transportContexts.set(
+      transportEpochId,
+      Object.freeze({
+        session: this.#lifecycle.session,
+        connection,
+      }),
+    );
     const report = this.#socket.getDropReport(transportEpochId);
     if (report) {
       this.#handleTransportDrop(transportEpochId, report);
@@ -773,11 +775,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         return;
       }
       this.#messages.dispatchReady(context.session, message);
-      this.events.emit("message", { ...context, message });
+      this.events.emit("message", Object.freeze({ ...context, message }));
     });
     this.#socket.events.on("error", ({ epoch, error, messageSequence, input }) => {
       const context = this.#currentTransportContext(epoch.id);
       if (!context) return;
+      if (!this.events.hasListeners("diagnostic")) return;
       const scope = Object.freeze({
         type: "connection" as const,
         session: context.session,
@@ -797,7 +800,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#socket.events.on("failed", ({ epoch, error }) => {
       const context = this.#currentTransportContext(epoch.id);
       if (context) {
-        this.events.emit("failed", { ...context, error });
+        this.events.emit("failed", Object.freeze({ ...context, error }));
       }
     });
     this.#socket.events.on("closed", ({ epoch }) => {
@@ -830,7 +833,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         if (!this.#lifecycle.isCurrentAttempt(connection)) return;
         this.#assertCurrentTransport(transportEpochId, transportSignal);
         const origin = this.#lifecycle.markReady(connection);
-        const context = { session: this.#lifecycle.session, connection };
+        const context = Object.freeze({ session: this.#lifecycle.session, connection });
         this.events.emit("open", context);
         if (origin === "initial") {
           this.#resolvePendingOpen();
@@ -1006,13 +1009,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #activeSessionContext(): ConnectionEventContext | undefined {
     const snapshot = this.#lifecycle.snapshot;
     if (snapshot.phase === "open" || snapshot.phase === "provisioning") {
-      return { session: snapshot.session, connection: snapshot.connection };
+      return Object.freeze({ session: snapshot.session, connection: snapshot.connection });
     }
     if (snapshot.phase === "connecting" && snapshot.status === "attempting") {
-      return { session: snapshot.session, connection: snapshot.connection };
+      return Object.freeze({ session: snapshot.session, connection: snapshot.connection });
     }
     if (snapshot.phase === "recovering") {
-      return { session: snapshot.session, connection: snapshot.drop.connection };
+      return Object.freeze({ session: snapshot.session, connection: snapshot.drop.connection });
     }
     return undefined;
   }
@@ -1057,7 +1060,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         attempts: this.#lifecycle.attempts,
         cause: report.cause,
       });
-      this.events.emit("dropped", { ...context, drop, error });
+      this.events.emit("dropped", Object.freeze({ ...context, drop, error }));
       if (terminalWithoutReconnector) {
         this.#terminateRecovery("recovery-exhausted", report.cause, error);
         return;
@@ -1098,7 +1101,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#canonicalDrops.clear();
     this.#disposeSessionResources(error, () => {
       if (connection) {
-        this.events.emit("closed", { session: context.session, connection, error });
+        this.events.emit("closed", Object.freeze({ session: context.session, connection, error }));
       }
       this.#rejectPendingOpen(error);
     });
@@ -1128,11 +1131,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#lifecycle.terminateRecovery(outcome, error, cause);
     this.#canonicalDrops.clear();
     this.#disposeSessionResources(error, () => {
-      this.events.emit("closed", {
-        session: drop.session,
-        connection: drop.connection,
-        error,
-      });
+      this.events.emit(
+        "closed",
+        Object.freeze({
+          session: drop.session,
+          connection: drop.connection,
+          error,
+        }),
+      );
     });
     return error;
   }
@@ -1582,28 +1588,30 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       selected = predicate(message);
     } catch (cause) {
       if (policy === "fail") onPredicateFailure(cause);
-      const diagnostic: MessagePredicateFailedDiagnostic = Object.freeze({
-        type: "message-predicate-failed",
-        severity: "error",
-        scope: Object.freeze({
-          type: "operation",
-          session: scope.session,
-          operation: scope.operation,
-          operationType: scope.operationType,
-        }),
-        occurredAt: Date.now(),
-        cause,
-        predicate: predicateType,
-        policy,
-      });
-      this.events.emitIsolated("diagnostic", diagnostic);
+      if (this.events.hasListeners("diagnostic")) {
+        const diagnostic: MessagePredicateFailedDiagnostic = Object.freeze({
+          type: "message-predicate-failed",
+          severity: "error",
+          scope: Object.freeze({
+            type: "operation",
+            session: scope.session,
+            operation: scope.operation,
+            operationType: scope.operationType,
+          }),
+          occurredAt: Date.now(),
+          cause,
+          predicate: predicateType,
+          policy,
+        });
+        this.events.emitIsolated("diagnostic", diagnostic);
+      }
       return "failed";
     }
     if (!selected) return "unmatched";
     try {
       onSelected(message);
-    } catch (cause) {
-      console.warn("メッセージ callback でエラーが発生しました:", cause);
+    } catch {
+      // user callbackとpredicateは個別の境界で処理済みのため、内部settleの競合だけを隔離します。
     }
     return "matched";
   }

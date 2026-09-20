@@ -280,6 +280,17 @@ describe("provisioning capability と resource scope", () => {
       { cause: firstCleanupError, name: "third", source: "defer" },
       { cause: secondCleanupError, name: undefined, source: "defer" },
     ]);
+    expect(
+      diagnostics.every(
+        (diagnostic) =>
+          diagnostic.type === "resource-cleanup-failed" &&
+          Object.isFrozen(diagnostic) &&
+          Object.isFrozen(diagnostic.scope) &&
+          Object.isFrozen(diagnostic.resource) &&
+          !("disposer" in diagnostic.resource) &&
+          !("registrationIndex" in diagnostic.resource),
+      ),
+    ).toBe(true);
   });
 
   /**
@@ -504,6 +515,9 @@ describe("provisioning capability と resource scope", () => {
         throw new Error("drop detector failure diagnosticがありません");
       }
       expect(diagnostics[0].detector).toBe(detectorIdentity);
+      expect(Object.isFrozen(diagnostics[0])).toBe(true);
+      expect(Object.isFrozen(diagnostics[0].scope)).toBe(true);
+      expect(Object.isFrozen(diagnostics[0].detector)).toBe(true);
 
       // 生存しているdetectorは引き続き同じconnectionを監視し、dropを報告できます。
       survivorDrop();

@@ -275,7 +275,13 @@ describe("operation の共通 lifecycle", () => {
     expect(
       diagnostics.every(
         (diagnostic) =>
-          diagnostic.type === "message-predicate-failed" && diagnostic.cause === cause,
+          diagnostic.type === "message-predicate-failed" &&
+          diagnostic.cause === cause &&
+          Object.isFrozen(diagnostic) &&
+          Object.isFrozen(diagnostic.scope) &&
+          !("message" in diagnostic) &&
+          !("connection" in diagnostic.scope) &&
+          !("messageSequence" in diagnostic.scope),
       ),
     ).toBe(true);
 
