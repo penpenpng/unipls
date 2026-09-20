@@ -9,7 +9,7 @@ import { ObservationQueue } from "./observation-queue.ts";
 export class ControlledProvisioner<TContext = unknown> {
   readonly #hook = new ControlledHook<TContext>();
   readonly invocations = this.#hook.invocations;
-  readonly setup = this.#hook.invoke;
+  readonly setupConnection = this.#hook.invoke;
 
   succeed(invocation: ControlledInvocation<TContext>): void {
     invocation.resolve(undefined);

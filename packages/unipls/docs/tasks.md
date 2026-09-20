@@ -1193,15 +1193,15 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 3: logical session と transport epoch を分離する
 
-- [ ] session ID を発行・所有する単一の session model を導入する。
-- [ ] 物理接続の試行にはsessionと異なる内部transport epochを与え、公開境界ではそのidentityを`ConnectionId`で表す。
-- [ ] provisioning/reconnector/event が同じ論理 session ID を参照するようにする。
-- [ ] session setupの未実行/成功済みを論理session stateへ明示的に保持し、物理IDのSetや公開`isSessionBeginning` flagから推測しない。
-- [ ] 二重 `open()` の妥当性検証を、provisioner/session の変更より前に行う。
-- [ ] 失敗した `open()` が既存 session を変更しないことを test する。
-- [ ] lifecycle coordinator を状態の唯一の writer とし、D2 の frozen snapshot を遷移ごとに生成する。
-- [ ] `unipls.lifecycle` getter と `{ previous, current }` を持つ lifecycle event を実装する。
-- [ ] 最初に ready になるまで `open()` を pending に保ち、D3 の attempt outcome に従って resolve/reject する。
+- [x] session ID を発行・所有する単一の session model を導入する。
+- [x] 物理接続の試行にはsessionと異なる内部transport epochを与え、公開境界ではそのidentityを`ConnectionId`で表す。
+- [x] provisioning/reconnector/event が同じ論理 session ID を参照するようにする。
+- [x] session setupの未実行/成功済みを論理session stateへ明示的に保持し、物理IDのSetや公開`isSessionBeginning` flagから推測しない。
+- [x] 二重 `open()` の妥当性検証を、provisioner/session の変更より前に行う。
+- [x] 失敗した `open()` が既存 session を変更しないことを test する。
+- [x] lifecycle coordinator を状態の唯一の writer とし、D2 の frozen snapshot を遷移ごとに生成する。
+- [x] `unipls.lifecycle` getter と `{ previous, current }` を持つ lifecycle event を実装する。
+- [x] 最初に ready になるまで `open()` を pending に保ち、D3 の attempt outcome に従って resolve/reject する。
 
 完了条件:
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { SessionId } from "../../src/index.ts";
 
 import {
   CallbackProbe,
@@ -9,6 +10,8 @@ import {
   DisposalProbe,
   ManualScheduler,
 } from "../support/index.ts";
+
+const session = "test-session" as SessionId;
 
 describe("controlled extension hooks", () => {
   it("pauses hooks at independently resolvable and rejectable invocations", async () => {
@@ -30,7 +33,7 @@ describe("controlled extension hooks", () => {
 
   it("controls provisioning, reconnect, cancel, and detector drop actions", async () => {
     const provisioner = new ControlledProvisioner<{ connection: number }>();
-    const provisioning = provisioner.setup({ connection: 1 });
+    const provisioning = provisioner.setupConnection({ connection: 1 });
     const provision = provisioner.invocations.take();
     provisioner.succeed(provision);
     await expect(provisioning).resolves.toBeUndefined();
@@ -41,7 +44,7 @@ describe("controlled extension hooks", () => {
     const cleanup = reconnector.setup(
       { reconnect: reconnectCalls.callback, cancel: cancelCalls.callback },
       {
-        session: 1,
+        session,
         sessionAttempts: [],
         allAttempts: [],
         signal: new AbortController().signal,
@@ -54,7 +57,7 @@ describe("controlled extension hooks", () => {
     const secondCleanup = reconnector.setup(
       { reconnect: reconnectCalls.callback, cancel: cancelCalls.callback },
       {
-        session: 1,
+        session,
         sessionAttempts: [],
         allAttempts: [],
         signal: new AbortController().signal,
@@ -88,7 +91,7 @@ describe("controlled extension hooks", () => {
       reconnector.setup(
         { reconnect() {}, cancel() {} },
         {
-          session: 1,
+          session,
           sessionAttempts: [],
           allAttempts: [],
           signal: new AbortController().signal,

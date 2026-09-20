@@ -31,22 +31,22 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   protected deserialize: (data: WebSocketData) => TOutput;
   protected timeout: number;
   #WebSocket: WebSocketConstructor;
-  #session: UniplsSessionState = UniplsSessionState.dead();
+  #epoch: UniplsTransportEpoch = UniplsTransportEpoch.dead();
   #events = new EventBus<UniplsSocketPublicEvents<TOutput> & UniplsSocketInternalEvents>();
   get events(): EventBus<UniplsSocketPublicEvents<TOutput>> {
     return this.#events as EventBus<UniplsSocketPublicEvents<TOutput>>;
   }
   get state(): UniplsConnectionState {
-    return this.#session.conn.state;
+    return this.#epoch.connection.state;
   }
   get intent() {
-    return this.#session.intent;
+    return this.#epoch.intent;
   }
-  get sessionId() {
-    return this.#session.id;
+  get transportEpochId() {
+    return this.#epoch.id;
   }
   get #socket() {
-    return this.#session.conn.socket;
+    return this.#epoch.connection.socket;
   }
 
   constructor({
@@ -67,17 +67,17 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.#events.on("raw-open", async ({ session }) => {
-      session.conn.state = "provisioning";
+      session.connection.state = "provisioning";
 
       try {
         await session.provisioner?.();
-        session.conn.state = "open";
+        session.connection.state = "open";
         this.#events.emit("open", { session });
       } catch (error) {
         session.intent = "close";
-        session.conn.state = "closed";
+        session.connection.state = "closed";
         this.#events.emit("failed", { session, error });
-        session.conn.socket?.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
+        session.connection.socket?.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
       }
     });
 
@@ -98,11 +98,11 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     this.#events.on("raw-close", ({ session, code }) => {
       if (code === UniplsWebSocketCloseCode.NORMAL_CLOSURE) {
-        session.conn.state = "closed";
+        session.connection.state = "closed";
         this.#events.emit("closed", { session });
       } else {
-        session.conn.state = "dropped";
-        this.#events.emit("dropped", { session });
+        session.connection.state = "dropped";
+        this.#events.emit("dropped", { session, code });
       }
     });
   }
@@ -118,9 +118,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     if (this.intent === "open" && this.state !== "dropped") {
       throw new UniplsDuplicatedConnectionError();
     }
-    const session = UniplsSessionState.create(provisioner);
-    session.conn.state = "connecting";
-    this.#session = session;
+    const session = UniplsTransportEpoch.create(provisioner);
+    session.connection.state = "connecting";
+    this.#epoch = session;
 
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     const events = this.#events.spawnEventBusView();
@@ -133,7 +133,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     let socket: WebSocket;
     try {
-      session.conn.socket = socket = this.#createSocket(session);
+      session.connection.socket = socket = this.#createSocket(session);
     } catch (err) {
       result.reject(err);
       return result.promise;
@@ -170,7 +170,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       }
 
       result.reject(new UniplsTimeoutError());
-      session.conn.state = "dropped";
+      session.connection.state = "dropped";
       timeoutTimer = undefined;
       socket.close(UniplsWebSocketCloseCode.MARKED_AS_TIMED_OUT);
     }, this.timeout);
@@ -178,7 +178,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
-  #createSocket(session: UniplsSessionState): WebSocket {
+  #createSocket(session: UniplsTransportEpoch): WebSocket {
     let socket: WebSocket;
     try {
       const WebSocket = this.#WebSocket;
@@ -209,10 +209,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       return Promise.resolve();
     }
 
-    this.#session.intent = "close";
+    this.#epoch.intent = "close";
 
-    const targetSession = this.#session;
-    const targetSessionId = this.#session.id;
+    const targetSession = this.#epoch;
+    const targetSessionId = this.#epoch.id;
 
     const events = this.#events.spawnEventBusView();
     const result = new AsyncResult<void>({
@@ -318,25 +318,25 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
 // FIXME: session は外部から操作不可能であるべき。id などのみ公開するに留めたほうがいい
 export interface UniplsSocketPublicEvents<TOutput> {
-  open: { session: UniplsSessionState };
-  message: { session: UniplsSessionState; message: TOutput };
-  error: { session: UniplsSessionState; error: unknown };
-  closed: { session: UniplsSessionState };
-  dropped: { session: UniplsSessionState };
+  open: { session: UniplsTransportEpoch };
+  message: { session: UniplsTransportEpoch; message: TOutput };
+  error: { session: UniplsTransportEpoch; error: unknown };
+  closed: { session: UniplsTransportEpoch };
+  dropped: { session: UniplsTransportEpoch; code?: number };
+  failed: { session: UniplsTransportEpoch; error: unknown };
 }
 
 interface UniplsSocketInternalEvents {
-  "raw-open": { session: UniplsSessionState };
-  "raw-message": { session: UniplsSessionState; data: WebSocketData };
-  "raw-close": { session: UniplsSessionState; socket: WebSocket; code: number };
-  failed: { session: UniplsSessionState; error: unknown };
+  "raw-open": { session: UniplsTransportEpoch };
+  "raw-message": { session: UniplsTransportEpoch; data: WebSocketData };
+  "raw-close": { session: UniplsTransportEpoch; socket: WebSocket; code: number };
 }
 
 type UniplsProvisioner = () => Promise<void>;
 
 // FIXME: ドメインを記述する
-class UniplsSessionState {
-  static #nextSessionId = 1;
+class UniplsTransportEpoch {
+  static #nextEpochId = 1;
 
   #id: number;
   get id() {
@@ -349,31 +349,31 @@ class UniplsSessionState {
   }
 
   intent: UniplsConnectionIntent = "open";
-  conn: UniplsConnection;
+  connection: UniplsTransportConnection;
 
   static create(provisioner?: UniplsProvisioner) {
-    return new UniplsSessionState(this.#nextSessionId++, provisioner);
+    return new UniplsTransportEpoch(this.#nextEpochId++, provisioner);
   }
 
   static dead() {
-    const session = new UniplsSessionState(NaN);
-    session.intent = "close";
-    session.conn.state = "closed";
-    return session;
+    const epoch = new UniplsTransportEpoch(NaN);
+    epoch.intent = "close";
+    epoch.connection.state = "closed";
+    return epoch;
   }
 
-  private constructor(sessionId: number, provisioner?: UniplsProvisioner) {
-    this.#id = sessionId;
+  private constructor(epochId: number, provisioner?: UniplsProvisioner) {
+    this.#id = epochId;
     this.#provisioner = provisioner;
-    this.conn = new UniplsConnection(sessionId);
+    this.connection = new UniplsTransportConnection(epochId);
   }
 }
 
-class UniplsConnection {
+class UniplsTransportConnection {
   state: UniplsConnectionState = "closed";
   socket?: WebSocket;
 
-  constructor(public sessionId: number) {}
+  constructor(public epochId: number) {}
 }
 
 export const UniplsWebSocketCloseCode = {

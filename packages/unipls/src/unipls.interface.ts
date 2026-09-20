@@ -32,7 +32,10 @@ export type UniplsProvisionerFunction<TInput = WebSocketData, TOutput = WebSocke
 ) => Promise<void> | void;
 
 export interface UniplsProvisionerObject<TInput = WebSocketData, TOutput = WebSocketData> {
-  setup: UniplsProvisionerFunction<TInput, TOutput>;
+  /** 論理 session ごとに一度だけ、成功するまで実行されます。 */
+  setupSession?: UniplsProvisionerFunction<TInput, TOutput>;
+  /** 各 transport epoch の connection setup として実行されます。 */
+  setupConnection: UniplsProvisionerFunction<TInput, TOutput>;
 }
 
 /**

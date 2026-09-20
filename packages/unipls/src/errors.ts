@@ -1,4 +1,36 @@
+import type {
+  ConnectionAttemptSnapshot,
+  ConnectionAttemptStage,
+  UniplsOpenErrorOutcome,
+} from "./types.ts";
+
 export abstract class UniplsError extends Error {}
+
+export class UniplsOpenError extends UniplsError {
+  override readonly name = "UniplsOpenError";
+  readonly outcome: UniplsOpenErrorOutcome;
+  readonly stage?: ConnectionAttemptStage;
+  readonly attempts: readonly ConnectionAttemptSnapshot[];
+  override readonly cause: unknown;
+
+  constructor({
+    outcome,
+    stage,
+    attempts,
+    cause,
+  }: {
+    outcome: UniplsOpenErrorOutcome;
+    stage?: ConnectionAttemptStage;
+    attempts: readonly ConnectionAttemptSnapshot[];
+    cause: unknown;
+  }) {
+    super("The logical session could not become ready.", { cause });
+    this.outcome = outcome;
+    this.stage = stage;
+    this.attempts = attempts;
+    this.cause = cause;
+  }
+}
 
 export class UniplsClosedError extends UniplsError {
   constructor() {
