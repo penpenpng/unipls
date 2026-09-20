@@ -13,20 +13,11 @@ import {
 } from "./errors.ts";
 import { EventBus } from "./event-bus";
 import { UniplsLifecycleCoordinator } from "./lifecycle.ts";
-import {
-  createDropWaitHandler,
-  createRetryingDropHandler,
-} from "./operations/drop-policy.ts";
-import {
-  SingleOperationScope,
-  StreamOperationScope,
-} from "./operations/operation-scope.ts";
+import { createDropWaitHandler, createRetryingDropHandler } from "./operations/drop-policy.ts";
+import { SingleOperationScope, StreamOperationScope } from "./operations/operation-scope.ts";
 import { QuerySession } from "./operations/query-session.ts";
 import { createOnReconnectedHandler } from "./operations/reconnect-hook.ts";
-import type {
-  UniplsReconnectEvent,
-  UniplsReconnector,
-} from "./reconnector/reconnector.ts";
+import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
 import type {
   ConnectionId,
   SessionId,
@@ -124,14 +115,27 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#provisioner = provisioner;
     const connection = this.#lifecycle.beginSession();
 
-    const socketOpening = this.#socket.open(async () => {
+    let transportEpochId = Number.NaN;
+    let transportSignal: AbortSignal | undefined;
+    const socketOpening = this.#socket.open(async (signal) => {
+      transportSignal = signal;
+      this.#assertCurrentTransport(transportEpochId, signal);
       this.#lifecycle.markProvisioning(connection);
-      await this.#runProvisioner();
-      this.#detectorManager.start(this.#createDropDetectorContext());
+      await this.#runProvisioner(transportEpochId, signal);
+      this.#assertCurrentTransport(transportEpochId, signal);
+      this.#detectorManager.start(
+        transportEpochId,
+        this.#createDropDetectorContext(transportEpochId, signal),
+      );
     });
-    this.#bindTransport(connection);
+    transportEpochId = this.#socket.transportEpochId;
+    this.#bindTransport(transportEpochId, connection);
     const promise = socketOpening
       .then(() => {
+        this.#assertCurrentTransport(transportEpochId, transportSignal);
+        if (!this.#lifecycle.isCurrentAttempt(connection)) {
+          throw transportSignal?.reason ?? new UniplsSocketDroppedError();
+        }
         this.#lifecycle.markReady(connection);
         this.events.emit("open", {
           session: this.#lifecycle.session,
@@ -143,10 +147,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         if (!this.#lifecycle.isCurrentAttempt(connection)) {
           throw cause;
         }
-        const stage =
-          this.lifecycle.phase === "provisioning"
-            ? "provisioning"
-            : "connecting";
+        const stage = this.lifecycle.phase === "provisioning" ? "provisioning" : "connecting";
         const attempts = this.#lifecycle.failInitialAttempt(connection, cause);
         throw new UniplsOpenError({
           outcome: "attempt-failed",
@@ -238,9 +239,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    *
    * @throws {UniplsClosedError}
    */
-  listen(
-    params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>,
-  ): () => void {
+  listen(params: UniplsSubscriber<TOutput> & UniplsListenOptions<TOutput>): () => void {
     if (this.state === "closed") {
       throw new UniplsClosedError();
     }
@@ -262,10 +261,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleTerminator,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            "An error occurred while processing onTerminator callback:",
-            err,
-          );
+          console.warn("An error occurred while processing onTerminator callback:", err);
         },
       });
       Unipls.#processMessage({
@@ -274,10 +270,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleMessage,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            "An error occurred while processing onMessage callback:",
-            err,
-          );
+          console.warn("An error occurred while processing onMessage callback:", err);
         },
       });
     });
@@ -338,9 +331,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return this.#request({ ...params, force: true });
   }
 
-  #request(
-    params: UniplsRequestParams<TInput, TOutput> & { force: boolean },
-  ): Promise<TOutput> {
+  #request(params: UniplsRequestParams<TInput, TOutput> & { force: boolean }): Promise<TOutput> {
     if (this.state === "closed") {
       throw new UniplsClosedError();
     }
@@ -376,11 +367,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    if (
-      this.state === "connecting" ||
-      this.state === "provisioning" ||
-      this.state === "open"
-    ) {
+    if (this.state === "connecting" || this.state === "provisioning" || this.state === "open") {
       request(params.query, params);
     }
 
@@ -471,11 +458,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
     };
 
-    if (
-      this.state === "connecting" ||
-      this.state === "provisioning" ||
-      this.state === "open"
-    ) {
+    if (this.state === "connecting" || this.state === "provisioning" || this.state === "open") {
       sendOnce(params.query);
     }
 
@@ -486,16 +469,28 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return scope.promise;
   }
 
-  async #runProvisioner(): Promise<void> {
+  async #runProvisioner(transportEpochId: number, signal: AbortSignal): Promise<void> {
     const result = new AsyncResult<void>();
     const sessionId = this.#lifecycle.session;
     const isSessionBeginning = this.#lifecycle.isSessionBeginning;
 
     const ctx: UniplsProvisioningContext<TInput, TOutput> = {
-      cast: (data) => this.castForce({ query: data }),
-      request: (params) => this.requestForce(params),
-      listen: (params) => this.listen(params),
-      subscribe: (params) => this.subscribeForce(params),
+      cast: (data) => {
+        this.#assertCurrentTransport(transportEpochId, signal);
+        return this.castForce({ query: data, signal });
+      },
+      request: (params) => {
+        this.#assertCurrentTransport(transportEpochId, signal);
+        return this.requestForce({ ...params, signal });
+      },
+      listen: (params) => {
+        this.#assertCurrentTransport(transportEpochId, signal);
+        this.listen({ ...params, signal });
+      },
+      subscribe: (params) => {
+        this.#assertCurrentTransport(transportEpochId, signal);
+        return this.subscribeForce({ ...params, signal });
+      },
       session: sessionId,
       isSessionBeginning,
     };
@@ -505,17 +500,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         this.#lifecycle.markSessionSetupCompleted();
       } else if (typeof this.#provisioner === "function") {
         this.#lifecycle.markSessionSetupCompleted();
-        await this.#provisioner(ctx);
+        await this.#waitForProvisioning(this.#provisioner(ctx), signal);
       } else {
         if (isSessionBeginning && this.#provisioner.setupSession) {
-          await this.#provisioner.setupSession(ctx);
+          await this.#waitForProvisioning(this.#provisioner.setupSession(ctx), signal);
+          this.#assertCurrentTransport(transportEpochId, signal);
           this.#lifecycle.markSessionSetupCompleted();
         } else if (isSessionBeginning) {
           this.#lifecycle.markSessionSetupCompleted();
         }
-        await this.#provisioner.setupConnection(ctx);
+        await this.#waitForProvisioning(this.#provisioner.setupConnection(ctx), signal);
       }
 
+      this.#assertCurrentTransport(transportEpochId, signal);
       result.resolve();
     } catch (err) {
       result.reject(err);
@@ -524,52 +521,64 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
-  #createDropDetectorContext(): DropDetectorContext<TInput, TOutput> {
+  #createDropDetectorContext(
+    transportEpochId: number,
+    signal: AbortSignal,
+  ): DropDetectorContext<TInput, TOutput> {
     return {
-      drop: () => this.drop(),
-      request: (params) => this.request(params),
+      drop: () => this.#socket.drop(transportEpochId),
+      request: (params) => {
+        this.#assertCurrentTransport(transportEpochId, signal);
+        return this.request({
+          ...params,
+          signal: AbortSignal.any([signal, ...(params.signal ? [params.signal] : [])]),
+        });
+      },
     };
   }
 
-  #bindTransport(connection: ConnectionId): void {
-    this.#transportContexts.set(this.#socket.transportEpochId, {
+  #bindTransport(transportEpochId: number, connection: ConnectionId): void {
+    this.#transportContexts.clear();
+    this.#transportContexts.set(transportEpochId, {
       session: this.#lifecycle.session,
       connection,
     });
   }
 
   #bridgeSocketEvents(): void {
-    this.#socket.events.on("message", ({ session, message }) => {
-      const context = this.#transportContexts.get(session.id);
+    this.#socket.events.on("message", ({ epoch, message }) => {
+      const context = this.#currentTransportContext(epoch.id);
       if (context) {
         this.events.emit("message", { ...context, message });
       }
     });
-    this.#socket.events.on("error", ({ session, error }) => {
-      const context = this.#transportContexts.get(session.id);
+    this.#socket.events.on("error", ({ epoch, error }) => {
+      const context = this.#currentTransportContext(epoch.id);
       if (context) {
         this.events.emit("error", { ...context, error });
       }
     });
-    this.#socket.events.on("failed", ({ session, error }) => {
-      const context = this.#transportContexts.get(session.id);
+    this.#socket.events.on("failed", ({ epoch, error }) => {
+      const context = this.#currentTransportContext(epoch.id);
       if (context) {
         this.events.emit("failed", { ...context, error });
       }
     });
-    this.#socket.events.on("closed", ({ session }) => {
-      const context = this.#transportContexts.get(session.id);
+    this.#socket.events.on("closed", ({ epoch }) => {
+      const context = this.#currentTransportContext(epoch.id);
       if (context) {
+        this.#detectorManager.stop(epoch.id);
         this.events.emit("closed", context);
+        this.#transportContexts.delete(epoch.id);
       }
     });
-    this.#socket.events.on("dropped", ({ session, code }) => {
-      const context = this.#transportContexts.get(session.id);
+    this.#socket.events.on("dropped", ({ epoch, code }) => {
+      const context = this.#currentTransportContext(epoch.id);
       if (!context) {
         return;
       }
 
-      this.#detectorManager.stop();
+      this.#detectorManager.stop(epoch.id);
       let drop: UniplsDrop | undefined;
       if (this.#lifecycle.hasActiveSession && this.#lifecycle.hasBeenReady) {
         drop = this.#lifecycle.createPeerDrop(code);
@@ -581,8 +590,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         ...(drop ? { drop } : {}),
       });
       if (drop) {
-        void this.#handleDropped(session.id);
+        void this.#handleDropped(epoch.id);
       }
+      this.#transportContexts.delete(epoch.id);
     });
   }
 
@@ -615,13 +625,26 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       const connection = this.#lifecycle.beginRecoveryAttempt();
 
       try {
-        const socketOpening = this.#socket.open(async () => {
+        let transportEpochId = Number.NaN;
+        let transportSignal: AbortSignal | undefined;
+        const socketOpening = this.#socket.open(async (signal) => {
+          transportSignal = signal;
+          this.#assertCurrentTransport(transportEpochId, signal);
           this.#lifecycle.markProvisioning(connection);
-          await this.#runProvisioner();
-          this.#detectorManager.start(this.#createDropDetectorContext());
+          await this.#runProvisioner(transportEpochId, signal);
+          this.#assertCurrentTransport(transportEpochId, signal);
+          this.#detectorManager.start(
+            transportEpochId,
+            this.#createDropDetectorContext(transportEpochId, signal),
+          );
         });
-        this.#bindTransport(connection);
+        transportEpochId = this.#socket.transportEpochId;
+        this.#bindTransport(transportEpochId, connection);
         await socketOpening;
+        this.#assertCurrentTransport(transportEpochId, transportSignal);
+        if (!this.#lifecycle.isCurrentAttempt(connection)) {
+          throw transportSignal?.reason ?? new UniplsSocketDroppedError();
+        }
 
         this.#lifecycle.markReady(connection);
         this.events.emit("open", {
@@ -662,6 +685,40 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       cleanup();
       return;
     }
+  }
+
+  #currentTransportContext(transportEpochId: number): ConnectionEventContext | undefined {
+    if (!this.#socket.isCurrentTransportEpoch(transportEpochId)) {
+      return undefined;
+    }
+    return this.#transportContexts.get(transportEpochId);
+  }
+
+  #assertCurrentTransport(transportEpochId: number, signal?: AbortSignal): void {
+    if (signal?.aborted || !this.#socket.isCurrentTransportEpoch(transportEpochId)) {
+      throw signal?.reason ?? new UniplsSocketDroppedError();
+    }
+  }
+
+  #waitForProvisioning<T>(value: T | PromiseLike<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) {
+      return Promise.reject(signal.reason);
+    }
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", onAbort);
+        callback();
+      };
+      const onAbort = () => finish(() => reject(signal.reason));
+      signal.addEventListener("abort", onAbort, { once: true });
+      Promise.resolve(value).then(
+        (result) => finish(() => resolve(result)),
+        (error) => finish(() => reject(error)),
+      );
+    });
   }
 
   /**
@@ -719,8 +776,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           force,
           signal: scope.signal,
         }),
-      onError: (error) =>
-        scope.raiseFatalError(Unipls.#translateSocketError(error)),
+      onError: (error) => scope.raiseFatalError(Unipls.#translateSocketError(error)),
     });
 
     const request = (
@@ -733,11 +789,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       });
     };
 
-    if (
-      this.state === "connecting" ||
-      this.state === "provisioning" ||
-      this.state === "open"
-    ) {
+    if (this.state === "connecting" || this.state === "provisioning" || this.state === "open") {
       request(params.query, params);
     }
 
@@ -759,10 +811,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleTerminator,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            "An error occurred while processing onTerminator callback:",
-            err,
-          );
+          console.warn("An error occurred while processing onTerminator callback:", err);
         },
       });
       Unipls.#processMessage({
@@ -771,10 +820,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onSelected: scope.handleMessage,
         onSelectorError: scope.handleError,
         onProcessorError: (err) => {
-          console.warn(
-            "An error occurred while processing onMessage callback:",
-            err,
-          );
+          console.warn("An error occurred while processing onMessage callback:", err);
         },
       });
     });

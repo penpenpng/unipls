@@ -1216,12 +1216,12 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 4: transport epoch を隔離し、古い処理を中断する
 
-- [ ] raw open/message/error/closeを作成元transport epochに束縛する。
-- [ ] currentでないtransport epochのeventがpublic stateとoperationを変更しないようにする。
-- [ ] connection 交代時に古い provisioning、送信待機、connection-scoped resource を abort する。
-- [ ] 待機送信がeventのtransport epochと同じsocketにだけ送るようにする。
-- [ ] 古い provisioning の遅延完了、古い message/close/error の race test を追加する。
-- [ ] detector contextを含む全connection callbackに作成元transport epoch IDをcaptureさせ、古いtransport epochからのdrop報告を無効化する。
+- [x] raw open/message/error/closeを作成元transport epochに束縛する。
+- [x] currentでないtransport epochのeventがpublic stateとoperationを変更しないようにする。
+- [x] connection 交代時に古い provisioning、送信待機、connection-scoped resource を abort する。
+- [x] 待機送信がeventのtransport epochと同じsocketにだけ送るようにする。
+- [x] 古い provisioning の遅延完了、古い message/close/error の race test を追加する。
+- [x] detector contextを含む全connection callbackに作成元transport epoch IDをcaptureさせ、古いtransport epochからのdrop報告を無効化する。
 
 完了条件:
 

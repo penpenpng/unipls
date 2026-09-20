@@ -1,4 +1,4 @@
-import { Unipls } from "../../src/index.ts";
+import { Unipls, type UniplsLifecycleSnapshot } from "../../src/index.ts";
 import {
   ControlledWebSocketServer,
   type ControlledCloseEventInit,
@@ -31,6 +31,25 @@ export class UniplsRaceScenario {
 
   beginOpen(): Promise<void> {
     return this.client.open(this.provisioner);
+  }
+
+  waitForLifecycle(
+    predicate: (snapshot: UniplsLifecycleSnapshot) => boolean,
+  ): Promise<UniplsLifecycleSnapshot> {
+    const current = this.client.lifecycle;
+    if (predicate(current)) {
+      return Promise.resolve(current);
+    }
+
+    return new Promise((resolve) => {
+      const stop = this.client.on("lifecycle", ({ current: next }) => {
+        if (!predicate(next)) {
+          return;
+        }
+        stop();
+        resolve(next);
+      });
+    });
   }
 
   attemptSecondOpen(): Promise<void> {

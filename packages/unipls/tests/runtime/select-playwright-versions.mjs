@@ -1,9 +1,11 @@
 let input = "";
 
+// Collect the registry version list from standard input.
 for await (const chunk of process.stdin) {
   input += chunk;
 }
 
+// Retain stable semantic versions and sort newest first.
 const versions = JSON.parse(input);
 const stableVersions = versions
   .filter((version) => /^\d+\.\d+\.\d+$/.test(version))
@@ -21,6 +23,7 @@ const stableVersions = versions
     return 0;
   });
 
+// Select the newest release from each of the latest two release lines.
 const selectedVersions = [];
 const selectedLines = new Set();
 
@@ -37,8 +40,12 @@ for (const candidate of stableVersions) {
   }
 }
 
+// Reject incomplete registry data instead of weakening the CI matrix.
 if (selectedVersions.length !== 2) {
-  throw new Error("Could not resolve the latest two stable Playwright release lines");
+  throw new Error(
+    "Could not resolve the latest two stable Playwright release lines",
+  );
 }
 
+// Emit the GitHub Actions-compatible matrix value.
 process.stdout.write(`versions=${JSON.stringify(selectedVersions)}\n`);

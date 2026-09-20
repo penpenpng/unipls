@@ -46,22 +46,22 @@ export class AsyncResult<T> {
       }, options.timeout);
     }
 
-    this.#signal.addEventListener(
-      "abort",
-      () => {
-        if (timer !== null) {
-          clearTimeout(timer);
-        }
+    const onAbort = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
 
-        if (!this.#resulted) {
-          this.#reject(this.#signal.reason);
-        }
-        this.#resulted = true;
+      if (!this.#resulted) {
+        this.#reject(this.#signal.reason);
+      }
+      this.#resulted = true;
 
-        options.finally?.();
-      },
-      { once: true },
-    );
+      options.finally?.();
+    };
+    this.#signal.addEventListener("abort", onAbort, { once: true });
+    if (this.#signal.aborted) {
+      onAbort();
+    }
   }
 
   resolve = (value: T) => {

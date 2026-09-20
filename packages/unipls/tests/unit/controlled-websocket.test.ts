@@ -1,39 +1,53 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ControlledWebSocket, ControlledWebSocketServer } from "../support/index.ts";
+import {
+  ControlledWebSocket,
+  ControlledWebSocketServer,
+} from "../support/index.ts";
 
 describe("ControlledWebSocketServer", () => {
   it("emits transport events in caller-controlled order, including stale events", () => {
+    // Arrange a controlled socket and record its property-handler callbacks.
     const server = new ControlledWebSocketServer();
-    const socket = new server.WebSocket("wss://unipls.test") as unknown as ControlledWebSocket;
+    const socket = new server.WebSocket(
+      "wss://unipls.test",
+    ) as unknown as ControlledWebSocket;
     const events: string[] = [];
 
     socket.onclose = (event) => events.push(`close:${event.code}`);
     socket.onmessage = (event) => events.push(`message:${event.data}`);
     socket.onopen = () => events.push("open");
 
+    // Emit an intentionally non-WebSocket order to model stale transport delivery.
     socket.emitClose({ code: 4100, reason: "first", wasClean: false });
     socket.emitMessage("late");
     socket.emitOpen();
 
+    // Verify the harness preserves caller order and server indexing.
     expect(events).toEqual(["close:4100", "message:late", "open"]);
     expect(server.connection(0)).toBe(socket);
   });
 
   it("records sends, close requests, and listener release", () => {
+    // Arrange a controlled socket and an observable event listener.
     const server = new ControlledWebSocketServer();
-    const socket = new server.WebSocket("wss://unipls.test") as unknown as ControlledWebSocket;
+    const socket = new server.WebSocket(
+      "wss://unipls.test",
+    ) as unknown as ControlledWebSocket;
     const listener = () => {};
 
+    // Register and release the listener while checking the harness count.
     socket.addEventListener("message", listener);
     expect(socket.listenerCount("message")).toBe(1);
     socket.removeEventListener("message", listener);
     expect(socket.listenerCount("message")).toBe(0);
 
+    // Drive the socket open, send one payload, and request a normal close.
     socket.emitOpen();
     socket.send("query");
     socket.close(1000, "done");
 
+    // Verify the transport observations preserve payload and close metadata.
     expect(socket.sent).toEqual(["query"]);
     expect(socket.closeRequests).toEqual([{ code: 1000, reason: "done" }]);
   });

@@ -33,7 +33,9 @@ export class ObservationQueue<T> {
   }
 }
 
+/** Advances every bounded Promise chain used by the maintained race harness; call once per phase. */
 export async function flushMicrotasks(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 10; index += 1) {
+    await Promise.resolve();
+  }
 }
