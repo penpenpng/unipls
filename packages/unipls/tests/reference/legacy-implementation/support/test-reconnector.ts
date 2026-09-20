@@ -1,8 +1,9 @@
+// Non-normative support for the historical references in this directory tree.
 import {
   type ReconnectionContext,
   type UniplsReconnector,
   type UniplsReconnectorActions,
-} from "../..";
+} from "../../../../src/index.ts";
 import { AwaitableQueue } from "./awaitable-queue";
 
 export class TestReconnector implements UniplsReconnector {

@@ -1,3 +1,4 @@
+// Non-normative support for the historical references in this directory tree.
 import { ws, type WebSocketData } from "msw";
 import { setupServer } from "msw/node";
 import { AwaitableQueue } from "./awaitable-queue";

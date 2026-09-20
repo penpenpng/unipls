@@ -1,6 +1,7 @@
+// Non-normative historical reference. See README.md; do not treat as a contract test.
 import { afterEach, expect, test } from "vitest";
-import { Unipls, UniplsClosedError } from "..";
-import { createMockServer, TestProvisioner, timeout, TimeoutError } from "./test-utils";
+import { Unipls, UniplsClosedError } from "../../../src/index.ts";
+import { createMockServer, TestProvisioner, timeout, TimeoutError } from "./support";
 
 const url = "ws://localhost:8080";
 const server = createMockServer(url);

@@ -1,11 +1,12 @@
+// Non-normative historical reference. See README.md; do not treat as a contract test.
 import { afterEach, expect, test } from "vitest";
-import { Unipls } from "..";
+import { Unipls } from "../../../src/index.ts";
 import type {
   ReconnectionContext,
   UniplsReconnector,
   UniplsReconnectorActions,
-} from "../reconnector";
-import { createMockServer, TestReconnector, TestSubscriber } from "./test-utils";
+} from "../../../src/reconnector/index.ts";
+import { createMockServer, TestReconnector, TestSubscriber } from "./support";
 
 const url = "ws://localhost:8080";
 const server = createMockServer(url);

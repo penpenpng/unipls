@@ -1,3 +1,4 @@
+// Non-normative support for the historical references in this directory tree.
 export * from "./awaitable-queue";
 export * from "./mock-server";
 export * from "./promise-timeout";

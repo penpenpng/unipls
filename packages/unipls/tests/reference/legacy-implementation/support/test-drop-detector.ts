@@ -1,4 +1,8 @@
-import type { DropDetectorContext, UniplsDropDetector } from "../../drop-detector/index.ts";
+// Non-normative support for the historical references in this directory tree.
+import type {
+  DropDetectorContext,
+  UniplsDropDetector,
+} from "../../../../src/drop-detector/index.ts";
 import { AwaitableQueue } from "./awaitable-queue";
 
 /**

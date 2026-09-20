@@ -1,5 +1,9 @@
-import type { WebSocketData } from "../..";
-import type { SubscriptionFinalizationContext, UniplsSubscriber } from "../../async-results";
+// Non-normative support for the historical references in this directory tree.
+import type { WebSocketData } from "../../../../src/index.ts";
+import type {
+  SubscriptionFinalizationContext,
+  UniplsSubscriber,
+} from "../../../../src/async-results.ts";
 import { AwaitableQueue } from "./awaitable-queue";
 
 export class TestSubscriber<TOutput = WebSocketData> implements UniplsSubscriber<TOutput> {

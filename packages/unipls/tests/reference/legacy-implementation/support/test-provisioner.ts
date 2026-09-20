@@ -1,5 +1,9 @@
-import type { WebSocketData } from "../..";
-import type { UniplsProvisionerObject, UniplsProvisioningContext } from "../../unipls.interface";
+// Non-normative support for the historical references in this directory tree.
+import type { WebSocketData } from "../../../../src/index.ts";
+import type {
+  UniplsProvisionerObject,
+  UniplsProvisioningContext,
+} from "../../../../src/unipls.interface.ts";
 import { AwaitableQueue } from "./awaitable-queue";
 
 export class TestProvisioner<

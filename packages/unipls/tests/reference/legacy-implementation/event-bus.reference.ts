@@ -1,5 +1,6 @@
+// Non-normative historical reference. See README.md; do not treat as a contract test.
 import { expect, test, vi } from "vitest";
-import { EventBus } from "../event-bus.ts";
+import { EventBus } from "../../../src/event-bus.ts";
 
 interface TestEvents {
   event: string;

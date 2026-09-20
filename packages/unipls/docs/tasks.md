@@ -8,6 +8,8 @@
 - 振る舞いを変えるタスクでは、先に black-box の contract test を書き、そのタスク内で green にする。
 - 公開パッケージとしての契約を検証するtest fileは`*.spec.ts`とする。公開entry pointから観測できるruntime behavior、型、export、error/event、package consumerとしての利用可否が該当する。
 - 公開契約ではない内部実装、utility、test harnessなどのtest fileは`*.test.ts`とする。実装を公開契約として固定しないため、`*.spec.ts`からprivate/internal moduleを直接検証しない。
+- `tests/reference/legacy-implementation`以下の`*.reference.ts`とsupport codeは、決定前の旧実装に付属していたtestを凍結した非規範的な参考資料である。test runnerと型検査の対象にせず、本書の決定、公開仕様、互換性、完了条件の根拠にしてはならない。
+- 旧referenceから再利用してよいのはscenario、race、mockの着想だけである。期待値をコピーしたりreferenceを修正してgreenにしたりせず、本書から期待値を導出した新しい`*.spec.ts`または`*.test.ts`として書き直す。新しいtest/sourceからreferenceをimportしない。
 - 現在の内部クラスや event bus の形ではなく、公開された振る舞いを固定する。
 - D1〜D13と「意図的にTask内で確定する詳細」にない新たな公開判断が必要になったら、実装で既成事実を作らずdecision recordへ追記する。
 - P2 の拡張は、P0/P1 の公開契約と lifecycle が安定してから着手する。
@@ -23,6 +25,7 @@
 3. 本書のタスク順序、checklist、完了条件。
 4. `plan.md`の現状分析。これは問題の由来を説明する資料であり、後から確定した決定を上書きしない。
 5. 現在のsourceとtest。既存挙動の把握には使うが、決定と矛盾する挙動を仕様として固定しない。
+6. `tests/reference/legacy-implementation`。旧実装で扱っていたscenarioを探すためだけに使い、assertionやAPI形状には仕様上の権威がない。
 
 `公開形の概略`、`公開形の方向性`と明記したcodeは型設計の意図を示す。後のDで確定した語彙やvariantが優先されるため、そのまま転記せず、Task 0とTask 12で一貫した最終declarationへ正規化する。D13の「将来の公開形の例」は初期releaseでは実装・exportしない。
 
@@ -1150,9 +1153,11 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 - [ ] 各最低runtimeでnative `AbortSignal.any`の優先順位、reason identity、後発abort不変性を検証し、polyfillをtest環境から暗黙注入しない。
 - [ ] format check、lint、型検査、test、build を独立した script にする。
 - [ ] test runnerとCIが公開contractの`*.spec.ts`とそれ以外の`*.test.ts`をともに収集し、結果上も区別できるようにする。
+- [ ] `tests/reference/**`をtest runner、型検査、coverage、test件数から除外し、referenceが壊れても修正を要求しない。
+- [ ] 最初のnormativeな`*.spec.ts`/`*.test.ts`を追加した時点で移行用の`passWithNoTests: true`を除去し、収集対象が0件ならCIを失敗させる。
 - [ ] package 単体で型検査を実行できるようにする。
 - [ ] 各検査を CI の独立 job、または失敗を個別に識別できる step にする。
-- [ ] 変更開始時点の既存test suiteとbuildが引き続き成功することを確認する。test件数を固定値として完了条件にしない。
+- [ ] referenceへ退避した旧suiteをgreenにする作業は行わず、Task 0以降に新規作成したnormative testとbuildだけをCI baselineとして維持する。test件数を固定値として完了条件にしない。
 
 完了条件:
 
@@ -1553,6 +1558,7 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 - [ ] behavior matrix の全行が contract test に対応しているか監査する。
 - [ ] 公開パッケージの契約testが`*.spec.ts`、それ以外が`*.test.ts`に分類され、公開contract testがinternal moduleへ依存していないことを監査する。
+- [ ] 新しいsource/testが`tests/reference/**`をimportせず、referenceのassertionを現仕様の根拠として引用していないことを監査する。
 - [ ] format、lint、型検査、unit/contract test、build、consumer smoke test を実行する。
 - [ ] timer、listener、AbortSignal、detector、reconnector cleanup の leak test を実行する。
 - [ ] supported runtime ごとの最小 integration test を実行する。

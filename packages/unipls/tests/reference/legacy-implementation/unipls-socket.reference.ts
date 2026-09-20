@@ -1,6 +1,11 @@
+// Non-normative historical reference. See README.md; do not treat as a contract test.
 import { afterEach, expect, test } from "vitest";
-import { UniplsSocket, UniplsSocketClosedError, UniplsSocketDroppedError } from "..";
-import { createMockServer } from "./test-utils";
+import {
+  UniplsSocket,
+  UniplsSocketClosedError,
+  UniplsSocketDroppedError,
+} from "../../../src/index.ts";
+import { createMockServer } from "./support";
 
 const url = "ws://localhost:8080";
 const server = createMockServer(url);

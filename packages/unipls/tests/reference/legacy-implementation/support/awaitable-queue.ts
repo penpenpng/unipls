@@ -1,3 +1,4 @@
+// Non-normative support for the historical references in this directory tree.
 import { timeout } from "./promise-timeout";
 
 export class AwaitableQueue<T> {

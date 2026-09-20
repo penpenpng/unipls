@@ -1,3 +1,4 @@
+// Non-normative support for the historical references in this directory tree.
 export class TimeoutError extends Error {}
 
 export function timeout<T>(promise: Promise<T>, timeout: number): Promise<T> {
