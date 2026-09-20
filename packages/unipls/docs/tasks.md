@@ -30,10 +30,10 @@
 
 ### 実装全体で維持する不変条件
 
-- session coordinatorだけがopen intent、論理session、connection epoch、lifecycle snapshot、recovery cycleを遷移させる。
+- session coordinatorだけがopen intent、logical session、transport epoch、lifecycle snapshot、recovery cycleを遷移させる。
 - lifecycle snapshot、drop、attempt/history、diagnostic、stream finalizationなどの公開recordはshallowなwrapperと所有metadataをruntimeでもfreezeする。opaqueなuser `cause`自体はclone/deep-freezeしない。
-- public methodは、必要な検証とsession/operationへの登録を同期区間内で終えてからuser codeや非同期処理へ進む。drop分類もepoch-scoped settle gateの同期区間で一度だけ確定する。
-- connection epochを先に無効化してからcleanupを始める。古いsocket event、detector callback、provisioning完了、reconnect actionは新しいepoch/sessionを変更できない。
+- public methodは、必要な検証とsession/operationへの登録を同期区間内で終えてからuser codeや非同期処理へ進む。drop分類もtransport-epoch-scoped settle gateの同期区間で一度だけ確定する。
+- transport epochを先に無効化してからcleanupを始める。古いsocket event、detector callback、provisioning完了、reconnect actionは新しいtransport epoch/sessionを変更できない。
 - operation、stream、drop、recovery、resource scopeにはそれぞれexactly-onceのsettle/dispose gateを一つだけ置き、複数の終了経路に独立したcleanupを実装しない。
 - ready barrierは送信と受信の両方に適用する。barrierを越える通信は作成元epochに束縛されたsetup contextだけが行える。
 - cleanupはLIFOで全disposerを一度ずつ試行し終えてから本来のoutcomeを通知する。cleanup failureはdiagnosticであり、元のoutcomeを置換しない。
@@ -82,21 +82,21 @@ callback subscriptionは失敗をthrowする呼出元を持たないため、`cl
 - 低レベル client も正式な安定 API とするが、package root には混在させず `unipls/socket` entry point から公開する。
 - 現在 root にある `UniplsSocket`、socket 固有 error、close code、および低レベル client の public signature に必要な型は `unipls/socket` に移す。高レベル API の signature にも必要な共有型だけは root からも公開してよい。
 - `castForce` / `requestForce` / `subscribeForce` は高レベル `Unipls` の public method にしない。
-- readiness barrier を越える通信 capability は、現在の connection epoch に束縛された provisioning context だけへ `cast` / `request` / `subscribe` という通常名で渡す。
+- readiness barrier を越える通信 capability は、現在の transport epoch に束縛された provisioning context だけへ `cast` / `request` / `subscribe` という通常名で渡す。
 - provisioning 外で wire-level の高度な制御が必要な利用者には、`unipls/socket` を明示的な escape hatch として提供する。
 
 理由:
 
 - 高レベル API と低レベル API の責務、安定性、error/state contract を entry point 単位で分離できる。
 - force は高速版ではなく readiness 保証を破る権限であり、通常 client に公開すると未認証・未同期の接続へ誤送信できる。
-- provisioning context に限定すれば、操作を対象 connection epoch とその AbortSignal に束縛し、drop/close 時に確実に無効化できる。
+- provisioning context に限定すれば、操作を対象 transport epoch とその AbortSignal に束縛し、drop/close 時に確実に無効化できる。
 
 実装上の帰結:
 
 - `unipls` と `unipls/socket` の双方に、独立した export 一覧、型宣言、consumer smoke test を持たせる。
 - 高レベルの内部実装が `UniplsSocket` を利用していても、その concrete 型を root の event payload や public declaration に漏らさない。
 - `unipls/socket` は正式な public API なので、低レベル state、event、error、serializer/deserializer、接続・送信 semantics も contract test の対象にする。
-- force method の単純な移動ではなく、provisioning context が失効後に利用できず、古い connection epoch へ送信できない capability として実装する。
+- force method の単純な移動ではなく、provisioning context が失効後に利用できず、古い transport epoch へ送信できない capability として実装する。
 - 既存 root import から移動する低レベル symbol は breaking change として migration note に記録する。
 
 影響するタスク: 10、13、14。
@@ -249,7 +249,7 @@ type ClosedLifecycleSnapshot =
 
 - `recovering`からはretryによる`connecting`と、cancel/exhaustion/reconnector failureによる`closed(reason: "dropped")`だけへ遷移する。
 - session cleanup と operation termination を、recovery outcome の確定と同じ atomic な遷移で行う。
-- cancel/exhaustion 後の遅延 action、古い event、provisioning 完了を epoch/session token で無効化する。
+- cancel/exhaustion 後の遅延 action、古い event、provisioning 完了をtransport epoch/session tokenで無効化する。
 - terminal outcome 後に `open()` すると新しい session ID になることを contract test する。
 
 影響するタスク: 5、6、8、9。
@@ -311,9 +311,9 @@ interface UniplsDrop {
 
 - dropを観測した箇所で一度だけ`UniplsDrop`を生成し、record本体とネストしたclose metadataをruntimeでもfreezeする。`cause`はopaque valueとして扱う。
 - user close と drop の競合ではsession coordinatorが確定済みintentを見て一度だけ分類する。
-- socket close/error、timeout、manual drop、すべてのdetectorの`ctx.drop()`を、connection epoch IDを受け取る単一の同期的な`reportDrop()`相当の入口へ集約する。現在epochかつ未確定であることの確認と、drop record/stateの確定までに`await`やuser callbackを挟まない。
+- socket close/error、timeout、manual drop、すべてのdetectorの`ctx.drop()`を、transport epoch IDを受け取る単一の同期的な`reportDrop()`相当の入口へ集約する。現在のtransport epochかつ未確定であることの確認と、drop record/stateの確定までに`await`やuser callbackを挟まない。
 - dropの勝者を確定した同期区間内でepochを`dropping`へ遷移させ、その後にだけabort、socket close、cleanup、通知、recovery cycle開始を行う。同じepochの後発報告はno-opとし、最初の報告だけがreconnectorを一回起動する。
-- detector contextとtransport callbackは作成元epoch IDをcaptureする。古いepochの遅延eventは、新epochがactiveでもdrop state、operation、recovery cycleを変更しない。
+- detector contextとtransport callbackは作成元transport epoch IDをcaptureする。古いtransport epochの遅延eventは、新しいtransport epochがactiveでもdrop state、operation、recovery cycleを変更しない。
 - `recovering` snapshotは単なる`cause: unknown`ではなく`drop: UniplsDrop`を持つ。
 - recoveryを行わない、または断念した`UniplsDroppedError`には`drop`とterminal outcomeを保持する。
 - public API間で同一dropを追跡できることと、生のtransport objectが漏れないことをcontract testする。
@@ -391,7 +391,7 @@ interface UniplsDrop {
 
 - 通常の`next` / `listen`にも送信operationと同じreadiness barrierを適用する。`connecting`、`provisioning`、`recovering`で開始したreceive operationはactive sessionへ受け付けるが、次のready connectionが得られるまでmessageの観測を開始しない。
 - provisioning中にtransportから届いたmessageは通常の`next` / `listen`へbuffer、replay、fan-outしない。通常operationのselectorやuser callbackも呼ばない。
-- provisioning protocolがmessageを受け取る必要がある場合は、provisioning contextが持つreadiness-bypass receive capabilityを使う。このcapabilityから作られたoperationは作成時のconnection epochに束縛し、dropをまたいで次のepochへ移さない。
+- provisioning protocolがmessageを受け取る必要がある場合は、provisioning contextが持つreadiness-bypass receive capabilityを使う。このcapabilityから作られたoperationは作成時のtransport epochに束縛し、dropをまたいで次のtransport epochへ移さない。
 - 一時的なprovisioning receive operationはprovisioning完了またはepoch終了までにsettleしなければ終了させる。ready後も必要なlistener/resourceはD9の`ResourceScope`へ登録し、session/connectionのどちらに所有させたかに応じた終了時点で破棄する。
 - readyへの遷移を受信境界とする。message deliveryがready遷移より前に処理されたmessageはprovisioning側だけ、遷移後に処理されたmessageは通常operation側で観測可能とし、一つのmessageをbarrierの両側へ重複配送しない。
 - drop時、通常の継続可能なreceive/stream operationは観測を停止する。次epochのprovisioning messageを無視し、そのepochがreadyになった後にだけ観測を再開する。継続可否と最終的なretry/finalizationはD10/D11の契約に従う。
@@ -404,7 +404,7 @@ interface UniplsDrop {
 
 実装上の帰結:
 
-- session coordinatorは通常operation用のready-gated受信経路と、provisioning context用のepoch-bound受信経路を分ける。生のsocket event busを通常operationへ直接公開しない。
+- session coordinatorは通常operation用のready-gated受信経路と、provisioning context用のtransport-epoch-bound受信経路を分ける。生のsocket event busを通常operationへ直接公開しない。
 - ready遷移、通常listenerの有効化、provisioning用の一時receive operationの失効を同じcoordinatorで順序付ける。
 - `next` / `listen`のtimeoutはD7どおり受付から進み、readiness待機中も停止しない。
 - 初回provisioning、recovery後の再provisioning、provisioning失敗、ready境界直前直後のmessageについてcontract testを作り、通常selectorがprovisioning messageに対して評価されないことも検証する。
@@ -416,17 +416,17 @@ interface UniplsDrop {
 
 決定:
 
-- provisionerのAPIを、論理sessionごとに一度だけ成功させるsession setup hookと、connection epochごとに実行するconnection setup hookへ分ける。`isSessionBeginning`を見て一つのhook内で分岐させる方式は廃止する。
+- provisionerのAPIを、logical sessionごとに一度だけ成功させるsession setup hookと、transport epochごとに実行するconnection setup hookへ分ける。`isSessionBeginning`を見て一つのhook内で分岐させる方式は廃止する。
 - session setupが所有するlistener/subscription/resourceは論理sessionへ束縛し、明示closeまたはD4のterminal dropで破棄する。一時的なdropだけでは破棄・再登録しない。
-- connection setupが所有するresourceは作成時のconnection epochへ束縛し、そのepochのloss、provisioning failure、交代、またはsession closeで破棄する。次epochのconnection setupが新しいresourceを作る。
+- connection setupが所有するresourceは作成時のtransport epochへ束縛し、そのtransport epochのloss、provisioning failure、交代、またはsession closeで破棄する。次のtransport epochのconnection setupが新しいresourceを作る。
 - setup contextは現在のscopeへdisposerを即時登録する`defer`相当のAPIを持つ。hookの正常終了時に返されたdisposerも同じscopeが所有する。これによりsetup途中で後続処理がthrow/rejectしても、それ以前に登録したresourceをrollbackできる。
 - disposerは冪等に扱い、登録と逆順のLIFOで一度だけ実行する。同期・非同期disposerを扱えるようにし、非同期cleanupも順番を保って完了を待つ。
 - LIFO stackというresource ownership modelは維持するが、標準の`DisposableStack`/`AsyncDisposableStack`をpublic contractや必須実装にはしない。library専用の`ResourceScope`が任意の識別nameと登録元、async cleanup、個別診断、冪等性、scopeの親子関係を所有する。
 - `ResourceScope.dispose()`は最初の呼び出しでcleanupを開始し、競合する後続呼び出しには同じ完了Promiseを返す。dispose開始後の新規登録は`UniplsInvalidUsageError`とし、実行中にdisposerがscopeを延命・追加できないようにする。
 - disposerはLIFO順に逐次`await`し、各failureを個別に捕捉して後続cleanupを継続する。標準stack由来の`SuppressedError`や`AggregateError`をscope外へ流さず、D11のdiagnosticへ変換する。
-- connection epochを先に無効化して新しいoperation/eventを拒否してから、そのepochのdisposerを実行する。cleanup中に古いcapabilityから新たな通信を開始できないようにする。
+- transport epochを先に無効化して新しいoperation/eventを拒否してから、そのtransport epochのdisposerを実行する。cleanup中に古いcapabilityから新たな通信を開始できないようにする。
 - initial attemptではsession setupを成功させた後にconnection setupを成功させて初めてreadyとする。session setupが完了する前にinitial provisioning attemptが失敗した場合は部分resourceをrollbackし、retryするattemptではsession setupを改めて実行する。一度成功したsession setupは同じ論理sessionの再接続では再実行しない。
-- session setup contextはsession-scopedでready-gatedなresource登録を担い、connection setup contextだけがD1/D8のepoch-bound readiness-bypass capabilityを持つ。接続ごとに必要な認証、handshake、購読復元はconnection setupへ置く。
+- session setup contextはsession-scopedでready-gatedなresource登録を担い、connection setup contextだけがD1/D8のtransport-epoch-bound readiness-bypass capabilityを持つ。接続ごとに必要な認証、handshake、購読復元はconnection setupへ置く。
 
 公開形の方向性:
 
@@ -454,7 +454,7 @@ interface ResourceScope {
 
 実装上の帰結:
 
-- session coordinatorはsession scopeを一つ、connection epochごとにconnection scopeを一つ所有し、子scopeであるconnection scopeをsession scopeより先に破棄する。
+- session coordinatorはsession scopeを一つ、transport epochごとにconnection scopeを一つ所有し、子scopeであるconnection scopeをsession scopeより先に破棄する。
 - setupはtransactionとして実行し、失敗時はそのsetupで新規登録されたdisposerだけをLIFO rollbackする。cleanup errorが後続cleanupを止めないよう全disposerを試行し、D11の診断経路へ集約する。
 - setup transaction、detector、operationはそれぞれ適切な親scopeに属する子`ResourceScope`を持ち、rollbackでは対象子scopeだけをdisposeする。単一のglobal stackへcheckpoint indexを混在させない。
 - runtimeが標準`AsyncDisposableStack`を十分にsupportする場合も、採用は`ResourceScope`内部の交換可能な実装詳細に限定し、公開挙動やerror modelを標準stackの既定throw semanticsへ依存させない。
@@ -572,13 +572,13 @@ D11の`StreamFinalization` unionを正本とする。terminatorに一致したme
 - reconnectorはconnection attemptの間でも失敗し得るためdiagnosticをconnectionへ帰属させない。attempt/history metadataはcanonicalなterminal errorから参照し、diagnosticへ別形式で複製しない。
 - drop detectorのsetupがthrow/rejectした場合は、ready前のconnection setup failureとして扱う。同じsetup transactionで先に登録されたdetector/resourceをLIFO rollbackし、元のerrorを`stage: "provisioning"`のattempt causeとしてreconnector policyへ渡す。
 - detector setup failureがinitialでterminalになれば`UniplsOpenError`、ready済みsessionのrecovery attemptでterminalになれば`UniplsDroppedError`のcauseに保持する。detector専用のdomain error classは追加しない。
-- setup成功後のdetector runtime callbackがthrow/rejectした場合は、throw自体をdropの根拠にせず、失敗したdetectorだけを現在のconnection epochで停止・disposeする。他detectorとconnection/session lifecycleは継続する。
+- setup成功後のdetector runtime callbackがthrow/rejectした場合は、throw自体をdropの根拠にせず、失敗したdetectorだけを現在のtransport epochで停止・disposeする。他detectorとconnection/session lifecycleは継続する。
 - detector runtime failureは元のerror、detectorを識別するimmutable metadata、session/connectionを持つconnection-scoped `drop-detector-failed` diagnosticとして通知する。fatalと判断するapplicationだけがhandlerから明示的にdropする。
 - detector identityは`registrationIndex`と任意の明示`name`からなり、runtime failure diagnosticと正常検出による`UniplsDrop.source`で同じfrozen recordを共有する。detector object自体や`constructor.name`は公開しない。
 - `drop-detector-failed` diagnosticはfailureを捕捉した監督境界を`boundary: "guard" | "run"`で示す。cleanupも失敗した場合は別の`resource-cleanup-failed` diagnosticとして通知する。
 - 現行の`setup(ctx): () => void`だけではdetector自身がtimerやhost eventへ登録したcallbackの後発throw/rejectをlibraryから捕捉できないため、detector contextに監督境界を明示する`guard()`と`run()`を設ける。`guard()`はevent callback、`run()`はbackground taskに使用する。
 - `guard(callback)`は同じ引数を受け取るvoid callbackを返し、callbackの同期throwと返されたPromiseのrejectを捕捉する。`run(task)`はtaskを開始し、その同期throw/非同期rejectを同じfailure経路へ流す。どちらもfailureを呼出元やhost event loopへ再throwせず、unhandled rejectionを発生させない。
-- detector contextはdetector instanceとconnection epochに束縛された`AbortSignal`を持つ。epoch終了または当該detectorのruntime failureでsignalをabortし、そのdetector scopeのdisposerをLIFOで一度ずつ実行する。signal abortを理由とするtask終了はruntime failureとして診断しない。
+- detector contextはdetector instanceとtransport epochに束縛された`AbortSignal`を持つ。transport epoch終了または当該detectorのruntime failureでsignalをabortし、そのdetector scopeのdisposerをLIFOで一度ずつ実行する。signal abortを理由とするtask終了はruntime failureとして診断しない。
 - `guard()`を通さずdetectorがhostへ直接登録したcallbackや、`run()`へ登録しなかったdetached taskのfailureはlibraryの監督外であることを契約に明記する。built-in detectorはすべて監督APIだけを使う。
 - disposer/cleanupがthrow/rejectしても残りのdisposerをLIFO順ですべて実行する。各disposerは成功・失敗にかかわらず一度だけ試行済みとし、同じ終了処理や競合する終了経路から再実行しない。
 - cleanup failureはsession、connection、operationのterminal outcomeを変更せず、`close()`やsubscriptionの`closed`をrejectさせない。cleanup完了は全disposerの成功ではなく、全disposerを一度ずつ試行し終えたことを意味する。
@@ -803,7 +803,7 @@ interface DropDetectorContext<TInput = unknown, TOutput = unknown>
 - currentの`UniplsDuplicatedConnectionError`とclosed状態での`UniplsClosedError`同期throwを`UniplsInvalidUsageError`へ統合する。
 - currentのmetadataを持たない`UniplsDroppedError`を、canonical dropとoutcomeを持つ形へ置き換える。初回接続/provisioning失敗用に`UniplsOpenError`を追加する。
 - domain error classごとに`name`、prototype、`cause`、frozen metadata、ESM packageをまたぐconsumer testを追加する。
-- raw message handlerからdeserializer failureをoperation event busへ流す経路を除去し、connection epoch coordinatorがmessage sequenceとdiagnostic snapshotを生成する。
+- raw message handlerからdeserializer failureをoperation event busへ流す経路を除去し、transport epoch coordinatorがmessage sequenceとdiagnostic snapshotを生成する。
 - diagnostic dispatch専用の隔離されたfan-outを実装し、listener throw後も残りlistenerを通知する。library内部の`console.warn`を診断経路に置き換える。
 - selector/terminator評価をoperation境界でcatchし、predicate error policyの適用、operation-scoped diagnostic生成、当該messageの破棄を一つの処理にする。
 - predicate diagnostic生成時にraw/deserialized messageをsnapshotへ保持せず、実体を取得できないconnection/message sequenceも追加しない。
@@ -872,6 +872,242 @@ await correlated.request({
 
 影響するタスク: 7、15。
 
+## Task 0 decision record: 用語、状態遷移、operation contract
+
+この節はD1〜D13を実装とcontract testへ落とす際の正規化済みの語彙とbehavior matrixである。前節の「公開形の概略」「公開形の方向性」と細部が異なる場合は、この節の最終形を優先する。
+
+### 用語とidentity
+
+- **open intent**: 利用者が接続を維持する意図。`open()`の同期区間で開始し、`close()`の同期区間、初回openのterminal failure、またはready後のrecovery terminal outcomeで終了する。open intentがactiveであることと、現在readyな物理接続があることは別である。
+- **logical session**: 一回のopen intentに対応する所有scope。session-scoped resource、operation、connection attempt historyを所有する。再接続に成功しても同じsessionであり、terminal outcome後の次の`open()`は必ず新しいsessionを作る。
+- **transport epoch**: WebSocket constructorの呼び出しを含む、一回のtransport接続試行に対応する世代。transport epoch IDはattempt開始時、user codeやWebSocket constructorを呼ぶ前に発行する。socket生成に失敗したtransport epochにもIDがある。transport epochは最大一つだけcurrentであり、無効化後のevent、callback、provisioning完了は観測可能な状態を変更できない。
+- **connection attempt**: 一つのtransport epochを作り、transport接続とprovisioningを経てreadyにする試行。`connecting`または`provisioning`で失敗するか、readyになって終了する。session closeと競合して中断された場合も`aborted`として完了recordを残す。
+- **attempt cycle**: initial open、またはready後の一つのcanonical dropを起点に、次のreadyまたはterminal outcomeまで続くattemptのまとまり。initial cycleは`cycle: 0`かつ`origin: "initial"`である。ready後のcanonical dropごとにcycleを1増やし、`origin: "recovery"`とする。
+- **recovery cycle**: `origin: "recovery"`であるattempt cycle。起点の`UniplsDrop`、同じlogical session、回復を継続するoperationとsession-scoped resourceを保持する。ready、user close、recovery cancel/exhaustion、reconnector failureのいずれかで終わる。
+- **ready**: current epochのtransportがopenし、session setup（未成功の場合）、connection setup、detector setupがすべて成功し、通常operation用の送受信barrierを開いた状態。公開lifecycleでは`phase: "open"`で表す。`open()`というmethod名やopen intentと混同しない。
+- **drop**: activeなopen intentの下でcurrent epochを失ったという、一度だけ確定する事実。peer close、transport error、timeout、detector、manual dropを`UniplsDrop`へ正規化する。attemptのprovisioning failureはattempt failureであり、それ自体を架空のdropへ変換しない。
+- **operation**: `cast`、`next`、`request`、`listen`、`subscribe`の一回の呼び出し。入力検証後、active sessionの確認とsessionへの登録を連続した同期区間で行い、この登録を受付のlinearization pointとする。
+- **settle / finalize**: Promise系operationのresolve/reject、またはstreamの終了結果を一度だけ確定すること。各operationは一つのsettle gateだけを持ち、cleanupを全件試行した後に結果を外部へ通知する。
+
+公開する`SessionId`、`ConnectionId`、`OperationId`は、それぞれ別のbrandを持つopaqueな`string`とする。`ConnectionId`はtransport epochの公開identityであり、物理socket objectやready済み接続だけを指すIDではない。値はlibraryだけが発行し、利用者が保証される操作は同じkind同士の厳密等価比較、Map/Setのkeyとしての利用、log出力だけである。文字列形式、長さ、生成方式、辞書順、session/connection間の包含関係はcontractにしない。数値への変換やIDから時刻・順序を復元する利用も保証しない。
+
+公開declarationの意味は次の形とする。brand symbol自体はexportせず、IDのruntime valueは通常のstringである。
+
+```ts
+declare const sessionIdBrand: unique symbol;
+declare const connectionIdBrand: unique symbol;
+declare const operationIdBrand: unique symbol;
+
+export type SessionId = string & { readonly [sessionIdBrand]: "SessionId" };
+export type ConnectionId = string & {
+  readonly [connectionIdBrand]: "ConnectionId";
+};
+export type OperationId = string & {
+  readonly [operationIdBrand]: "OperationId";
+};
+```
+
+### connection attempt/history record
+
+`cycle`と`attempt`は0/1始まりのcycle-localな位置、`sequence`は1始まりのsession全体で単調増加する番号である。initial cycleでは`cycle === 0`、各recovery cycleでは`cycle >= 1`である。`attempt`は各cycleで1から始まる。これらはopaque IDではなく、policyと診断のための順序値である。
+
+```ts
+type ConnectionAttemptOrigin = "initial" | "recovery";
+type ConnectionAttemptStage = "connecting" | "provisioning";
+
+type ConnectionAttemptSnapshot =
+  | Readonly<{
+      sequence: number;
+      cycle: number;
+      attempt: number;
+      origin: ConnectionAttemptOrigin;
+      connection: ConnectionId;
+      startedAt: number;
+      endedAt: number;
+      outcome: "ready";
+    }>
+  | Readonly<{
+      sequence: number;
+      cycle: number;
+      attempt: number;
+      origin: ConnectionAttemptOrigin;
+      connection: ConnectionId;
+      startedAt: number;
+      endedAt: number;
+      outcome: "failed";
+      stage: ConnectionAttemptStage;
+      cause: unknown;
+      drop?: UniplsDrop;
+    }>
+  | Readonly<{
+      sequence: number;
+      cycle: number;
+      attempt: number;
+      origin: ConnectionAttemptOrigin;
+      connection: ConnectionId;
+      startedAt: number;
+      endedAt: number;
+      outcome: "aborted";
+      stage: ConnectionAttemptStage;
+      reason: "session-closed";
+    }>;
+```
+
+`startedAt`、`endedAt`、`detectedAt`、diagnosticの`occurredAt`はUnix epochからのmillisecondsであり、観測・log用である。system clockの補正下で差分が正のdurationになることは保証しない。timeoutとdeadlineの判定にはこれらを使わず、D7のmonotonic clockを使う。
+
+`attempts`はそのlogical sessionで完了した全attemptを`sequence`順に持つfrozen readonly arrayである。record本体、array、record内のlibrary-owned metadataもruntimeでfreezeする。attempt完了ごとに新しいarray snapshotを作り、既に公開したarrayへ追記しない。`cause`はopaqueなuser/host valueとしてcloneもdeep-freezeもしない。reconnector、lifecycle、domain errorが同じ時点の履歴を示す場合は同じarrayとrecordのidentityを共有する。
+
+進行中のattemptは`attempts`へ未完了recordを入れず、`connecting`/`provisioning` snapshotの`connection`、`cycle`、`attempt`、`origin`で示す。attemptがready、failed、abortedのいずれかへ確定したときだけhistoryへ追加する。
+
+### lifecycle snapshotの最終形
+
+initial attempt failure後にreconnector actionを待つ間は`connecting`の`status: "waiting"`とする。ready済みsessionのrecovery action待ちは`recovering`とする。これにより、provisioning failureを架空のdropへ変換せず、かつ物理attemptが存在しない待機を`status: "attempting"`と誤表示しない。
+
+```ts
+type ClosedLifecycleSnapshot =
+  | Readonly<{ phase: "closed"; reason: "idle" }>
+  | Readonly<{
+      phase: "closed";
+      reason: "user";
+      session: SessionId;
+      attempts: readonly ConnectionAttemptSnapshot[];
+    }>
+  | Readonly<{
+      phase: "closed";
+      reason: "open-failed";
+      session: SessionId;
+      outcome: UniplsOpenErrorOutcome;
+      attempts: readonly ConnectionAttemptSnapshot[];
+      cause: unknown;
+      drop?: UniplsDrop;
+    }>
+  | Readonly<{
+      phase: "closed";
+      reason: "dropped";
+      session: SessionId;
+      outcome: Exclude<UniplsDroppedErrorOutcome, "operation-failed">;
+      attempts: readonly ConnectionAttemptSnapshot[];
+      drop: UniplsDrop;
+      cause?: unknown;
+    }>;
+
+type AttemptingLifecycleFields = Readonly<{
+  status: "attempting";
+  session: SessionId;
+  connection: ConnectionId;
+  cycle: number;
+  attempt: number;
+  attempts: readonly ConnectionAttemptSnapshot[];
+}> &
+  (
+    | Readonly<{ origin: "initial" }>
+    | Readonly<{ origin: "recovery"; drop: UniplsDrop }>
+  );
+
+type UniplsLifecycleSnapshot =
+  | ClosedLifecycleSnapshot
+  | Readonly<{
+      phase: "connecting";
+      status: "waiting";
+      session: SessionId;
+      origin: "initial";
+      nextAttempt: number;
+      attempts: readonly ConnectionAttemptSnapshot[];
+    }>
+  | (Readonly<{ phase: "connecting" }> & AttemptingLifecycleFields)
+  | (Readonly<{ phase: "provisioning" }> & AttemptingLifecycleFields)
+  | Readonly<{
+      phase: "open";
+      session: SessionId;
+      connection: ConnectionId;
+      attempts: readonly ConnectionAttemptSnapshot[];
+    }>
+  | Readonly<{
+      phase: "recovering";
+      session: SessionId;
+      drop: UniplsDrop;
+      nextAttempt: number;
+      attempts: readonly ConnectionAttemptSnapshot[];
+    }>;
+```
+
+`reason: "idle"`はinstance生成後まだsessionを開始していない状態だけを表す。active sessionに対する明示`close()`は、初回ready前、ready後、recovery中のどこで呼ばれても`reason: "user"`へ収束する。初回ready前のterminal attempt/policy failureは`reason: "open-failed"`、一度readyになった後のrecovery cancel/exhaustion/reconnector failureは`reason: "dropped"`である。`operation-failed`は個別operationのoutcomeでありsession terminal outcomeではないため、closed lifecycleの`outcome`には現れない。
+
+`close()`を`closed`で呼ぶことは冪等なno-opであり、snapshot object identityを変更しない。次の`open()`だけが新しいsessionを作る。すべてのsnapshot、その`attempts` array、library-ownedなネストmetadataはruntimeでfreezeし、同じ状態の間はgetterが同じobjectを返す。
+
+### lifecycle状態遷移表
+
+表中の「attempt failure」はtransport生成/接続失敗、connection timeout、provisioning failureを含む。cleanup failureはどの遷移も変更せずdiagnosticだけを追加する。表にないstale transport epoch eventとsettle済みreconnector actionはno-opである。
+
+| 現在 | 入力・条件 | 次 | session / epochと外部結果 |
+| --- | --- | --- | --- |
+| `closed(*)` | `open()`の入力検証成功 | `connecting(attempting, initial)` | 新しいsessionとcycle 0/attempt 1のepochを同期的に作る。`open()`はpending。 |
+| `closed(*)` | 5 operation | 変更なし | operationを作らず同期的に`UniplsInvalidUsageError`をthrowする。 |
+| `connecting(waiting, initial)` | 有効な`reconnect()` action | `connecting(attempting, initial)` | 同じsessionで`nextAttempt`の新epochを作る。 |
+| `connecting(attempting)` | current transportのopen | `provisioning(attempting)` | 同じsession/transport epoch/attemptを維持し、setup transactionを開始する。 |
+| `provisioning(attempting)` | setup成功 | `open` | `ready` attempt recordを追加しbarrierを開く。session最初のreadyなら`open()`をresolveする。 |
+| `connecting` / `provisioning`（initial） | attempt failure後、policyが将来のactionを待つ | `connecting(waiting, initial)` | `failed` recordを追加し、同じsessionを維持する。`open()`はpending。 |
+| `connecting` / `provisioning`（initial） | attempt failure後、policyが即retry | `connecting(attempting, initial)` | failed epochを先に無効化/cleanupし、新epochで次attemptを開始する。 |
+| `connecting` / `provisioning`（initial） | reconnectorなし、cancel、exhaustion、reconnector failure | `closed(open-failed)` | sessionをterminalにし、`open()`を対応する`UniplsOpenError`でrejectする。 |
+| `open` | peer close/error/timeout/detector/manual dropがdrop gateを最初に通過 | `recovering` | epochを同期的に無効化し、一つのcanonical dropと新しいrecovery cycleを確定する。operationへdrop policyを一度だけ適用する。 |
+| `recovering` | 有効な`reconnect()` action | `connecting(attempting, recovery)` | 同じsession/dropを維持し、cycle内の次attempt用epochを作る。 |
+| `connecting` / `provisioning`（recovery） | attempt failure後、policyが待機 | `recovering` | `failed` recordを追加し、cycle起点の同じdropを保持する。 |
+| `connecting` / `provisioning`（recovery） | attempt failure後、policyが即retry | `connecting(attempting, recovery)` | failed epochをcleanup後、同じcycleの次attemptを開始する。 |
+| `recovering`またはrecovery attempt中 | cancel / exhaustion / reconnector failure | `closed(dropped)` | session scopeを終了し、継続中operationを同じterminal `UniplsDroppedError`でsettleする。 |
+| 任意のactive phase | 利用者の`close()`が先にsession terminal gateを通過 | `closed(user)` | current epochを先に無効化し、全operationをclose outcomeへ進め、全resourceのcleanup完了後に`close()`をresolveする。 |
+| 任意のactive phase | current attempt中の`close()` | `closed(user)` | 進行中attemptを`aborted/session-closed`としてhistoryへ追加する。pending `open()`は`UniplsClosedError`でrejectする。 |
+| 任意 | currentでないtransport epochのevent/provisioning完了/drop報告 | 変更なし | callback固有の後始末以外を行わず、current session/transport epoch/operationへ通知しない。 |
+| `closed(*)` | `close()` | 同じsnapshot | 完了済みcleanup Promiseがあればそれを返し、なければ即時resolveする。 |
+
+同じJavaScript turnでuser closeとdropが競合した場合、session/epochの同期settle gateを先に通過した入力が分類を確定する。dropが先でも、その後recovery中に利用者が`close()`を呼べば最終session outcomeは`closed(user)`である。既にcancel/exhaustion/reconnector failureがsession terminal gateを通過した後の`close()`は`closed(dropped)`を変更しない。
+
+### operation behavior matrix
+
+全operationで、wrong type/必須値欠落は`TypeError`、timeoutやbuffer値の範囲不正は`RangeError`としてsession確認より前に同期throwする。入力snapshot/validation後は、active sessionの最終確認とoperation登録の間にuser codeを呼ばない。既にabort済みのsignalは、active session内では受付済みoperationのabort outcomeであり、invalid usageの同期throwではない。
+
+| operation | `closed(*)`で開始 | `connecting` / `provisioning`で開始 | `open`で開始 | `recovering`で開始 | 一度readyになった後のdrop時の既定 | 成功結果 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cast` | 同期`UniplsInvalidUsageError` | 受付後、最初のreadyまで待つ。factoryは未評価 | ready epochでfactory評価、serialize、send | 次のreadyまで待ち、初回sendする | `fail`。送信を試みた未settle castを暗黙再送しない | transportがsendを受理した時点で`Promise<void>` resolve。peer受信は保証しない |
+| `next` | 同期`UniplsInvalidUsageError` | 受付後、最初のreadyからselectorを有効化 | selectorに最初に一致したmessageを待つ | 次のreadyから観測を始める | `wait`。drop中とprovisioning中は観測停止し、次のready後に再開 | 最初の一致messageでresolve |
+| `request` | 同期`UniplsInvalidUsageError` | 受付後、最初のreadyでfactory評価、send後にselectorを有効化 | send完了後に届く一致messageを待つ | 次のreadyで初回sendする | `fail`。明示`wait`は再送せずready後に応答待ちだけ再開、`resend`/customだけ再送 | send後の最初の一致messageでresolve |
+| `listen` | 同期`UniplsInvalidUsageError` | 受付後、最初のreadyから観測 | ready中の一致messageを配送 | 次のreadyから観測 | `wait`。drop/provisioning中は観測停止しready後に再開 | terminator/unsubscribe/closeまたはfailureまで0..N件を配送 |
+| `subscribe` | 同期`UniplsInvalidUsageError` | 受付後、最初のreadyでfactory評価、send後に観測 | send完了後の一致messageを配送 | 次のreadyで初回send | `fail`。明示`wait`は再送せず観測だけ再開、`resend`/customだけ再送 | terminator/unsubscribe/closeまたはfailureまで0..N件を配送 |
+
+ready前に受け付けられ、まだ一度も送信・観測していないoperationはdrop recoveryの対象ではない。現在のattemptが失敗しても同じsessionの次のreadyを待ち、`retry: "fail"`でも初回実行する。factoryは実際の初回send直前まで評価しない。一度sendを試みたpayloadはpeerへの到達可否が不明なので、明示`resend`またはcustom recoveryなしに再送しない。
+
+`request`/`subscribe`はsend完了前に届いたmessageを結果にしない。`next`/`listen`を含む通常operationはprovisioning中のmessageに対してselector/terminator/callbackを実行しない。dropを`wait`でまたぐoperationも、新epochのprovisioning messageを観測しない。
+
+operationの終了結果は次のとおりである。Promise系の「reject値」とAsyncIterableの「throw値」とstream finalizationの`error`は同じobject/value identityを使う。
+
+| 終了入力 | `cast` / `next` / `request` | callback stream / AsyncIterable `closed` | AsyncIterable |
+| --- | --- | --- | --- |
+| 通常成功 | resolve | 継続 | messageをyield |
+| terminator一致 | 該当なし | `{ ok: true, reason: "terminated", message }` | terminal messageをyieldせず正常終了 |
+| `unsubscribe()` / iterator `return()` | 該当なし | `{ ok: true, reason: "unsubscribed" }` | bufferを破棄して正常終了 |
+| 利用者のsession `close()` | `UniplsClosedError`でreject | `{ ok: true, reason: "closed" }` | 正常終了 |
+| initial open terminal failure | `UniplsOpenError`でreject | `{ ok: false, reason: "open-error", error }` | 同じerrorをthrow |
+| operationの`fail`またはrecovery terminal outcome | `UniplsDroppedError`でreject | `{ ok: false, reason: "dropped", error }` | 同じerrorをthrow |
+| deadline到達 | `UniplsTimeoutError`でreject | `{ ok: false, reason: "timeout", error }` | 同じerrorをthrow |
+| `AbortSignal` | `signal.reason`でreject | `{ ok: false, reason: "aborted", error: signal.reason }` | 同じ値をthrow |
+| buffer overflow `"error"` | 該当なし | `{ ok: false, reason: "buffer-overflow", error }` | 同じ`UniplsBufferOverflowError`をthrow |
+| callback throw + `"unsubscribe"` | 該当なし | `{ ok: false, reason: "callback-error", error }` | 該当なし |
+| factory/serializer/predicate fail-fast等 | 元の値でreject | `{ ok: false, reason: "fatal-error", error }` | 同じ値をthrow |
+
+streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全cleanupを一度ずつ試行した後に、一つのfrozen finalizationでresolveする。cleanup failureはこの表の結果を変更しない。
+
+### timeout、readiness、stream finalizationのcontract例
+
+以下は後続contract testが固定する時系列である。
+
+1. **ready待機もdeadlineに含む**: `t=0`の`connecting`中に`request({ timeout: 100, query: factory })`を受け付ける。`t=100`までreadyにならなければfactoryを一度も呼ばず`UniplsTimeoutError`でrejectする。`t=100`後にready eventが来ても送信しない。
+2. **retryでdeadlineをリセットしない**: `t=0`に`next({ timeout: 100, retry: "wait" })`を開始し、`t=40`にdrop、`t=90`に再びreadyになってもdeadlineは元の`t=100`である。`t=100`まで一致messageがなければtimeoutし、epochごとに残り100msへ戻さない。
+3. **readinessは送受信共通**: provisioning中にmessage A、ready遷移後にmessage Bを受信した場合、通常`next`/`listen`のselectorはAに対して呼ばれずBだけを観測できる。connection setup contextのtransport-epoch-bound receive capabilityはAを観測できるが、Bを通常operationと重複配送する権利はない。
+4. **recovery中の初回send**: recovery待機中に`request({ retry: "fail", query: factory })`を開始しても即時失敗せずfactoryも評価しない。次のreadyでfactoryを初めて評価して一度送る。この送信後にさらにdropした場合だけ`retry: "fail"`を適用する。
+5. **terminatorはdataではなく終了理由**: stream messageにterminatorが一致したらselectorを評価せず、callback/yieldへ渡さない。cleanup後に`closed`を`{ ok: true, reason: "terminated", message }`でresolveし、AsyncIteratorは正常終了する。
+6. **終了競合はfirst-wins**: timeout callbackと一致messageが同じturnで競合した場合、共通settle gateを最初に通過した側だけを採用する。後発側はfinalization、callback、cleanupを二重実行しない。
+7. **abort reasonを包まない**: `const reason = { code: "stop" }`でsignalをabortした場合、Promise/iteratorが投げる値と`closed`の`error`はすべて`reason`と厳密等価である。
+8. **closeはstreamの正常終了**: session `close()`はcallback streamとAsyncIterableを`{ ok: true, reason: "closed" }`へfinalizeし、iteratorをthrowさせない。一方、同じstreamがrecovery exhaustionで終わる場合は`dropped` finalizationとなりiteratorはその`UniplsDroppedError`をthrowする。
+
 ## 作業順序
 
 ### Phase 0: 判断と安全網
@@ -890,10 +1126,10 @@ await correlated.request({
 - [x] D10 について採用案、却下案、理由、公開形、実装上の帰結、互換性への影響を記録する。
 - [x] D11〜D12 について採用案、却下案、理由、互換性への影響を記録する。
 - [x] D13について初期releaseでの非採用、内部dispatcher境界、将来追加時の互換条件を記録する。
-- [ ] session、connection attempt/epoch、recovery cycle、operation の用語を定義する。
-- [ ] `open`、ready、drop、retry、cancel/exhaust、reconnector failure、close の状態遷移表を作る。
-- [ ] 5 operation について、各 state での開始可否、drop 時の既定動作、settle 結果を matrix にする。
-- [ ] timeout/readiness/stream finalization の contract 例を記す。
+- [x] session、connection attempt/transport epoch、recovery cycle、operation の用語を定義する。
+- [x] `open`、ready、drop、retry、cancel/exhaust、reconnector failure、close の状態遷移表を作る。
+- [x] 5 operation について、各 state での開始可否、drop 時の既定動作、settle 結果を matrix にする。
+- [x] timeout/readiness/stream finalization の contract 例を記す。
 
 成果物:
 
@@ -950,10 +1186,10 @@ await correlated.request({
 
 ### Phase 1: lifecycle の正規化
 
-#### Task 3: 論理 session と connection epoch を分離する
+#### Task 3: logical session と transport epoch を分離する
 
 - [ ] session ID を発行・所有する単一の session model を導入する。
-- [ ] 物理接続には session と異なる内部 connection epoch/ID を与える。
+- [ ] 物理接続の試行にはsessionと異なる内部transport epochを与え、公開境界ではそのidentityを`ConnectionId`で表す。
 - [ ] provisioning/reconnector/event が同じ論理 session ID を参照するようにする。
 - [ ] session setupの未実行/成功済みを論理session stateへ明示的に保持し、物理IDのSetや公開`isSessionBeginning` flagから推測しない。
 - [ ] 二重 `open()` の妥当性検証を、provisioner/session の変更より前に行う。
@@ -965,7 +1201,7 @@ await correlated.request({
 完了条件:
 
 - 再接続前後で session ID が不変である。
-- session setupは論理sessionで一度だけ成功し、connection setupはreadyになる各connection epochで一度ずつ成功する。
+- session setupはlogical sessionで一度だけ成功し、connection setupはreadyになる各transport epochで一度ずつ成功する。
 - session を表す state holder と ID generator が重複していない。
 - lifecycle event の dispatch 時に `unipls.lifecycle === event.current` が成立し、次の遷移まで getter の object identity が安定している。
 
@@ -973,19 +1209,19 @@ await correlated.request({
 
 依存: Task 2。
 
-#### Task 4: connection epoch を隔離し、古い処理を中断する
+#### Task 4: transport epoch を隔離し、古い処理を中断する
 
-- [ ] raw open/message/error/close を作成元 epoch に束縛する。
-- [ ] 現在でない epoch の event が public state と operation を変更しないようにする。
+- [ ] raw open/message/error/closeを作成元transport epochに束縛する。
+- [ ] currentでないtransport epochのeventがpublic stateとoperationを変更しないようにする。
 - [ ] connection 交代時に古い provisioning、送信待機、connection-scoped resource を abort する。
-- [ ] 待機送信が event の epoch と同じ socket にだけ送るようにする。
+- [ ] 待機送信がeventのtransport epochと同じsocketにだけ送るようにする。
 - [ ] 古い provisioning の遅延完了、古い message/close/error の race test を追加する。
-- [ ] detector contextを含む全connection callbackに作成元epoch IDをcaptureさせ、古いepochからのdrop報告を無効化する。
+- [ ] detector contextを含む全connection callbackに作成元transport epoch IDをcaptureさせ、古いtransport epochからのdrop報告を無効化する。
 
 完了条件:
 
-- stale epoch から ready event や message が発生しても現在の connection に影響しない。
-- epoch 終了後にその epoch の callback、timer、listener が残らない。
+- stale transport epochからready eventやmessageが発生しても現在のconnectionに影響しない。
+- transport epoch終了後にそのtransport epochのcallback、timer、listenerが残らない。
 
 適用する決定: D2、D9。
 
@@ -996,7 +1232,7 @@ await correlated.request({
 - [ ] user close intent と transport close metadata を別に扱う。
 - [ ] server code 1000、非 1000、接続前 close、socket 生成失敗をD5に従ってuser closeまたはdropへ一度だけ分類する。
 - [ ] peer close、transport error、timeout、detector、manual dropからfrozen `UniplsDrop`を生成する。
-- [ ] 全drop検出経路をepoch-scopedな同期`reportDrop()` gateへ集約し、check-and-set完了前にawait、cleanup、event dispatch、user callbackを実行しない。
+- [ ] 全drop検出経路をtransport-epoch-scopedな同期`reportDrop()` gateへ集約し、check-and-set完了前にawait、cleanup、event dispatch、user callbackを実行しない。
 - [ ] 最初のdrop報告でepochを同期的に無効化してcanonical dropを確定し、その勝者だけがcleanupと一つのrecovery cycleを開始する。後発報告は同じepochのno-opにする。
 - [ ] detector由来dropにはfrozenなdetector identityをsourceとして保持し、複数detectorが反応した場合はsettle gateの最初の勝者を記録する。
 - [ ] dropped/no-socket の状態から `close()` しても必ず terminal state に収束させる。
@@ -1007,7 +1243,7 @@ await correlated.request({
 完了条件:
 
 - 状態遷移表のすべての close/drop ケースが contract test で網羅される。
-- `close()` 完了後に open intent、active epoch、recovery timer が残らない。
+- `close()` 完了後にopen intent、active transport epoch、recovery timerが残らない。
 - recovery terminal outcome 後に session-scoped resource と pending operation が残らず、次の `open()` が新しい session ID を作る。
 - 同じepochについてdetector、socket、timeoutが重複してdropを報告しても、canonical drop、drop/lifecycle通知、cleanup、recovery cycle、reconnector起動がそれぞれ一回だけである。
 
@@ -1055,7 +1291,7 @@ await correlated.request({
 - [ ] selector/terminator throwは該当operationについてmessageを破棄し、operation-scoped diagnosticを通知して既定では継続する。`predicateError: "fail"`だけをterminal outcomeへ流す。
 - [ ] predicate diagnosticを`message-predicate-failed` variantとして型付けし、`severity: "error"`、predicate種別、policy、causeを持たせる一方、message本体や取得不能な相関IDを含めない。
 - [ ] cleanup を user callback より先に確定し、全終了経路で exactly once にする。
-- [ ] 通常receive operationをready-gated受信経路へ、provisioning contextのreceive operationをepoch-bound受信経路へ分離する。
+- [ ] 通常receive operationをready-gated受信経路へ、provisioning contextのreceive operationをtransport-epoch-bound受信経路へ分離する。
 - [ ] provisioning messageを通常receive operationへbuffer/replayせず、通常selectorも評価しないことをcontract testにする。
 - [ ] active recovery中に開始したoperationをsessionの次のready/terminal outcomeへ接続し、socket stateだけを理由に失敗させない。
 - [ ] active sessionの確認とoperationのsessionへの登録を同期的なlinearization pointにまとめ、登録前にuser codeへ再入しない。
@@ -1116,7 +1352,7 @@ await correlated.request({
 - [ ] terminatorをselectorより先に評価し、一致時はterminal messageをcallback/yieldせず`closed`の`terminated.message`だけに保持することをtestする。
 - [ ] 既存 callback API を残す場合は adapter として実装し、互換性 test を付ける。
 - [ ] `listen`、`subscribe`はopen intent外でterminal handleを作らず、同期的に`UniplsInvalidUsageError`をthrowする。
-- [ ] streamのtimeoutはconnection epochごとにリセットせず、受付からの一つのdeadlineで一度だけfinalizeする。
+- [ ] streamのtimeoutはtransport epochごとにリセットせず、受付からの一つのdeadlineで一度だけfinalizeする。
 - [ ] `listen`はprovisioning中とdrop中に観測を停止し、次epochのready後にだけ再開する。
 - [ ] AsyncIterable adapterをoperation開始時に作り、有限の既定buffer、数値指定、`latest`、3種のoverflow policy、message-loss診断を実装する。
 - [ ] 実装前に既定buffer capacityの具体値をpublic documentationへ記録し、capacityちょうど、capacity超過、`0`/負数/非有限値のvalidationをcontract testで固定する。
@@ -1142,16 +1378,16 @@ await correlated.request({
 
 #### Task 10: provisioning capability と resource scope を再設計する
 
-- [ ] provisioning contextに通常APIとは分離したepoch-bound receive capabilityを持たせ、provisioning完了またはepoch終了時に一時receive operationを失効させる。
+- [ ] provisioning contextに通常APIとは分離したtransport-epoch-bound receive capabilityを持たせ、provisioning完了またはtransport epoch終了時に一時receive operationを失効させる。
 - [ ] provisioning context外からreadiness barrierを迂回できないことを型とruntimeの両方でtestする。
-- [ ] provisioning context を connection epoch に束縛する。
+- [ ] provisioning contextをtransport epochに束縛する。
 - [ ] provisionerをsession setupとconnection setupへ分け、`isSessionBeginning`を削除する。function shorthandを残す場合はconnection setupへ写像する。
 - [ ] session scopeとconnection scopeにそれぞれ`defer`相当の即時disposer登録とhook戻り値の取り込みを実装する。
 - [ ] 専用`ResourceScope`に任意のscope-localな一意nameと登録元metadata、LIFOの逐次async cleanup、memoizedなdispose Promise、dispose開始後の登録拒否を実装する。標準`DisposableStack`の有無に挙動を依存させない。
 - [ ] `defer(disposer, { name? })`を公開し、nameを省略したresourceの個別識別を保証せず、library-owned resourceには安定したnameを割り当てる。
 - [ ] context の通信操作に適切な cleanup/cancel handle を返す。
 - [ ] drop detector contextへdetector-scopedな`signal`、event callback用`guard()`、background task用`run()`を追加し、connection setup contextのresource scopeと統合する。
-- [ ] force 系を高レベル `Unipls` の public surface から除き、epoch-bound な provisioning context の capability として共通 primitive 上に実装する。
+- [ ] force 系を高レベル `Unipls` の public surface から除き、transport-epoch-boundなprovisioning contextのcapabilityとして共通primitive上に実装する。
 - [ ] connecting 中の準備通信が raw open 後、ready 前に動作することを test する。
 - [ ] 再接続ごとに session-scoped listener が重複しないことを test する。
 - [ ] setup途中のthrow/rejectではそのtransactionで登録済みの同期・非同期disposerをLIFO rollbackし、cleanup errorを診断へ集約する。
@@ -1161,7 +1397,7 @@ await correlated.request({
 
 完了条件:
 
-- connection-scoped resource は epoch 終了時、session-scoped resource は session 終了時に破棄される。
+- connection-scoped resourceはtransport epoch終了時、session-scoped resourceはsession終了時に破棄される。
 - provisioning failure/abort 後に通常 operation が未準備 connection へ流れない。
 - `cast`、`request`、`subscribe` の準備通信に barrier の非対称性がない。
 - session setupは成功後に同じsessionで再実行されず、connection setupは各epochでちょうど一度成功する。
@@ -1178,7 +1414,7 @@ await correlated.request({
 - [ ] detectorへ任意の明示`name`を追加し、0始まりのregistration indexと合わせたfrozen identityを登録時に生成する。明示nameのinstance内重複をsession開始前に拒否する。
 - [ ] 途中の setup failure で、登録済み disposer を逆順に実行する。
 - [ ] detector/resource cleanupをD9のscope-owned disposer stackへ統合し、async cleanupとcleanup error後の継続をtestする。
-- [ ] disposer を冪等にし、drop/close/provisioning failure/epoch 交代で一度だけ実行する。
+- [ ] disposerを冪等にし、drop/close/provisioning failure/transport epoch交代で一度だけ実行する。
 - [ ] detector disposerの同期throw/非同期rejectを個別に捕捉し、後続disposerを止めず、同じdisposerを競合する終了経路から再試行しない。
 - [ ] detector runtime callback/taskを`guard()`/`run()`のerror boundary内で実行し、同期throw/非同期reject時は当該detectorだけをabort・停止してconnection-scoped diagnosticへ渡す。
 - [ ] `guard()`の戻り値からerrorやrejected Promiseをhostへ漏らさず、`run()` taskでもunhandled rejectionを発生させない。

@@ -65,15 +65,15 @@ timeout を操作開始からの deadline とするか、接続中だけ進む�
 
 その結果、再接続すると provisioning の session ID が変わり、物理接続 ID を記録する `#provisionedSessions` にとって毎回が初回になるため、`isSessionBeginning` も常に `true` になる。reconnector context が示す session と provisioning context が示す session も一致しない。
 
-論理セッションを唯一の session とし、物理接続には別名の connection epoch/ID を内部だけで与える。`isSessionBeginning` は論理セッション自身の状態として保持し、ID の Set で推測しない。
+論理セッションを唯一の session とし、物理接続の試行には別名の transport epoch/ID を内部だけで与える。`isSessionBeginning` は論理セッション自身の状態として保持し、ID の Set で推測しない。
 
 ### P0: 古い物理接続のイベントが隔離されていない
 
-socket の raw event は作成時の物理接続を参照するが、公開 event bus には古い接続の message、close、provisioning 完了もそのまま流れる。各操作も現在の connection epoch を確認しない。さらに、待機送信の listener は event の接続を確認せず、実際の送信先には「その時点の現在 socket」を使う。
+socket の raw event は作成時の物理接続を参照するが、公開 event bus には古い接続の message、close、provisioning 完了もそのまま流れる。各操作も現在の transport epoch を確認しない。さらに、待機送信の listener は event の接続を確認せず、実際の送信先には「その時点の現在 socket」を使う。
 
 このため、drop 後に古い provisioning が完了した場合、古い接続の `open` が ready を偽装したり、新しい socket へ準備前の送信を流したりできる。古い close/error が新しい操作を終了させる可能性もある。
 
-物理接続ごとの epoch と AbortSignal を導入し、すべての raw event、provisioning、送信待機をその epoch に束縛する。現在でない epoch のイベントは状態を変更する前に破棄し、接続交代時に古い epoch の全処理を abort する。
+物理接続試行ごとのtransport epochとAbortSignalを導入し、すべてのraw event、provisioning、送信待機をそのtransport epochに束縛する。currentでないtransport epochのeventは状態を変更する前に破棄し、接続交代時に古いtransport epochの全処理をabortする。
 
 ### P0: `open()` が検証前に現在の論理状態を書き換える
 
@@ -123,7 +123,7 @@ provisioning で登録する資源を、論理セッションに属するもの�
 
 複数 detector の setup 中に後続 detector が throw すると、それ以前に得た disposer が manager に保存されずリークする。detector の callback 例外も接続 lifecycle から隔離されていない。
 
-setup を transactional にし、途中失敗時は設定済み detector を逆順に破棄する。disposer は冪等にし、drop、close、provisioning failure、epoch 交代のすべてで一度だけ実行する。
+setup を transactional にし、途中失敗時は設定済み detector を逆順に破棄する。disposer は冪等にし、drop、close、provisioning failure、transport epoch交代のすべてで一度だけ実行する。
 
 ### P1: 公開 event 型が広すぎ、内部状態を露出する
 
@@ -161,11 +161,11 @@ timer 完了時と abort 時の双方で対になる cleanup を行う共通 abo
 
 `castForce` / `requestForce` / `subscribeForce` を通常 client に公開すると、利用者が readiness barrier を任意に破れる。必要なのは provisioning が準備通信を行う capability であり、通常操作の恒常的な別バリアントではない。
 
-force primitive は内部化し、接続 epoch に束縛された provisioning context だけへ渡す。高度な用途で公開する場合も、危険性と有効期間が型に現れる専用 connection handle にする。
+force primitive は内部化し、transport epochに束縛されたprovisioning contextだけへ渡す。高度な用途で公開する場合も、危険性と有効期間が型に現れる専用connection handleにする。
 
 ### P1: 高レベル client と低レベル socket の同時公開は契約を二重化する
 
-現在は `Unipls` に加えて `UniplsSocket`、socket 固有 error、close code も root から export している。両方を安定 API にすると、state、session、event、provisioning の意味を二重に維持する必要があり、内部の epoch 設計も固定される。
+現在は `Unipls` に加えて `UniplsSocket`、socket 固有 error、close code も root から export している。両方を安定 API にすると、state、session、event、provisioning の意味を二重に維持する必要があり、内部のtransport epoch設計も固定される。
 
 主目的が回復可能な型付き操作である以上、まず高レベル client と拡張 interface を public contract にする。低レベル層が実利用に必要だと確認できた場合だけ、内部クラスそのものではなく別 entry point の小さな transport interface として設計する。
 
@@ -179,7 +179,7 @@ selector を基本 primitive として維持しつつ、key extractor と correl
 
 現在は高レベル session manager、socket session、connection state、intent、provisioned ID Set、reconnector cleanup が別々に状態を持つ。この分散が session ID の混同と競合を生んでいる。
 
-論理セッション、現在の connection epoch、再接続サイクルを所有する単一 coordinator を置き、操作と extension は immutable snapshot と signal だけを見る構成が適する。状態遷移を reducer/state machine として列挙すると、無効な組み合わせを作りにくい。
+論理セッション、現在の transport epoch、再接続サイクルを所有する単一 coordinator を置き、操作と extension は immutable snapshot と signal だけを見る構成が適する。状態遷移を reducer/state machine として列挙すると、無効な組み合わせを作りにくい。
 
 ### P2: retry preset の既定値と deadline を policy object に集約する
 
@@ -195,9 +195,9 @@ selector を基本 primitive として維持しつつ、key extractor と correl
 
 ## 推奨する実装順序
 
-1. lifecycle、session、connection epoch、reconnection outcome、timeout/readiness の contract test を追加する。
-2. 単一 lifecycle coordinator を導入し、論理 session と物理 connection epoch を分離する。
-3. close/drop/reconnect/provisioning を epoch-bound な state machine に統合し、すべての終端を通知する。
+1. lifecycle、session、transport epoch、reconnection outcome、timeout/readiness の contract test を追加する。
+2. 単一 lifecycle coordinator を導入し、logical session と transport epoch を分離する。
+3. close/drop/reconnect/provisioning を transport-epoch-bound な state machine に統合し、すべての終端を通知する。
 4. 5 操作を同じ operation lifecycle 上に載せ、dropped 中の開始、factory/callback 例外、cleanup を統一する。
 5. provisioner、detector、reconnector の所有期間と失敗時 cleanup を揃える。
 6. 公開 API を選別し、root exports、型、package metadata、consumer smoke test を完成させる。
