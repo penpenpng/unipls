@@ -20,13 +20,15 @@ import { createOnReconnectedHandler } from "./operations/reconnect-hook.ts";
 import type { UniplsReconnectEvent, UniplsReconnector } from "./reconnector/reconnector.ts";
 import type {
   ConnectionId,
+  DropDetectorIdentity,
   SessionId,
   UniplsConnectionState,
   UniplsDrop,
+  UniplsDroppedErrorOutcome,
   UniplsLifecycleSnapshot,
   WebSocketData,
 } from "./types.ts";
-import { UniplsSocket } from "./unipls-socket";
+import { UniplsSocket, type UniplsSocketDropReport } from "./unipls-socket";
 import type {
   UniplsCastParams,
   UniplsListenOptions,
@@ -48,8 +50,8 @@ type UniplsEvents<TOutput> = {
   open: ConnectionEventContext;
   message: ConnectionEventContext & { message: TOutput };
   error: ConnectionEventContext & { error: unknown };
-  closed: ConnectionEventContext;
-  dropped: ConnectionEventContext & { code?: number; drop?: UniplsDrop };
+  closed: ConnectionEventContext & { error?: UniplsDroppedError };
+  dropped: ConnectionEventContext & { drop: UniplsDrop; error: UniplsDroppedError };
   failed: ConnectionEventContext & { error: unknown };
   lifecycle: {
     previous: UniplsLifecycleSnapshot;
@@ -62,6 +64,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #socket: UniplsSocket<TInput, TOutput>;
   #events = new EventBus<UniplsEvents<TOutput>>();
   #transportContexts = new Map<number, ConnectionEventContext>();
+  #canonicalDrops = new Map<number, UniplsDrop>();
   #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #reconnector?: UniplsReconnector;
   #reconnectorCleanup?: () => void;
@@ -123,9 +126,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.#lifecycle.markProvisioning(connection);
       await this.#runProvisioner(transportEpochId, signal);
       this.#assertCurrentTransport(transportEpochId, signal);
-      this.#detectorManager.start(
-        transportEpochId,
-        this.#createDropDetectorContext(transportEpochId, signal),
+      this.#detectorManager.start(transportEpochId, (identity) =>
+        this.#createDropDetectorContext(transportEpochId, signal, identity),
       );
     });
     transportEpochId = this.#socket.transportEpochId;
@@ -143,17 +145,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         });
       })
       .catch((error) => {
-        const cause = Unipls.#translateSocketError(error);
+        const cause = this.#translateSocketError(error);
         if (!this.#lifecycle.isCurrentAttempt(connection)) {
           throw cause;
         }
         const stage = this.lifecycle.phase === "provisioning" ? "provisioning" : "connecting";
-        const attempts = this.#lifecycle.failInitialAttempt(connection, cause);
+        const drop = this.#canonicalDrops.get(transportEpochId);
+        const attempts = this.#lifecycle.failInitialAttempt(connection, cause, drop);
+        this.#canonicalDrops.delete(transportEpochId);
         throw new UniplsOpenError({
           outcome: "attempt-failed",
           stage,
           attempts,
           cause,
+          drop,
         });
       });
     void promise.catch(() => {});
@@ -164,11 +169,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
    * WebSocket 接続を切断します。この切断にともなう再接続は行われません。既に切断されている場合は何もしません。
    */
   close(): Promise<void> {
+    const context = this.#activeSessionContext();
+    this.#transportContexts.clear();
+    const closing = this.#socket.close();
     this.#lifecycle.closeByUser();
     this.#detectorManager.stop();
     this.#reconnectorCleanup?.();
     this.#reconnectorCleanup = undefined;
-    return this.#socket.close();
+    this.#canonicalDrops.clear();
+    if (context) {
+      this.events.emit("closed", context);
+    }
+    return closing;
   }
 
   async [Symbol.asyncDispose]() {
@@ -225,8 +237,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once("closed", () => {
-      scope.reject(new UniplsClosedError());
+    events.once("closed", ({ error }) => {
+      scope.reject(error ?? new UniplsClosedError());
     });
 
     return scope.promise;
@@ -287,8 +299,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         onFatal: scope.raiseFatalError,
       }),
     );
-    events.once("closed", () => {
-      scope.raiseFatalError(new UniplsClosedError());
+    events.once("closed", ({ error }) => {
+      scope.raiseFatalError(error ?? new UniplsClosedError());
     });
 
     return scope.unsubscribe;
@@ -354,7 +366,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           force: params.force,
           signal: scope.signal,
         }),
-      onError: (error) => scope.reject(Unipls.#translateSocketError(error)),
+      onError: (error) => scope.reject(this.#translateSocketError(error)),
     });
 
     const request = (
@@ -411,8 +423,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once("closed", () => {
-      scope.reject(new UniplsClosedError());
+    events.once("closed", ({ error }) => {
+      scope.reject(error ?? new UniplsClosedError());
     });
 
     return scope.promise;
@@ -442,7 +454,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           .enqueue(payload, { force, signal: scope.signal })
           .then(() => scope.resolve())
           .catch((error) => {
-            scope.reject(Unipls.#translateSocketError(error));
+            scope.reject(this.#translateSocketError(error));
           });
       };
 
@@ -462,8 +474,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       sendOnce(params.query);
     }
 
-    events.once("closed", () => {
-      scope.reject(new UniplsClosedError());
+    events.once("closed", ({ error }) => {
+      scope.reject(error ?? new UniplsClosedError());
     });
 
     return scope.promise;
@@ -524,9 +536,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #createDropDetectorContext(
     transportEpochId: number,
     signal: AbortSignal,
+    identity: DropDetectorIdentity,
   ): DropDetectorContext<TInput, TOutput> {
     return {
-      drop: () => this.#socket.drop(transportEpochId),
+      drop: () => {
+        this.#socket.reportDrop(transportEpochId, {
+          source: Object.freeze({ type: "detector", detector: identity }),
+        });
+      },
       request: (params) => {
         this.#assertCurrentTransport(transportEpochId, signal);
         return this.request({
@@ -543,6 +560,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       session: this.#lifecycle.session,
       connection,
     });
+    const report = this.#socket.getDropReport(transportEpochId);
+    if (report) {
+      this.#handleTransportDrop(transportEpochId, report);
+    }
   }
 
   #bridgeSocketEvents(): void {
@@ -565,34 +586,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
     });
     this.#socket.events.on("closed", ({ epoch }) => {
-      const context = this.#currentTransportContext(epoch.id);
+      const context = this.#transportContextForTerminalEvent(epoch.id);
       if (context) {
         this.#detectorManager.stop(epoch.id);
         this.events.emit("closed", context);
         this.#transportContexts.delete(epoch.id);
       }
     });
-    this.#socket.events.on("dropped", ({ epoch, code }) => {
-      const context = this.#currentTransportContext(epoch.id);
-      if (!context) {
-        return;
-      }
-
-      this.#detectorManager.stop(epoch.id);
-      let drop: UniplsDrop | undefined;
-      if (this.#lifecycle.hasActiveSession && this.#lifecycle.hasBeenReady) {
-        drop = this.#lifecycle.createPeerDrop(code);
-        this.#lifecycle.beginRecovery(drop);
-      }
-      this.events.emit("dropped", {
-        ...context,
-        code,
-        ...(drop ? { drop } : {}),
-      });
-      if (drop) {
-        void this.#handleDropped(epoch.id);
-      }
-      this.#transportContexts.delete(epoch.id);
+    this.#socket.events.on("dropped", ({ epoch, report }) => {
+      this.#handleTransportDrop(epoch.id, report);
     });
   }
 
@@ -633,9 +635,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           this.#lifecycle.markProvisioning(connection);
           await this.#runProvisioner(transportEpochId, signal);
           this.#assertCurrentTransport(transportEpochId, signal);
-          this.#detectorManager.start(
-            transportEpochId,
-            this.#createDropDetectorContext(transportEpochId, signal),
+          this.#detectorManager.start(transportEpochId, (identity) =>
+            this.#createDropDetectorContext(transportEpochId, signal, identity),
           );
         });
         transportEpochId = this.#socket.transportEpochId;
@@ -653,8 +654,9 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         });
         const event = this.#lifecycle.reconnectSucceeded();
         this.events.emit("reconnect", event);
+        this.#canonicalDrops.delete(epochId);
       } catch (err) {
-        const cause = Unipls.#translateSocketError(err);
+        const cause = this.#translateSocketError(err);
         if (this.#lifecycle.isCurrentAttempt(connection)) {
           this.#lifecycle.failRecoveryAttempt(connection, cause);
           this.#lifecycle.reconnectFailed(cause);
@@ -667,6 +669,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         return;
       }
       cleanup();
+      this.#terminateRecovery("recovery-cancelled");
+    };
+
+    const exhaust = (cause?: unknown) => {
+      if (settled) {
+        return;
+      }
+      cleanup();
+      this.#terminateRecovery("recovery-exhausted", cause);
     };
 
     let registeredCleanup: (() => void) | undefined;
@@ -676,13 +687,19 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         {
           reconnect,
           cancel,
+          exhaust,
         },
         this.#lifecycle.buildReconnectionContext(),
       );
       registeredCleanup = cleanupCallback ?? undefined;
+      if (settled) {
+        registeredCleanup?.();
+        return;
+      }
       this.#reconnectorCleanup = cleanup;
-    } catch {
+    } catch (cause) {
       cleanup();
+      this.#terminateRecovery("reconnector-failed", cause);
       return;
     }
   }
@@ -692,6 +709,96 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       return undefined;
     }
     return this.#transportContexts.get(transportEpochId);
+  }
+
+  #activeSessionContext(): ConnectionEventContext | undefined {
+    const snapshot = this.#lifecycle.snapshot;
+    if (snapshot.phase === "open" || snapshot.phase === "provisioning") {
+      return { session: snapshot.session, connection: snapshot.connection };
+    }
+    if (snapshot.phase === "connecting" && snapshot.status === "attempting") {
+      return { session: snapshot.session, connection: snapshot.connection };
+    }
+    if (snapshot.phase === "recovering") {
+      return { session: snapshot.session, connection: snapshot.drop.connection };
+    }
+    return undefined;
+  }
+
+  #transportContextForTerminalEvent(transportEpochId: number): ConnectionEventContext | undefined {
+    if (this.#socket.transportEpochId !== transportEpochId) {
+      return undefined;
+    }
+    return this.#transportContexts.get(transportEpochId);
+  }
+
+  #handleTransportDrop(transportEpochId: number, report: UniplsSocketDropReport): void {
+    const context = this.#transportContextForTerminalEvent(transportEpochId);
+    if (!context || !this.#lifecycle.hasActiveSession) {
+      return;
+    }
+
+    let drop = this.#canonicalDrops.get(transportEpochId);
+    if (!drop) {
+      drop = this.#lifecycle.createDrop(context.connection, report);
+      this.#canonicalDrops.set(transportEpochId, drop);
+    }
+    this.#detectorManager.stop(transportEpochId);
+
+    if (!this.#lifecycle.hasBeenReady) {
+      const error = new UniplsDroppedError({
+        outcome: "operation-failed",
+        drop,
+        attempts: this.#lifecycle.attempts,
+        cause: report.cause,
+      });
+      this.events.emit("dropped", { ...context, drop, error });
+      this.#transportContexts.delete(transportEpochId);
+      return;
+    }
+
+    this.#lifecycle.beginRecovery(drop);
+    const terminalWithoutReconnector = this.#reconnector === undefined;
+    const error = new UniplsDroppedError({
+      outcome: terminalWithoutReconnector ? "recovery-exhausted" : "operation-failed",
+      drop,
+      attempts: this.#lifecycle.attempts,
+      cause: report.cause,
+    });
+    this.events.emit("dropped", { ...context, drop, error });
+    this.#transportContexts.delete(transportEpochId);
+
+    if (terminalWithoutReconnector) {
+      this.#terminateRecovery("recovery-exhausted", report.cause, error);
+      return;
+    }
+    void this.#handleDropped(transportEpochId);
+  }
+
+  #terminateRecovery(
+    outcome: Exclude<UniplsDroppedErrorOutcome, "operation-failed">,
+    cause?: unknown,
+    existingError?: UniplsDroppedError,
+  ): UniplsDroppedError | undefined {
+    if (!this.#lifecycle.hasActiveSession) {
+      return undefined;
+    }
+    const drop = this.#lifecycle.recoveryDrop;
+    const error =
+      existingError ??
+      new UniplsDroppedError({ outcome, drop, attempts: this.#lifecycle.attempts, cause });
+    this.#reconnectorCleanup?.();
+    this.#reconnectorCleanup = undefined;
+    this.#detectorManager.stop();
+    this.#socket.terminate(this.#socket.transportEpochId);
+    this.#lifecycle.terminateRecovery(outcome, error, cause);
+    this.#canonicalDrops.clear();
+    this.events.emit("closed", {
+      session: drop.session,
+      connection: drop.connection,
+      error,
+    });
+    return error;
   }
 
   #assertCurrentTransport(transportEpochId: number, signal?: AbortSignal): void {
@@ -776,7 +883,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           force,
           signal: scope.signal,
         }),
-      onError: (error) => scope.raiseFatalError(Unipls.#translateSocketError(error)),
+      onError: (error) => scope.raiseFatalError(this.#translateSocketError(error)),
     });
 
     const request = (
@@ -849,8 +956,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }),
     );
 
-    events.once("closed", () => {
-      scope.raiseFatalError(new UniplsClosedError());
+    events.once("closed", ({ error }) => {
+      scope.raiseFatalError(error ?? new UniplsClosedError());
     });
 
     return scope.unsubscribe;
@@ -863,12 +970,20 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     return query;
   }
 
-  static #translateSocketError(error: unknown): unknown {
+  #translateSocketError(error: unknown): unknown {
     if (error instanceof UniplsSocketClosedError) {
       return new UniplsClosedError();
     }
     if (error instanceof UniplsSocketDroppedError) {
-      return new UniplsDroppedError();
+      const drop = this.#canonicalDrops.get(this.#socket.transportEpochId);
+      if (drop && this.#lifecycle.hasActiveSession) {
+        return new UniplsDroppedError({
+          outcome: "operation-failed",
+          drop,
+          attempts: this.#lifecycle.attempts,
+          cause: error,
+        });
+      }
     }
     return error;
   }

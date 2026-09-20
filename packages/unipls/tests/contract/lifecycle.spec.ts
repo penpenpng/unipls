@@ -31,10 +31,7 @@ describe("Unipls lifecycle", () => {
       origin: "initial",
       attempts: [],
     });
-    if (
-      connecting.phase !== "connecting" ||
-      connecting.status !== "attempting"
-    ) {
+    if (connecting.phase !== "connecting" || connecting.status !== "attempting") {
       throw new Error("Expected an active initial connection attempt");
     }
     expect(typeof connecting.session).toBe("string");
@@ -72,9 +69,7 @@ describe("Unipls lifecycle", () => {
     expect(Object.isFrozen(open.attempts[0])).toBe(true);
 
     expect(transitions.at(-1)?.current).toBe(open);
-    expect(transitions.every(({ current }) => Object.isFrozen(current))).toBe(
-      true,
-    );
+    expect(transitions.every(({ current }) => Object.isFrozen(current))).toBe(true);
     expect(getterMatchesEvent.every(Boolean)).toBe(true);
 
     // Close the session and verify that a repeated close is an identity-preserving no-op.
@@ -139,10 +134,7 @@ describe("Unipls lifecycle", () => {
       origin: "recovery",
       session: firstOpen.session,
     });
-    if (
-      reconnecting.phase !== "connecting" ||
-      reconnecting.status !== "attempting"
-    ) {
+    if (reconnecting.phase !== "connecting" || reconnecting.status !== "attempting") {
       throw new Error("Expected a recovery connection attempt");
     }
     expect(reconnecting.connection).not.toBe(firstOpen.connection);
@@ -240,8 +232,7 @@ describe("Unipls lifecycle", () => {
     const reconnection = scenario.reconnector.invocations.take();
     reconnection.reconnect();
     scenario.transport.connection(1).emitOpen();
-    const originalProvisionerInvocation =
-      scenario.provisioner.invocations.take();
+    const originalProvisionerInvocation = scenario.provisioner.invocations.take();
     expect(replacementProvisioner.invocations.size).toBe(0);
     scenario.provisioner.succeed(originalProvisionerInvocation);
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
@@ -272,10 +263,7 @@ describe("Unipls lifecycle", () => {
     // Start a fresh session and compare both logical and physical identities.
     const secondOpening = scenario.beginOpen();
     const secondConnecting = scenario.client.lifecycle;
-    if (
-      secondConnecting.phase !== "connecting" ||
-      secondConnecting.status !== "attempting"
-    ) {
+    if (secondConnecting.phase !== "connecting" || secondConnecting.status !== "attempting") {
       throw new Error("Expected the second logical session to be connecting");
     }
     expect(secondConnecting.session).not.toBe(firstOpen.session);

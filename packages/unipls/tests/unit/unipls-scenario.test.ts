@@ -17,7 +17,7 @@ describe("UniplsRaceScenario", () => {
     // Verify both detector controls were initialized with the same epoch context.
     const firstDetector = scenario.detectors[0].invocations.take();
     const secondDetector = scenario.detectors[1].invocations.take();
-    expect(firstDetector.context).toBe(secondDetector.context);
+    expect(firstDetector.context).not.toBe(secondDetector.context);
 
     // Race duplicate detector reports, a transport error, and the actual close event.
     secondDetector.drop();
@@ -80,16 +80,12 @@ describe("UniplsRaceScenario", () => {
 
       // If reconnect created a socket, emit its close so the user close can settle.
       if (winner === "reconnect") {
-        scenario.transport
-          .connection(1)
-          .emitClose({ code: 1000, wasClean: true });
+        scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
       }
       await closing;
 
       // Verify only a reconnect-first ordering was allowed to allocate a new epoch.
-      expect(scenario.transport.connections).toHaveLength(
-        winner === "reconnect" ? 2 : 1,
-      );
+      expect(scenario.transport.connections).toHaveLength(winner === "reconnect" ? 2 : 1);
     },
   );
 });

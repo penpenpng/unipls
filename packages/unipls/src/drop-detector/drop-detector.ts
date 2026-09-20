@@ -1,6 +1,9 @@
 import type { UniplsMessageFactory } from "../unipls.interface.ts";
 
 export interface UniplsDropDetector<TInput = unknown, TOutput = unknown> {
+  /** 同じ client に登録する detector 間で一意な診断用の名前です。 */
+  readonly name?: string;
+
   /**
    * プロビジョニング完了後に呼び出されます。接続ごと（再接続を含む）に呼ばれます。
    * 返り値の関数は切断（drop/close）時に呼ばれます。

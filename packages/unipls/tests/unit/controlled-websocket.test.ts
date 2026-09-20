@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  ControlledWebSocket,
-  ControlledWebSocketServer,
-} from "../support/index.ts";
+import { ControlledWebSocket, ControlledWebSocketServer } from "../support/index.ts";
 
 describe("ControlledWebSocketServer", () => {
   it("emits transport events in caller-controlled order, including stale events", () => {
     // Arrange a controlled socket and record its property-handler callbacks.
     const server = new ControlledWebSocketServer();
-    const socket = new server.WebSocket(
-      "wss://unipls.test",
-    ) as unknown as ControlledWebSocket;
+    const socket = new server.WebSocket("wss://unipls.test") as unknown as ControlledWebSocket;
     const events: string[] = [];
 
     socket.onclose = (event) => events.push(`close:${event.code}`);
@@ -31,9 +26,7 @@ describe("ControlledWebSocketServer", () => {
   it("records sends, close requests, and listener release", () => {
     // Arrange a controlled socket and an observable event listener.
     const server = new ControlledWebSocketServer();
-    const socket = new server.WebSocket(
-      "wss://unipls.test",
-    ) as unknown as ControlledWebSocket;
+    const socket = new server.WebSocket("wss://unipls.test") as unknown as ControlledWebSocket;
     const listener = () => {};
 
     // Register and release the listener while checking the harness count.

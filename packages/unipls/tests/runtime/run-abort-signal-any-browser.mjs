@@ -25,9 +25,7 @@ try {
 
   // Verify all browser-realm checks completed and report success.
   if (result.checks !== 3) {
-    throw new Error(
-      `Expected 3 AbortSignal.any checks, received ${result.checks}`,
-    );
+    throw new Error(`Expected 3 AbortSignal.any checks, received ${result.checks}`);
   }
 
   console.log(`${browserName} AbortSignal.any: ${result.checks} checks passed`);

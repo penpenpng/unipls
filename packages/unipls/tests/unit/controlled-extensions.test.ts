@@ -47,7 +47,11 @@ describe("controlled extension hooks", () => {
     const cancelCalls = new CallbackProbe();
     const reconnector = new ControlledReconnector();
     const cleanup = reconnector.setup(
-      { reconnect: reconnectCalls.callback, cancel: cancelCalls.callback },
+      {
+        reconnect: reconnectCalls.callback,
+        cancel: cancelCalls.callback,
+        exhaust() {},
+      },
       {
         session,
         sessionAttempts: [],
@@ -61,7 +65,11 @@ describe("controlled extension hooks", () => {
 
     // Exercise a separate cancel action and its disposer.
     const secondCleanup = reconnector.setup(
-      { reconnect: reconnectCalls.callback, cancel: cancelCalls.callback },
+      {
+        reconnect: reconnectCalls.callback,
+        cancel: cancelCalls.callback,
+        exhaust() {},
+      },
       {
         session,
         sessionAttempts: [],
@@ -99,7 +107,7 @@ describe("controlled extension hooks", () => {
     // Verify the configured cause escapes synchronously and unchanged.
     expect(() =>
       reconnector.setup(
-        { reconnect() {}, cancel() {} },
+        { reconnect() {}, cancel() {}, exhaust() {} },
         {
           session,
           sessionAttempts: [],
@@ -119,10 +127,7 @@ describe("resource observation probes", () => {
     const disposals = new DisposalProbe();
 
     // Cancel one task, execute the other, and advance without wall-clock time.
-    const cancelled = scheduler.setTimeout(
-      () => callback.callback("cancelled"),
-      5,
-    );
+    const cancelled = scheduler.setTimeout(() => callback.callback("cancelled"), 5);
     scheduler.setTimeout(() => callback.callback("ran"), 10);
     scheduler.clearTimeout(cancelled);
     scheduler.advanceBy(10);
@@ -136,10 +141,7 @@ describe("resource observation probes", () => {
     // Verify only live work ran and all timer/disposer resources were released.
     expect(callback.calls).toEqual([["ran"]]);
     expect(scheduler.pendingCount).toBe(0);
-    expect(disposals.records.map(({ name }) => name)).toEqual([
-      "second",
-      "first",
-    ]);
+    expect(disposals.records.map(({ name }) => name)).toEqual(["second", "first"]);
     expect(disposals.count("first")).toBe(1);
   });
 });

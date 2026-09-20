@@ -5,9 +5,7 @@ const result = verifyAbortSignalAny();
 
 // Fail the process unless every probe stage completed.
 if (result.checks !== 3) {
-  throw new Error(
-    `Expected 3 AbortSignal.any checks, received ${result.checks}`,
-  );
+  throw new Error(`Expected 3 AbortSignal.any checks, received ${result.checks}`);
 }
 
 // Publish a concise success record for the runtime matrix log.

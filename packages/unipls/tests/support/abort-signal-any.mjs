@@ -16,10 +16,7 @@ export function verifyAbortSignalAny() {
   // Abort one live input and observe exact reason identity.
   const firstController = new AbortController();
   const secondController = new AbortController();
-  const liveResult = AbortSignal.any([
-    firstController.signal,
-    secondController.signal,
-  ]);
+  const liveResult = AbortSignal.any([firstController.signal, secondController.signal]);
   const firstLiveReason = { source: "first-live" };
   const laterReason = { source: "later" };
 

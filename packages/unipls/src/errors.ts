@@ -1,6 +1,8 @@
 import type {
   ConnectionAttemptSnapshot,
   ConnectionAttemptStage,
+  UniplsDrop,
+  UniplsDroppedErrorOutcome,
   UniplsOpenErrorOutcome,
 } from "./types.ts";
 
@@ -11,6 +13,7 @@ export class UniplsOpenError extends UniplsError {
   readonly outcome: UniplsOpenErrorOutcome;
   readonly stage?: ConnectionAttemptStage;
   readonly attempts: readonly ConnectionAttemptSnapshot[];
+  readonly drop?: UniplsDrop;
   override readonly cause: unknown;
 
   constructor({
@@ -18,17 +21,20 @@ export class UniplsOpenError extends UniplsError {
     stage,
     attempts,
     cause,
+    drop,
   }: {
     outcome: UniplsOpenErrorOutcome;
     stage?: ConnectionAttemptStage;
     attempts: readonly ConnectionAttemptSnapshot[];
     cause: unknown;
+    drop?: UniplsDrop;
   }) {
     super("The logical session could not become ready.", { cause });
     this.outcome = outcome;
     this.stage = stage;
     this.attempts = attempts;
     this.cause = cause;
+    this.drop = drop;
   }
 }
 
@@ -39,8 +45,28 @@ export class UniplsClosedError extends UniplsError {
 }
 
 export class UniplsDroppedError extends UniplsError {
-  constructor() {
-    super("UniplsDroppedError: The WebSocket connection was dropped.");
+  override readonly name = "UniplsDroppedError";
+  readonly outcome: UniplsDroppedErrorOutcome;
+  readonly drop: UniplsDrop;
+  readonly attempts: readonly ConnectionAttemptSnapshot[];
+  override readonly cause: unknown;
+
+  constructor({
+    outcome,
+    drop,
+    attempts,
+    cause,
+  }: {
+    outcome: UniplsDroppedErrorOutcome;
+    drop: UniplsDrop;
+    attempts: readonly ConnectionAttemptSnapshot[];
+    cause?: unknown;
+  }) {
+    super("The logical session could not remain ready.", { cause });
+    this.outcome = outcome;
+    this.drop = drop;
+    this.attempts = attempts;
+    this.cause = cause;
   }
 }
 

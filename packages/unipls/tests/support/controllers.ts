@@ -23,7 +23,7 @@ export class ControlledProvisioner<TContext = unknown> {
 export class ControlledReconnectorInvocation {
   readonly context: ReconnectionContext;
   cleanupCount = 0;
-  action: "pending" | "reconnect" | "cancel" = "pending";
+  action: "pending" | "reconnect" | "cancel" | "exhaust" = "pending";
   readonly #actions: UniplsReconnectorActions;
 
   constructor(actions: UniplsReconnectorActions, context: ReconnectionContext) {
@@ -37,6 +37,10 @@ export class ControlledReconnectorInvocation {
 
   cancel(): void {
     this.#act("cancel", this.#actions.cancel);
+  }
+
+  exhaust(cause?: unknown): void {
+    this.#act("exhaust", () => this.#actions.exhaust(cause));
   }
 
   cleanup = (): void => {
@@ -98,6 +102,8 @@ export class ControlledDropDetector<TContext = unknown> {
   readonly invocations = new ObservationQueue<ControlledDropDetectorInvocation<TContext>>();
   #nextSetupFailure: unknown;
   #hasSetupFailure = false;
+
+  constructor(readonly name?: string) {}
 
   failNextSetup(cause: unknown): void {
     this.#nextSetupFailure = cause;

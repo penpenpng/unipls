@@ -42,9 +42,7 @@ for (const candidate of stableVersions) {
 
 // Reject incomplete registry data instead of weakening the CI matrix.
 if (selectedVersions.length !== 2) {
-  throw new Error(
-    "Could not resolve the latest two stable Playwright release lines",
-  );
+  throw new Error("Could not resolve the latest two stable Playwright release lines");
 }
 
 // Emit the GitHub Actions-compatible matrix value.

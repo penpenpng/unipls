@@ -1234,16 +1234,16 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 5: close/drop の分類と収束を統一する
 
-- [ ] user close intent と transport close metadata を別に扱う。
-- [ ] server code 1000、非 1000、接続前 close、socket 生成失敗をD5に従ってuser closeまたはdropへ一度だけ分類する。
-- [ ] peer close、transport error、timeout、detector、manual dropからfrozen `UniplsDrop`を生成する。
-- [ ] 全drop検出経路をtransport-epoch-scopedな同期`reportDrop()` gateへ集約し、check-and-set完了前にawait、cleanup、event dispatch、user callbackを実行しない。
-- [ ] 最初のdrop報告でepochを同期的に無効化してcanonical dropを確定し、その勝者だけがcleanupと一つのrecovery cycleを開始する。後発報告は同じepochのno-opにする。
-- [ ] detector由来dropにはfrozenなdetector identityをsourceとして保持し、複数detectorが反応した場合はsettle gateの最初の勝者を記録する。
-- [ ] dropped/no-socket の状態から `close()` しても必ず terminal state に収束させる。
-- [ ] close/drop event と operation termination を exactly once にする。
-- [ ] close と reconnect action が競合しても古い action が復活しないようにする。
-- [ ] cancel/exhaustion/reconnector failureでsession scopeを終了し、`closed(reason: "dropped")`のfrozen snapshotへatomicに遷移する。
+- [x] user close intent と transport close metadata を別に扱う。
+- [x] server code 1000、非 1000、接続前 close、socket 生成失敗をD5に従ってuser closeまたはdropへ一度だけ分類する。
+- [x] peer close、transport error、timeout、detector、manual dropからfrozen `UniplsDrop`を生成する。
+- [x] 全drop検出経路をtransport-epoch-scopedな同期`reportDrop()` gateへ集約し、check-and-set完了前にawait、cleanup、event dispatch、user callbackを実行しない。
+- [x] 最初のdrop報告でepochを同期的に無効化してcanonical dropを確定し、その勝者だけがcleanupと一つのrecovery cycleを開始する。後発報告は同じepochのno-opにする。
+- [x] detector由来dropにはfrozenなdetector identityをsourceとして保持し、複数detectorが反応した場合はsettle gateの最初の勝者を記録する。
+- [x] dropped/no-socket の状態から `close()` しても必ず terminal state に収束させる。
+- [x] close/drop event と operation termination を exactly once にする。
+- [x] close と reconnect action が競合しても古い action が復活しないようにする。
+- [x] cancel/exhaustion/reconnector failureでsession scopeを終了し、`closed(reason: "dropped")`のfrozen snapshotへatomicに遷移する。
 
 完了条件:
 

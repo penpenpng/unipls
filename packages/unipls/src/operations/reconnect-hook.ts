@@ -1,5 +1,4 @@
 import type { EventBus } from "../event-bus.ts";
-import { UniplsDroppedError } from "../errors.ts";
 import type { UniplsReconnectEvent } from "../reconnector/reconnector.ts";
 import type { UniplsMessageFactory } from "../unipls.interface.ts";
 
@@ -43,7 +42,7 @@ export function createOnReconnectedHandler<
           reconnection,
         });
       } catch (err) {
-        params.onError(err ?? new UniplsDroppedError());
+        params.onError(err ?? new Error("Recovery callback failed"));
       } finally {
         params.onSettled?.();
       }

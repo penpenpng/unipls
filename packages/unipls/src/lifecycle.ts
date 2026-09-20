@@ -5,6 +5,8 @@ import type {
   ConnectionId,
   SessionId,
   UniplsDrop,
+  UniplsDroppedErrorOutcome,
+  UniplsDropSource,
   UniplsLifecycleEvent,
   UniplsLifecycleSnapshot,
 } from "./types.ts";
@@ -88,6 +90,18 @@ export class UniplsLifecycleCoordinator {
     return this.#requireSession().controller.signal;
   }
 
+  get attempts(): readonly ConnectionAttemptSnapshot[] {
+    return this.#requireSession().attempts;
+  }
+
+  get recoveryDrop(): UniplsDrop {
+    const drop = this.#requireSession().recoveryDrop;
+    if (!drop) {
+      throw new Error("Recovery drop is missing");
+    }
+    return drop;
+  }
+
   get isSessionBeginning(): boolean {
     return !this.#requireSession().sessionSetupCompleted;
   }
@@ -152,6 +166,7 @@ export class UniplsLifecycleCoordinator {
     const session = this.#requireSession();
     return {
       session: session.id,
+      ...(session.recoveryDrop ? { drop: session.recoveryDrop } : {}),
       lastAttemptedAt: session.reconnectAttempts.at(-1)?.attemptedAt,
       error: session.lastReconnectError,
       sessionAttempts: session.reconnectAttempts,
@@ -212,6 +227,7 @@ export class UniplsLifecycleCoordinator {
   failInitialAttempt(
     connection: ConnectionId,
     cause: unknown,
+    drop?: UniplsDrop,
   ): readonly ConnectionAttemptSnapshot[] {
     const session = this.#requireSession();
     const attempt = this.#requireAttempt(connection);
@@ -228,6 +244,7 @@ export class UniplsLifecycleCoordinator {
       outcome: "attempt-failed",
       attempts,
       cause,
+      ...(drop ? { drop } : {}),
     });
     return attempts;
   }
@@ -285,17 +302,44 @@ export class UniplsLifecycleCoordinator {
     });
   }
 
-  createPeerDrop(code?: number): UniplsDrop {
+  terminateRecovery(
+    outcome: Exclude<UniplsDroppedErrorOutcome, "operation-failed">,
+    error: unknown,
+    cause?: unknown,
+  ): void {
     const session = this.#requireSession();
-    const connection = this.#currentConnection();
-    const close =
-      code === undefined ? undefined : Object.freeze({ code, reason: "", wasClean: code === 1000 });
+    const drop = this.recoveryDrop;
+    session.controller.abort(error);
+    const sessionId = session.id;
+    const attempts = session.attempts;
+    this.#session = undefined;
+    this.#transition({
+      phase: "closed",
+      reason: "dropped",
+      session: sessionId,
+      outcome,
+      attempts,
+      drop,
+      ...(cause === undefined ? {} : { cause }),
+    });
+  }
+
+  createDrop(
+    connection: ConnectionId,
+    report: {
+      readonly source: UniplsDropSource;
+      readonly close?: Readonly<{ code: number; reason: string; wasClean: boolean }>;
+      readonly cause?: unknown;
+    },
+  ): UniplsDrop {
+    const session = this.#requireSession();
     return Object.freeze({
-      source: Object.freeze({ type: "peer-close" as const }),
+      source: report.source,
       session: session.id,
       connection,
       detectedAt: Date.now(),
-      ...(close ? { close } : {}),
+      ...(report.close ? { close: report.close } : {}),
+      ...(report.cause === undefined ? {} : { cause: report.cause }),
     });
   }
 
@@ -360,17 +404,6 @@ export class UniplsLifecycleCoordinator {
   #appendAttempt(attempt: ConnectionAttemptSnapshot): void {
     const session = this.#requireSession();
     session.attempts = Object.freeze([...session.attempts, attempt]);
-  }
-
-  #currentConnection(): ConnectionId {
-    const snapshot = this.#snapshot;
-    if (snapshot.phase === "open" || snapshot.phase === "provisioning") {
-      return snapshot.connection;
-    }
-    if (snapshot.phase === "connecting" && snapshot.status === "attempting") {
-      return snapshot.connection;
-    }
-    throw new Error("There is no current connection");
   }
 
   #requireSession(): LogicalSession {

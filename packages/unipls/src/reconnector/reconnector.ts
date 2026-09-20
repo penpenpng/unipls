@@ -1,4 +1,4 @@
-import type { SessionId } from "../types.ts";
+import type { SessionId, UniplsDrop } from "../types.ts";
 
 export interface UniplsReconnector {
   setup(actions: UniplsReconnectorActions, ctx: ReconnectionContext): void | (() => void);
@@ -7,11 +7,15 @@ export interface UniplsReconnector {
 export interface UniplsReconnectorActions {
   reconnect(): void;
   cancel(): void;
+  exhaust(cause?: unknown): void;
 }
 
 export interface ReconnectionContext {
   /** 現在のセッションを表します。 */
   session: SessionId;
+
+  /** ready connectionを失った起点となるcanonical dropです。 */
+  drop?: UniplsDrop;
 
   /** この再接続よりも前に試行した再接続の中で最も新しい試行を行った時刻を表します。 */
   lastAttemptedAt?: number;

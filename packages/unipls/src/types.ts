@@ -23,6 +23,11 @@ export type UniplsConnectionIntent = "open" | "close";
 export type ConnectionAttemptOrigin = "initial" | "recovery";
 export type ConnectionAttemptStage = "connecting" | "provisioning";
 
+export interface DropDetectorIdentity {
+  readonly registrationIndex: number;
+  readonly name?: string;
+}
+
 export type ConnectionAttemptSnapshot =
   | Readonly<{
       sequence: number;
@@ -64,6 +69,7 @@ export type UniplsDropSource =
   | Readonly<{ type: "peer-close" }>
   | Readonly<{ type: "transport-error" }>
   | Readonly<{ type: "timeout" }>
+  | Readonly<{ type: "detector"; detector: DropDetectorIdentity }>
   | Readonly<{ type: "manual-drop" }>;
 
 export interface UniplsDrop {

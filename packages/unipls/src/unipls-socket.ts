@@ -9,6 +9,7 @@ import { EventBus } from "./event-bus.ts";
 import type {
   UniplsConnectionIntent,
   UniplsConnectionState,
+  UniplsDropSource,
   WebSocketConstructor,
   WebSocketData,
 } from "./types.ts";
@@ -48,10 +49,6 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   isCurrentTransportEpoch(epochId: number): boolean {
     return this.#epoch.id === epochId && !this.#epoch.signal.aborted;
   }
-  get #socket() {
-    return this.#epoch.connection.socket;
-  }
-
   constructor({
     url,
     serializer = (data) => data as WebSocketData,
@@ -116,22 +113,25 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       if (!this.#isCurrent(epoch)) {
         return;
       }
-      this.#events.emit("error", { epoch, error });
+      this.reportDrop(
+        epoch.id,
+        { source: { type: "transport-error" }, cause: error },
+        UniplsWebSocketCloseCode.ABNORMAL_CLOSURE,
+      );
     });
 
-    this.#events.on("raw-close", ({ epoch, code }) => {
+    this.#events.on("raw-close", ({ epoch, code, reason, wasClean }) => {
       if (!this.#isCurrent(epoch)) {
         return;
       }
-      if (code === UniplsWebSocketCloseCode.NORMAL_CLOSURE) {
+      const close = Object.freeze({ code, reason, wasClean });
+      if (epoch.intent === "close") {
         epoch.connection.state = "closed";
-        this.#events.emit("closed", { epoch });
         epoch.deactivate(new UniplsSocketClosedError());
-      } else {
-        epoch.connection.state = "dropped";
-        this.#events.emit("dropped", { epoch, code });
-        epoch.deactivate(new UniplsSocketDroppedError());
+        this.#events.emit("closed", { epoch, close });
+        return;
       }
+      this.reportDrop(epoch.id, { source: { type: "peer-close" }, close });
     });
   }
 
@@ -161,13 +161,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       },
     });
 
-    let socket: WebSocket;
     try {
-      epoch.connection.socket = socket = this.#createSocket(epoch);
-    } catch (err) {
-      epoch.connection.state = "dropped";
-      epoch.deactivate(err);
-      result.reject(err);
+      epoch.connection.socket = this.#createSocket(epoch);
+    } catch (cause) {
+      this.reportDrop(epoch.id, { source: { type: "transport-error" }, cause });
       return result.promise;
     }
 
@@ -201,25 +198,21 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
         return;
       }
 
-      result.reject(new UniplsTimeoutError());
-      epoch.connection.state = "dropped";
       timeoutTimer = undefined;
-      socket.close(UniplsWebSocketCloseCode.MARKED_AS_TIMED_OUT);
-      epoch.deactivate(new UniplsTimeoutError());
+      const cause = new UniplsTimeoutError();
+      this.reportDrop(
+        epoch.id,
+        { source: { type: "timeout" }, cause },
+        UniplsWebSocketCloseCode.MARKED_AS_TIMED_OUT,
+      );
     }, this.timeout);
 
     return result.promise;
   }
 
   #createSocket(epoch: UniplsTransportEpoch): WebSocket {
-    let socket: WebSocket;
-    try {
-      const WebSocket = this.#WebSocket;
-      socket = new WebSocket(this.url);
-    } catch {
-      // When the given URL is invalid, Deno runtime throws SyntaxError.
-      throw new UniplsSocketDroppedError();
-    }
+    const WebSocket = this.#WebSocket;
+    const socket = new WebSocket(this.url);
 
     socket.onopen = () => {
       this.#events.emit("raw-open", { epoch });
@@ -228,10 +221,17 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       this.#events.emit("raw-message", { epoch, data: ev.data });
     };
     socket.onerror = (ev) => {
-      this.#events.emit("raw-error", { epoch, error: ev });
+      const cause = "cause" in ev ? ev.cause : ev;
+      this.#events.emit("raw-error", { epoch, error: cause });
     };
     socket.onclose = (ev) => {
-      this.#events.emit("raw-close", { epoch, socket, code: ev.code });
+      this.#events.emit("raw-close", {
+        epoch,
+        socket,
+        code: ev.code,
+        reason: ev.reason,
+        wasClean: ev.wasClean,
+      });
     };
 
     return socket;
@@ -241,46 +241,86 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
    * WebSocket 接続を切断します。既に切断されている場合は何もしません。
    */
   close(): Promise<void> {
-    if (!this.#socket || this.intent === "close" || this.state === "closed") {
+    if (this.intent === "close" || this.state === "closed") {
       return Promise.resolve();
     }
 
-    this.#epoch.intent = "close";
+    const targetEpoch = this.#epoch;
+    const targetEpochId = targetEpoch.id;
+    const socket = targetEpoch.connection.socket;
+    targetEpoch.intent = "close";
 
-    const targetSession = this.#epoch;
-    const targetSessionId = this.#epoch.id;
+    if (!socket || this.state === "dropped") {
+      targetEpoch.connection.state = "closed";
+      targetEpoch.deactivate(new UniplsSocketClosedError());
+      this.#events.emit("closed", { epoch: targetEpoch });
+      return Promise.resolve();
+    }
 
     const events = this.#events.spawnEventBusView();
     const result = new AsyncResult<void>({
       finally: () => events.dispose(),
     });
 
-    if (this.state === "dropped") {
-      result.resolve();
-      this.#events.emit("closed", { epoch: targetSession });
-      targetSession.deactivate(new UniplsSocketClosedError());
-      return result.promise;
-    }
-
     events.on("closed", ({ epoch }) => {
-      if (targetSessionId !== epoch.id) return;
+      if (targetEpochId !== epoch.id) return;
       result.resolve();
     });
     events.on("dropped", ({ epoch }) => {
-      if (targetSessionId !== epoch.id) return;
+      if (targetEpochId !== epoch.id) return;
       result.resolve();
     });
 
-    this.#socket.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
+    socket.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
 
     return result.promise;
   }
 
   drop(epochId = this.#epoch.id): void {
-    if (!this.isCurrentTransportEpoch(epochId)) {
+    this.reportDrop(
+      epochId,
+      { source: { type: "manual-drop" } },
+      UniplsWebSocketCloseCode.ABNORMAL_CLOSURE,
+    );
+  }
+
+  reportDrop(
+    epochId: number,
+    report: UniplsSocketDropReport,
+    closeCode: number = UniplsWebSocketCloseCode.ABNORMAL_CLOSURE,
+  ): boolean {
+    const epoch = this.#epoch;
+    if (epoch.id !== epochId || !epoch.claimDrop(report)) {
+      return false;
+    }
+
+    const frozenReport = epoch.dropReport as UniplsSocketDropReport;
+    const socket = epoch.connection.socket;
+    epoch.connection.state = "dropped";
+    epoch.deactivate(frozenReport.cause ?? new UniplsSocketDroppedError());
+    if (socket && socket.readyState < WebSocketReadyState.CLOSING) {
+      socket.close(closeCode);
+    }
+    this.#events.emit("dropped", { epoch, report: frozenReport });
+    return true;
+  }
+
+  getDropReport(epochId: number): UniplsSocketDropReport | undefined {
+    return this.#epoch.id === epochId ? this.#epoch.dropReport : undefined;
+  }
+
+  terminate(epochId: number): void {
+    if (this.#epoch.id !== epochId) {
       return;
     }
-    this.#socket?.close(UniplsWebSocketCloseCode.ABNORMAL_CLOSURE);
+    const epoch = this.#epoch;
+    const socket = epoch.connection.socket;
+    epoch.intent = "close";
+    epoch.connection.state = "closed";
+    epoch.deactivate(new UniplsSocketClosedError());
+    if (socket && socket.readyState < WebSocketReadyState.CLOSING) {
+      socket.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
+    }
   }
 
   /**
@@ -395,8 +435,8 @@ export interface UniplsSocketPublicEvents<TOutput> {
   open: { epoch: UniplsTransportEpoch };
   message: { epoch: UniplsTransportEpoch; message: TOutput };
   error: { epoch: UniplsTransportEpoch; error: unknown };
-  closed: { epoch: UniplsTransportEpoch };
-  dropped: { epoch: UniplsTransportEpoch; code?: number };
+  closed: { epoch: UniplsTransportEpoch; close?: Readonly<UniplsSocketCloseMetadata> };
+  dropped: { epoch: UniplsTransportEpoch; report: UniplsSocketDropReport };
   failed: { epoch: UniplsTransportEpoch; error: unknown };
 }
 
@@ -404,7 +444,25 @@ interface UniplsSocketInternalEvents {
   "raw-open": { epoch: UniplsTransportEpoch };
   "raw-message": { epoch: UniplsTransportEpoch; data: WebSocketData };
   "raw-error": { epoch: UniplsTransportEpoch; error: unknown };
-  "raw-close": { epoch: UniplsTransportEpoch; socket: WebSocket; code: number };
+  "raw-close": {
+    epoch: UniplsTransportEpoch;
+    socket: WebSocket;
+    code: number;
+    reason: string;
+    wasClean: boolean;
+  };
+}
+
+export interface UniplsSocketCloseMetadata {
+  readonly code: number;
+  readonly reason: string;
+  readonly wasClean: boolean;
+}
+
+export interface UniplsSocketDropReport {
+  readonly source: UniplsDropSource;
+  readonly close?: Readonly<UniplsSocketCloseMetadata>;
+  readonly cause?: unknown;
 }
 
 type UniplsProvisioner = (signal: AbortSignal) => Promise<void>;
@@ -426,6 +484,10 @@ class UniplsTransportEpoch {
   intent: UniplsConnectionIntent = "open";
   connection: UniplsTransportConnection;
   readonly #controller = new AbortController();
+  #dropReport?: UniplsSocketDropReport;
+  get dropReport(): UniplsSocketDropReport | undefined {
+    return this.#dropReport;
+  }
   get signal(): AbortSignal {
     return this.#controller.signal;
   }
@@ -435,6 +497,25 @@ class UniplsTransportEpoch {
       this.#controller.abort(reason);
     }
     this.connection.detach();
+  }
+
+  claimDrop(report: UniplsSocketDropReport): boolean {
+    if (this.intent === "close" || this.#dropReport || this.signal.aborted) {
+      return false;
+    }
+    const source =
+      report.source.type === "detector"
+        ? Object.freeze({
+            type: "detector" as const,
+            detector: Object.freeze({ ...report.source.detector }),
+          })
+        : Object.freeze({ ...report.source });
+    this.#dropReport = Object.freeze({
+      source,
+      ...(report.close ? { close: Object.freeze({ ...report.close }) } : {}),
+      ...(report.cause === undefined ? {} : { cause: report.cause }),
+    });
+    return true;
   }
 
   static create(provisioner?: UniplsProvisioner) {

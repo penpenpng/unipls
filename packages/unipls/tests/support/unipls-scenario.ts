@@ -19,12 +19,18 @@ export class UniplsRaceScenario {
   readonly detectors: ControlledDropDetector[];
   readonly client: Unipls<string, string>;
 
-  constructor({ detectorCount = 2 }: { detectorCount?: number } = {}) {
-    this.detectors = Array.from({ length: detectorCount }, () => new ControlledDropDetector());
+  constructor({
+    detectorCount = 2,
+    reconnectable = true,
+  }: { detectorCount?: number; reconnectable?: boolean } = {}) {
+    this.detectors = Array.from(
+      { length: detectorCount },
+      (_, index) => new ControlledDropDetector(`detector-${index}`),
+    );
     this.client = new Unipls<string, string>({
       url: "wss://unipls.test/socket",
       WebSocket: this.transport.WebSocket,
-      reconnector: this.reconnector,
+      ...(reconnectable ? { reconnector: this.reconnector } : {}),
       dropDetectors: this.detectors,
     });
   }

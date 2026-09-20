@@ -24,15 +24,15 @@ export function createDropWaitHandler(params: {
   retry?: UniplsDropRetryStrategy;
   isDone: () => boolean;
   onFatal: (error: unknown) => void;
-}): () => void {
-  return () => {
+}): (event: { error: UniplsDroppedError }) => void {
+  return ({ error }) => {
     if (params.isDone()) {
       return;
     }
 
     const retry = params.retry ?? "wait";
     if (!params.reconnectable || retry === "fail") {
-      params.onFatal(new UniplsDroppedError());
+      params.onFatal(error);
     }
   };
 }
@@ -45,17 +45,17 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
   onReconnected: OnReconnected<TInput, TOutput>;
   getQuery: () => UniplsMessageFactory<TInput>;
   getSelector: () => (data: TOutput) => boolean;
-}): () => void {
+}): (event: { error: UniplsDroppedError }) => void {
   let waitingForReconnect = false;
 
-  return () => {
+  return ({ error }) => {
     if (params.isDone() || waitingForReconnect) {
       return;
     }
 
     const retry = params.retry ?? "fail";
     if (!params.reconnectable || retry === "fail") {
-      params.onFatal(new UniplsDroppedError());
+      params.onFatal(error);
       return;
     }
 
@@ -81,11 +81,15 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
         reconnection,
       });
 
-      await runRecoveryDecision(decision, {
-        request,
-        query,
-        selector,
-      });
+      await runRecoveryDecision(
+        decision,
+        {
+          request,
+          query,
+          selector,
+        },
+        error,
+      );
     });
   };
 }
@@ -97,13 +101,14 @@ async function runRecoveryDecision<TInput, TOutput>(
     query: UniplsMessageFactory<TInput>;
     selector: (data: TOutput) => boolean;
   },
+  dropError: UniplsDroppedError,
 ): Promise<void> {
   if (decision === undefined || decision === "wait") {
     return;
   }
 
   if (decision === "fail") {
-    throw new UniplsDroppedError();
+    throw dropError;
   }
 
   if (decision === "resend") {
