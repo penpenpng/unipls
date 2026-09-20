@@ -273,6 +273,13 @@ describe("close と drop の分類", () => {
     if (dropped[0]?.drop.source.type !== "detector") {
       throw new Error("Expected a detector drop");
     }
+    expect(dropped[0].drop.source.detector).toBe(
+      (
+        secondDetector.context as {
+          detector: unknown;
+        }
+      ).detector,
+    );
     expect(Object.isFrozen(dropped[0].drop.source)).toBe(true);
     expect(Object.isFrozen(dropped[0].drop.source.detector)).toBe(true);
     expect(firstDetector.cleanupCount).toBe(1);

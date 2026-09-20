@@ -554,7 +554,7 @@ class UniplsTransportEpoch {
       report.source.type === "detector"
         ? Object.freeze({
             type: "detector" as const,
-            detector: Object.freeze({ ...report.source.detector }),
+            detector: report.source.detector,
           })
         : Object.freeze({ ...report.source });
     this.#dropReport = Object.freeze({

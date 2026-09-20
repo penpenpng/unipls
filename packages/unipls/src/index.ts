@@ -69,6 +69,10 @@ export type {
   DropDetectorRequestParams,
   UniplsDropDetector,
 } from "./drop-detector/drop-detector.ts";
+export {
+  HeartbeatDropDetector,
+  type HeartbeatOptions,
+} from "./drop-detector/heartbeat-drop-detector.ts";
 export { Unipls } from "./unipls";
 export { UniplsSocket, UniplsWebSocketCloseCode } from "./unipls-socket";
 export type {

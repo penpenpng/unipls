@@ -47,10 +47,10 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
 
   /** 現在の接続に対する heartbeat 監視を開始します。 */
   setup(ctx: DropDetectorContext<TInput, TOutput>): void {
-    const loop = async () => {
-      while (!ctx.signal.aborted) {
+    const loop = async (signal: AbortSignal) => {
+      while (!signal.aborted) {
         try {
-          await sleep(this.#options.interval, ctx.signal);
+          await sleep(this.#options.interval, signal);
         } catch {
           break;
         }
@@ -60,14 +60,18 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
             query: this.#options.ping,
             selector: this.#options.pong,
             timeout: this.#options.timeout ?? this.#options.interval,
-            signal: ctx.signal,
+            signal,
           });
         } catch (err) {
+          if (signal.aborted) {
+            break;
+          }
           if (err instanceof UniplsTimeoutError) {
             ctx.drop();
+            break;
           }
-          // timeout は drop として報告し、それ以外の終了理由では監視だけを終了します。
-          break;
+          // 接続終了以外の失敗はrun()の監督境界へ渡し、detector failureとして通知します。
+          throw err;
         }
       }
     };

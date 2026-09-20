@@ -115,6 +115,12 @@ setup途中で例外が発生した場合は、そのsetupで登録済みのreso
 
 WebSocket の close だけでなく、heartbeat timeout やブラウザの offline 通知なども接続喪失の根拠になり得ます。drop detector は ready な物理接続ごとに動作し、接続喪失を報告します。
 
+detectorは接続ごとの`signal`とresource scopeを受け取ります。host eventへ渡すcallbackは`ctx.guard(callback)`、background taskは`ctx.run((signal) => task(signal))`で開始してください。これらの監督境界が同期throwまたはPromiseのrejectを捕捉すると、失敗したdetectorだけを停止してdiagnosticを通知し、接続と他のdetectorは継続します。`guard()`を通さず登録したcallbackや、`run()`を使わず開始したtaskはライブラリの監督対象にはなりません。
+
+setupが返すdisposerと`ctx.defer()`へ登録したresourceは、接続終了時にLIFO順で一度ずつ解放されます。setup途中の失敗ではそのdetectorの部分resourceを先にrollbackし、それ以前に開始したdetectorとconnection setupのresourceも逆順に解放します。
+
+runtime非依存の`HeartbeatDropDetector`は`unipls`から利用できます。`window`のoffline eventを利用する`NetworkDropDetector`はブラウザ専用であり、`unipls/browser`から明示的にimportします。
+
 ### 2. reconnector: 次の物理接続をいつ試すか決める
 
 reconnector は、直前の失敗、現在の論理セッションとその試行履歴、セッション終了を通知する signal を材料に、再接続するか、待機するか、断念するかを決めます。即時再接続、指数バックオフ、online 復帰待ちなどはこのポリシーの差です。

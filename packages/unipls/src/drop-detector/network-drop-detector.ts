@@ -1,4 +1,4 @@
-import type { DropDetectorContext, UniplsDropDetector } from "./index.ts";
+import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector.ts";
 
 /**
  * ブラウザの offline イベントを検出して drop とみなす {@link UniplsDropDetector} です。

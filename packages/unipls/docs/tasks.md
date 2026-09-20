@@ -1415,19 +1415,19 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 11: drop detector の lifecycle を堅牢化する
 
-- [ ] detector setup を transactional にする。
-- [ ] detectorへ任意の明示`name`を追加し、0始まりのregistration indexと合わせたfrozen identityを登録時に生成する。明示nameのinstance内重複をsession開始前に拒否する。
-- [ ] 途中の setup failure で、登録済み disposer を逆順に実行する。
-- [ ] detector/resource cleanupをD9のscope-owned disposer stackへ統合し、async cleanupとcleanup error後の継続をtestする。
-- [ ] disposerを冪等にし、drop/close/provisioning failure/transport epoch交代で一度だけ実行する。
-- [ ] detector disposerの同期throw/非同期rejectを個別に捕捉し、後続disposerを止めず、同じdisposerを競合する終了経路から再試行しない。
-- [ ] detector runtime callback/taskを`guard()`/`run()`のerror boundary内で実行し、同期throw/非同期reject時は当該detectorだけをabort・停止してconnection-scoped diagnosticへ渡す。
-- [ ] `guard()`の戻り値からerrorやrejected Promiseをhostへ漏らさず、`run()` taskでもunhandled rejectionを発生させない。
-- [ ] detector runtime failureで他detectorとconnectionを継続し、自動dropしないことをcontract testする。
-- [ ] runtime failure diagnosticへdetector identityと`guard`/`run` boundaryを含め、detector由来dropでは同じidentityをcanonical `UniplsDrop.source`へ保持する。
-- [ ] epoch終了による正常なsignal abort、runtime failure、drop/close競合を共通settle gateで一度だけ処理し、built-in detectorが監督外callback/taskを作らないことをtestする。
-- [ ] heartbeat の abort listener を timer 完了時にも解除する。
-- [ ] runtime非依存な`HeartbeatDropDetector`をrootから、browser固有な`NetworkDropDetector`を`unipls/browser`から公開し、root importが`window`やbrowser moduleへ到達しないことをtestする。
+- [x] detector setup を transactional にする。
+- [x] detectorへ任意の明示`name`を追加し、0始まりのregistration indexと合わせたfrozen identityを登録時に生成する。明示nameのinstance内重複をsession開始前に拒否する。
+- [x] 途中の setup failure で、登録済み disposer を逆順に実行する。
+- [x] detector/resource cleanupをD9のscope-owned disposer stackへ統合し、async cleanupとcleanup error後の継続をtestする。
+- [x] disposerを冪等にし、drop/close/provisioning failure/transport epoch交代で一度だけ実行する。
+- [x] detector disposerの同期throw/非同期rejectを個別に捕捉し、後続disposerを止めず、同じdisposerを競合する終了経路から再試行しない。
+- [x] detector runtime callback/taskを`guard()`/`run()`のerror boundary内で実行し、同期throw/非同期reject時は当該detectorだけをabort・停止してconnection-scoped diagnosticへ渡す。
+- [x] `guard()`の戻り値からerrorやrejected Promiseをhostへ漏らさず、`run()` taskでもunhandled rejectionを発生させない。
+- [x] detector runtime failureで他detectorとconnectionを継続し、自動dropしないことをcontract testする。
+- [x] runtime failure diagnosticへdetector identityと`guard`/`run` boundaryを含め、detector由来dropでは同じidentityをcanonical `UniplsDrop.source`へ保持する。
+- [x] epoch終了による正常なsignal abort、runtime failure、drop/close競合を共通settle gateで一度だけ処理し、built-in detectorが監督外callback/taskを作らないことをtestする。
+- [x] heartbeat の abort listener を timer 完了時にも解除する。
+- [x] runtime非依存な`HeartbeatDropDetector`をrootから、browser固有な`NetworkDropDetector`を`unipls/browser`から公開し、root importが`window`やbrowser moduleへ到達しないことをtestする。
 
 完了条件:
 

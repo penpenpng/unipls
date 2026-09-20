@@ -742,7 +742,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       },
       guard: <TArgs extends readonly unknown[]>(callback: (...args: TArgs) => MaybePromise<void>) =>
         guard(callback),
-      run: (task: () => MaybePromise<void>) => guard(task, "run")(),
+      run: (task: (taskSignal: AbortSignal) => MaybePromise<void>) =>
+        guard(() => task(scope.signal), "run")(),
     });
   }
 

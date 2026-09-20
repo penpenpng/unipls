@@ -12,6 +12,7 @@ import {
   type UniplsDiagnostic,
 } from "../../src/index.ts";
 import {
+  ControlledReconnector,
   ControlledWebSocketServer,
   flushMicrotasks,
   UniplsRaceScenario,
@@ -354,11 +355,13 @@ describe("provisioning capability と resource scope", () => {
   it("drop detector setup failureをconnection setup failureとしてrollbackする", async () => {
     // 2つ目で失敗するdetectorと、それ以前のresourceのcleanup順を記録します。
     const transport = new ControlledWebSocketServer();
+    const reconnector = new ControlledReconnector();
     const cause = new Error("detector setup failed");
     const order: string[] = [];
     const client = new Unipls<string, string>({
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
+      reconnector,
       dropDetectors: [
         {
           name: "first",
@@ -371,8 +374,11 @@ describe("provisioning capability と resource scope", () => {
         },
         {
           name: "second",
-          setup() {
+          setup(ctx) {
             order.push("detector:second:setup");
+            ctx.defer(() => {
+              order.push("detector:second:partial-cleanup");
+            });
             throw cause;
           },
         },
@@ -388,6 +394,9 @@ describe("provisioning capability と resource scope", () => {
 
     // ! detector failure後、先に登録されたdetector、connection resourceの順にrollbackします。
     transport.current.emitOpen();
+    const retry = await reconnector.invocations.next();
+    expect(retry.context.cause).toBe(cause);
+    retry.cancel();
     const error = await opening.then(
       () => {
         throw new Error("openが成功しました");
@@ -398,6 +407,7 @@ describe("provisioning capability と resource scope", () => {
     expect(order).toEqual([
       "detector:first:setup",
       "detector:second:setup",
+      "detector:second:partial-cleanup",
       "detector:first:cleanup",
       "connection:cleanup",
     ]);
@@ -415,33 +425,54 @@ describe("provisioning capability と resource scope", () => {
    * // detectorだけを停止し、connectionは継続する
    * ```
    */
-  it.each(["guard", "run"] as const)(
-    "drop detectorの%s failureを当該detectorへ隔離する",
-    async (boundary) => {
+  it.each([
+    ["guard", "同期throw", "sync"],
+    ["guard", "非同期reject", "async"],
+    ["run", "同期throw", "sync"],
+    ["run", "非同期reject", "async"],
+  ] as const)(
+    "drop detectorの%sで%sを当該detectorへ隔離する",
+    async (boundary, _failureLabel, failureMode) => {
       // detector contextの監督境界を後から発火できるよう保持します。
       const transport = new ControlledWebSocketServer();
+      const reconnector = new ControlledReconnector();
       const cause = new Error(`${boundary} failed`);
       const diagnostics: UniplsDiagnostic[] = [];
       let trigger!: () => void;
+      let survivorDrop!: () => void;
       let detectorSignal!: AbortSignal;
+      let survivorSignal!: AbortSignal;
+      let detectorIdentity!: object;
       let cleanupCount = 0;
+      let survivorCleanupCount = 0;
       const client = new Unipls<string, string>({
         url: "wss://unipls.test/socket",
         WebSocket: transport.WebSocket,
+        reconnector,
         dropDetectors: [
           {
             name: "supervised",
             setup(ctx: DropDetectorContext<string, string>) {
               detectorSignal = ctx.signal;
+              detectorIdentity = ctx.detector;
               ctx.defer(() => {
                 cleanupCount += 1;
               });
-              trigger =
-                boundary === "guard"
-                  ? ctx.guard(() => {
-                      throw cause;
-                    })
-                  : () => ctx.run(() => Promise.reject(cause));
+              const fail = () => {
+                if (failureMode === "sync") throw cause;
+                return Promise.reject(cause);
+              };
+              trigger = boundary === "guard" ? ctx.guard(fail) : () => ctx.run(fail);
+            },
+          },
+          {
+            name: "survivor",
+            setup(ctx) {
+              survivorSignal = ctx.signal;
+              survivorDrop = ctx.drop;
+              return () => {
+                survivorCleanupCount += 1;
+              };
             },
           },
         ],
@@ -453,10 +484,13 @@ describe("provisioning capability と resource scope", () => {
       await opening;
 
       // ! runtime failureはdetector scopeだけをabort・cleanupして診断します。
+      expect(trigger).not.toThrow();
       trigger();
       await flushMicrotasks();
       expect(detectorSignal.aborted).toBe(true);
+      expect(survivorSignal.aborted).toBe(false);
       expect(cleanupCount).toBe(1);
+      expect(survivorCleanupCount).toBe(0);
       expect(client.lifecycle.phase).toBe("open");
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]).toMatchObject({
@@ -466,12 +500,18 @@ describe("provisioning capability と resource scope", () => {
         boundary,
         detector: { registrationIndex: 0, name: "supervised" },
       });
+      if (diagnostics[0]?.type !== "drop-detector-failed") {
+        throw new Error("drop detector failure diagnosticがありません");
+      }
+      expect(diagnostics[0].detector).toBe(detectorIdentity);
 
-      // connection自体は利用者が明示的に閉じるまで維持されます。
-      const closing = client.close();
-      socket.emitClose();
-      await closing;
+      // 生存しているdetectorは引き続き同じconnectionを監視し、dropを報告できます。
+      survivorDrop();
+      const recovery = reconnector.invocations.take();
       expect(cleanupCount).toBe(1);
+      expect(survivorCleanupCount).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      recovery.cancel();
     },
   );
 });

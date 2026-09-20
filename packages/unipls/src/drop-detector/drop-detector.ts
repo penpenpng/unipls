@@ -30,8 +30,8 @@ export interface DropDetectorContext<TInput = unknown, TOutput = unknown> extend
     callback: (...args: TArgs) => MaybePromise<void>,
   ): (...args: TArgs) => void;
 
-  /** background taskを開始し、その同期throwと非同期rejectを当該detectorへ隔離します。 */
-  run(task: () => MaybePromise<void>): void;
+  /** detector の signal を渡して background taskを開始し、失敗を当該detectorへ隔離します。 */
+  run(task: (signal: AbortSignal) => MaybePromise<void>): void;
 }
 
 /** detector が接続の健全性を問い合わせるための request を指定します。 */
