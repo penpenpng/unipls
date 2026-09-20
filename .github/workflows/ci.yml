@@ -89,8 +89,41 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+  consumer-package:
+    name: Package consumer fixture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.4.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter unipls build
+      - name: Pack the published file set
+        run: |
+          mkdir -p "$RUNNER_TEMP/unipls-package"
+          npm pack --pack-destination "$RUNNER_TEMP/unipls-package" ./packages/unipls
+      - name: Install and verify the isolated consumer
+        run: |
+          tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
+          node packages/unipls/tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
+          node "$RUNNER_TEMP/unipls-consumer/run-smoke.mjs"
+          node "$RUNNER_TEMP/unipls-consumer/verify-node-package.mjs"
+          node packages/unipls/node_modules/typescript/bin/tsc --project "$RUNNER_TEMP/unipls-consumer/tsconfig.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unipls-package
+          path: ${{ runner.temp }}/unipls-package/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
   native-runtime:
     name: ${{ matrix.runtime }} ${{ matrix.version }}
+    needs: consumer-package
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -103,10 +136,10 @@ jobs:
             command: node
             version: latest
           - runtime: Deno
-            command: deno
+            command: deno run
             version: v2.0.0
           - runtime: Deno
-            command: deno
+            command: deno run
             version: latest
           - runtime: Bun
             command: bun
@@ -116,6 +149,9 @@ jobs:
             version: latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.4.0
       - if: matrix.runtime == 'Node.js'
         uses: actions/setup-node@v4
         with:
@@ -128,7 +164,17 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.version }}
-      - run: ${{ matrix.command }} packages/unipls/tests/runtime/run-abort-signal-any.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: unipls-package
+          path: ${{ runner.temp }}/unipls-package
+      - name: Install the same tarball in an isolated consumer
+        run: |
+          tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
+          node packages/unipls/tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
+      - name: Run package and native capability smoke tests
+        working-directory: ${{ runner.temp }}/unipls-consumer
+        run: ${{ matrix.command }} run-smoke.mjs
 
   browser-versions:
     name: Resolve browser generations
@@ -146,7 +192,9 @@ jobs:
 
   browser-runtime:
     name: ${{ matrix.browser }} (Playwright ${{ matrix.playwright }})
-    needs: browser-versions
+    needs:
+      - browser-versions
+      - consumer-package
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -161,16 +209,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
+      - uses: actions/download-artifact@v4
+        with:
+          name: unipls-package
+          path: ${{ runner.temp }}/unipls-package
       - name: Install browser generation
         env:
           BROWSER_NAME: ${{ matrix.browser }}
           PLAYWRIGHT_VERSION: ${{ matrix.playwright }}
         run: |
           runtime_dir="$RUNNER_TEMP/unipls-browser-runtime"
-          mkdir -p "$runtime_dir/tests/runtime" "$runtime_dir/tests/support"
-          cp packages/unipls/tests/runtime/run-abort-signal-any-browser.mjs "$runtime_dir/tests/runtime/"
-          cp packages/unipls/tests/support/abort-signal-any.mjs "$runtime_dir/tests/support/"
+          tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
+          node packages/unipls/tests/package/prepare-consumer.mjs "$tarball" "$runtime_dir"
+          cp packages/unipls/tests/runtime/run-package-browser.mjs "$runtime_dir/"
           cd "$runtime_dir"
           npm install --no-package-lock --no-save "playwright@$PLAYWRIGHT_VERSION"
           npx playwright install --with-deps "$BROWSER_NAME"
-          node tests/runtime/run-abort-signal-any-browser.mjs "$BROWSER_NAME"
+          node run-package-browser.mjs "$BROWSER_NAME"

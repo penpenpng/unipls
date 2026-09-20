@@ -11,5 +11,5 @@
     "noUnusedParameters": true,
     "skipLibCheck": false
   },
-  "include": ["tests/api/**/*.ts"]
+  "include": ["consumer-types.ts", "runtime-globals.d.ts"]
 }

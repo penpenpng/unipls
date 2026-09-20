@@ -1505,18 +1505,18 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 14: package export と consumer smoke test を完成させる
 
-- [ ] `package.json` に runtime/types の root export を設定する。
-- [ ] `unipls/socket` の runtime/types subpath export を設定する。
-- [ ] `unipls/browser`のruntime/types subpath exportを設定し、`NetworkDropDetector`と将来のbrowser固有adapterだけを公開する。
-- [ ] description、keywords、files、engines/runtime 前提を整える。
-- [ ] `engines.node`を`>=22.4.0`に設定し、Deno `>=2.0.0`、Bun `>=1.2.0`、browser rolling policy、ES2022 targetをpackage metadataとsupport documentへ明記する。
-- [ ] tarball を作り、隔離した fixture project へ install する test を追加する。
-- [ ] fixture で `unipls` と `unipls/socket` の ESM import、型検査、最小接続をそれぞれ検証する。
-- [ ] Browser、Node.js、Deno、Bunそれぞれでroot APIと`unipls/socket`のconsumer smoke testを実行し、最小接続とclose/drop cleanupまで検証する。
-- [ ] browser fixtureで`unipls/browser`を検証し、Node/Deno/Bun fixtureではroot importがbrowser固有moduleを評価せず`window`へアクセスしないことを検証する。
-- [ ] global WebSocketの既定利用、注入constructorの優先、global欠落時の同期的な構成error、module importだけではglobalへアクセスしないことをtestする。
-- [ ] operationのuser/scope/timeout signal合成がnative `AbortSignal.any`を使い、最初の`reason`を同一objectのままresultへ伝えることを全runtimeでtestする。
-- [ ] source や monorepo alias がなくても動作することを確認する。
+- [x] `package.json` に runtime/types の root export を設定する。
+- [x] `unipls/socket` の runtime/types subpath export を設定する。
+- [x] `unipls/browser`のruntime/types subpath exportを設定し、`NetworkDropDetector`と将来のbrowser固有adapterだけを公開する。
+- [x] description、keywords、files、engines/runtime 前提を整える。
+- [x] `engines.node`を`>=22.4.0`に設定し、Deno `>=2.0.0`、Bun `>=1.2.0`、browser rolling policy、ES2022 targetをpackage metadataとsupport documentへ明記する。
+- [x] tarball を作り、隔離した fixture project へ install する test を追加する。
+- [x] fixture で `unipls` と `unipls/socket` の ESM import、型検査、最小接続をそれぞれ検証する。
+- [x] Browser、Node.js、Deno、Bunそれぞれでroot APIと`unipls/socket`のconsumer smoke testを実行し、最小接続とclose/drop cleanupまで検証する。
+- [x] browser fixtureで`unipls/browser`を検証し、Node/Deno/Bun fixtureではroot importがbrowser固有moduleを評価せず`window`へアクセスしないことを検証する。
+- [x] global WebSocketの既定利用、注入constructorの優先、global欠落時の同期的な構成error、module importだけではglobalへアクセスしないことをtestする。
+- [x] operationのuser/scope/timeout signal合成がnative `AbortSignal.any`を使い、最初の`reason`を同一objectのままresultへ伝えることを全runtimeでtestする。
+- [x] source や monorepo alias がなくても動作することを確認する。
 
 完了条件:
 

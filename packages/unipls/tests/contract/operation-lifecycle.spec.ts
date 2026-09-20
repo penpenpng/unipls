@@ -880,14 +880,14 @@ describe("operation の共通 lifecycle", () => {
   /**
    * ```ts
    * const completed = client.next({ selector, signal, timeout: 100 });
-   * await completed; // 成功時に timer、abort listener、message 登録を解放する
+   * await completed; // 成功時に timer と message 登録を解放する
    * const aborted = client.next({ selector, signal: anotherSignal });
    * controller.abort(cause);
    * await aborted; // 中断時にも同じ資源を一度だけ解放する
    * ```
    */
   it("成功・中断・timeout の各終了経路で operation 資源を一度だけ解放する", async () => {
-    // timer と外部 AbortSignal の listener 操作を観測できる ready な client を作ります。
+    // native signal 合成と timer を観測できる ready な client を作ります。
     vi.useFakeTimers();
     try {
       const transport = new ControlledWebSocketServer();
@@ -899,9 +899,12 @@ describe("operation の共通 lifecycle", () => {
       const socket = transport.current;
       socket.emitOpen();
       await opening;
+      const signalAny = vi.spyOn(AbortSignal, "any");
+      signalAny.mockClear();
 
-      // 正常完了では外部 abort listener を解除し、deadline timer も破棄します。
+      // 正常完了では外部signalへlibrary listenerを追加せず、deadline timerを破棄します。
       const completedController = new AbortController();
+      const completedAdd = vi.spyOn(completedController.signal, "addEventListener");
       const completedRemove = vi.spyOn(completedController.signal, "removeEventListener");
       const completed = client.next({
         selector: (message) => message === "done",
@@ -910,10 +913,12 @@ describe("operation の共通 lifecycle", () => {
       });
       socket.emitMessage("done");
       await expect(completed).resolves.toBe("done");
-      expect(completedRemove).toHaveBeenCalledTimes(1);
+      expect(completedAdd).not.toHaveBeenCalled();
+      expect(completedRemove).not.toHaveBeenCalled();
 
       // abort が勝った場合も同じ cleanup gate を通り、元の reason で一度だけ終了します。
       const abortedController = new AbortController();
+      const abortedAdd = vi.spyOn(abortedController.signal, "addEventListener");
       const abortedRemove = vi.spyOn(abortedController.signal, "removeEventListener");
       const cause = new Error("aborted");
       const aborted = client.next({
@@ -923,7 +928,8 @@ describe("operation の共通 lifecycle", () => {
       });
       abortedController.abort(cause);
       await expect(aborted).rejects.toBe(cause);
-      expect(abortedRemove).toHaveBeenCalledTimes(1);
+      expect(abortedAdd).not.toHaveBeenCalled();
+      expect(abortedRemove).not.toHaveBeenCalled();
 
       // timeout 後に message が届いても operation は復活せず、selector は実行されません。
       let selectorCalls = 0;
@@ -939,6 +945,7 @@ describe("operation の共通 lifecycle", () => {
       socket.emitMessage("late");
       expect(selectorCalls).toBe(0);
       expect(vi.getTimerCount()).toBe(0);
+      expect(signalAny).toHaveBeenCalledTimes(3);
 
       // セッションを終了します。
       const closing = client.close();

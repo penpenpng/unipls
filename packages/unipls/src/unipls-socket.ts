@@ -93,7 +93,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     this.timeout = timeout;
 
     if (!WebSocket) {
-      throw new Error("WebSocket constructor was not provided.");
+      throw new UniplsInvalidUsageError(
+        "WebSocket constructorを注入するか、実行環境のglobalThis.WebSocketを利用可能にしてください。",
+      );
     }
     this.#WebSocket = WebSocket;
 

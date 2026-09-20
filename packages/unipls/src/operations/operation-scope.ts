@@ -33,8 +33,8 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
   readonly session: SessionId;
   readonly signal: AbortSignal;
   #controller = new AbortController();
-  #externalSignal?: AbortSignal;
-  #onExternalAbort?: () => void;
+  #timeoutController?: AbortController;
+  #onAbort?: () => void;
   #timer?: ReturnType<typeof setTimeout>;
   #unregister: () => void;
   #cleaned = false;
@@ -46,11 +46,23 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
     operationType: OperationType;
     mode?: MessageDeliveryMode;
     receive?: (message: TMessage) => void;
+    signal?: AbortSignal;
+    timeout?: number;
   }) {
     this.events = params.events.spawnEventBusView();
     this.session = params.session;
     this.operationType = params.operationType;
-    this.signal = this.#controller.signal;
+    const signals = [this.#controller.signal];
+    if (params.signal) signals.push(params.signal);
+    if (params.timeout !== undefined) {
+      this.#timeoutController = new AbortController();
+      signals.push(this.#timeoutController.signal);
+      this.#timer = setTimeout(() => {
+        this.#timer = undefined;
+        this.#timeoutController?.abort(new UniplsTimeoutError());
+      }, params.timeout);
+    }
+    this.signal = AbortSignal.any(signals);
     const registration = params.dispatcher.register({
       session: params.session,
       operationType: params.operationType,
@@ -62,31 +74,26 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
   }
 
   arm(params: {
-    signal?: AbortSignal;
-    timeout?: number;
     onAbort: (reason: unknown) => void;
-    onTimeout: () => void;
+    onTimeout: (reason: UniplsTimeoutError) => void;
   }): void {
-    if (params.signal) {
-      this.#externalSignal = params.signal;
-      this.#onExternalAbort = () => params.onAbort(params.signal?.reason);
-      params.signal.addEventListener("abort", this.#onExternalAbort, { once: true });
-    }
-    if (params.timeout !== undefined) {
-      this.#timer = setTimeout(params.onTimeout, params.timeout);
-    }
-    if (params.signal?.aborted) {
-      params.onAbort(params.signal.reason);
-    }
+    this.#onAbort = () => {
+      const timeoutReason = this.#timeoutController?.signal.reason;
+      if (this.#timeoutController?.signal.aborted && this.signal.reason === timeoutReason) {
+        params.onTimeout(timeoutReason as UniplsTimeoutError);
+        return;
+      }
+      params.onAbort(this.signal.reason);
+    };
+    this.signal.addEventListener("abort", this.#onAbort, { once: true });
+    if (this.signal.aborted) this.#onAbort();
   }
 
   cleanup(reason?: unknown): void {
     if (this.#cleaned) return;
     this.#cleaned = true;
     if (this.#timer !== undefined) clearTimeout(this.#timer);
-    if (this.#externalSignal && this.#onExternalAbort) {
-      this.#externalSignal.removeEventListener("abort", this.#onExternalAbort);
-    }
+    if (this.#onAbort) this.signal.removeEventListener("abort", this.#onAbort);
     this.#unregister();
     this.events.dispose();
     this.#controller.abort(reason);
@@ -117,10 +124,8 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
     });
     void this.#promise.catch(() => {});
     this.#resources.arm({
-      signal: params.signal,
-      timeout: params.timeout,
       onAbort: this.reject,
-      onTimeout: () => this.reject(new UniplsTimeoutError()),
+      onTimeout: this.reject,
     });
   }
 
@@ -220,11 +225,9 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
             onDropped: params.delivery.onMessageDropped,
           });
     this.#resources.arm({
-      signal: params.signal,
-      timeout: params.timeout,
       onAbort: (reason) =>
         this.#finish(Object.freeze({ ok: false, reason: "aborted", error: reason })),
-      onTimeout: () => this.raiseFatalError(new UniplsTimeoutError()),
+      onTimeout: this.raiseFatalError,
     });
   }
 
