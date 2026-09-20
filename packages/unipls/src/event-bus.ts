@@ -72,10 +72,9 @@ export class EventBus<TEvents extends Record<string, any>> {
   }
 
   /** すべての listener を解除します。 */
-  [Symbol.dispose] = () => {
+  dispose(): void {
     this.#listeners = {};
-  };
-  dispose = this[Symbol.dispose];
+  }
 }
 
 /** @internal 登録した listener を所有する event bus の view です。 */
@@ -106,13 +105,12 @@ class EventBusView<TEvents extends Record<string, any>> {
   }
 
   /** この view から登録したすべての listener を解除します。 */
-  [Symbol.dispose] = () => {
+  dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
     for (const cleanup of this.#cleanups) {
       cleanup();
     }
     this.#cleanups.clear();
-  };
-  dispose = this[Symbol.dispose];
+  }
 }

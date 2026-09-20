@@ -12,23 +12,12 @@ import {
   type UniplsDiagnostic,
 } from "../../src/index.ts";
 import {
+  closeClient,
   ControlledWebSocketServer,
   flushMicrotasks,
+  openClient,
   UniplsRaceScenario,
 } from "../support/index.ts";
-
-async function openClient(client: Unipls<string, string>, transport: ControlledWebSocketServer) {
-  const opening = client.open();
-  transport.current.emitOpen();
-  await opening;
-  return transport.current;
-}
-
-async function closeClient(client: Unipls<string, string>, socket: { emitClose(): void }) {
-  const closing = client.close();
-  socket.emitClose();
-  await closing;
-}
 
 describe("stream operation の共通 lifecycle", () => {
   /**
@@ -70,8 +59,14 @@ describe("stream operation の共通 lifecycle", () => {
     // 終了後のメッセージは callback へ届かず、暗黙の dispose protocol も公開しません。
     socket.emitMessage("late");
     expect(messages).toEqual(["first"]);
-    expect(Symbol.dispose in subscription).toBe(false);
-    expect(Symbol.asyncDispose in subscription).toBe(false);
+    const disposalSymbols = Symbol as typeof Symbol & {
+      readonly dispose?: symbol;
+      readonly asyncDispose?: symbol;
+    };
+    if (disposalSymbols.dispose) expect(disposalSymbols.dispose in subscription).toBe(false);
+    if (disposalSymbols.asyncDispose) {
+      expect(disposalSymbols.asyncDispose in subscription).toBe(false);
+    }
     await closeClient(client, socket);
   });
 

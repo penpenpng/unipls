@@ -26,7 +26,7 @@ export default defineConfig({
     },
   },
   pack: {
-    entry: ["src/index.ts", "src/browser.ts"],
+    entry: ["src/index.ts", "src/socket.ts", "src/browser.ts"],
     target: "es2022",
     dts: true,
     sourcemap: true,

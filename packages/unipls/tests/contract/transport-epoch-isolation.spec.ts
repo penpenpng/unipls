@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { UniplsSocket } from "../../src/index.ts";
+import { UniplsSocket } from "../../src/socket.ts";
 import {
   ControlledWebSocketServer,
   flushMicrotasks,

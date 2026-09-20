@@ -12,8 +12,22 @@ import type {
   UniplsDropSource,
   WebSocketConstructor,
   WebSocketData,
+  WebSocketLike,
 } from "./types.ts";
-import type { UniplsParams } from "./unipls.interface.ts";
+
+/** 低レベルWebSocket clientの接続先と変換方法を指定します。 */
+export interface UniplsSocketParams<TInput = WebSocketData, TOutput = WebSocketData> {
+  /** 接続先のWebSocket URLです。 */
+  readonly url: string;
+  /** 送信値をWebSocketが扱えるdataへ変換します。 */
+  readonly serializer?: (data: TInput) => WebSocketData;
+  /** 受信したWebSocket dataを利用者向けの値へ変換します。 */
+  readonly deserializer?: (data: WebSocketData) => TOutput;
+  /** 接続に使うWebSocket実装です。省略時は実行環境のglobalを使います。 */
+  readonly WebSocket?: WebSocketConstructor;
+  /** 接続成立を待つ最大時間をミリ秒で指定します。 */
+  readonly timeout?: number;
+}
 
 /**
  * 1つの WebSocket 接続を開閉し、値の変換と drop の分類を行う低レベル client です。
@@ -34,9 +48,20 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   #WebSocket: WebSocketConstructor;
   #epoch: UniplsTransportEpoch = UniplsTransportEpoch.dead();
   #events = new EventBus<UniplsSocketPublicEvents<TOutput> & UniplsSocketInternalEvents>();
-  /** 接続単位のイベントを購読する event bus です。 */
-  get events(): EventBus<UniplsSocketPublicEvents<TOutput>> {
-    return this.#events as EventBus<UniplsSocketPublicEvents<TOutput>>;
+  /** 接続単位のevent listenerを登録し、解除関数を返します。 */
+  on<K extends keyof UniplsSocketPublicEvents<TOutput>>(
+    event: K,
+    listener: (payload: UniplsSocketPublicEvents<TOutput>[K]) => void,
+    options?: { readonly once?: boolean },
+  ): () => void {
+    return this.#events.on(event, listener, options);
+  }
+  /** 登録済みの接続単位event listenerを解除します。 */
+  off<K extends keyof UniplsSocketPublicEvents<TOutput>>(
+    event: K,
+    listener: (payload: UniplsSocketPublicEvents<TOutput>[K]) => void,
+  ): void {
+    this.#events.off(event, listener);
   }
   /** 現在の WebSocket 接続状態です。 */
   get state(): UniplsConnectionState {
@@ -59,18 +84,18 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     url,
     serializer = (data) => data as WebSocketData,
     deserializer = (data) => data as TOutput,
-    WebSocket = globalThis.WebSocket,
+    WebSocket = (globalThis as { WebSocket?: WebSocketConstructor }).WebSocket,
     timeout = 5000,
-  }: UniplsParams<TInput, TOutput>) {
+  }: UniplsSocketParams<TInput, TOutput>) {
     this.#url = url;
     this.serialize = serializer;
     this.deserialize = deserializer;
     this.timeout = timeout;
 
-    this.#WebSocket = WebSocket;
-    if (!this.#WebSocket) {
+    if (!WebSocket) {
       throw new Error("WebSocket constructor was not provided.");
     }
+    this.#WebSocket = WebSocket;
 
     this.#events.on("raw-open", async ({ epoch }) => {
       if (!this.#isCurrent(epoch)) {
@@ -84,14 +109,14 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
           return;
         }
         epoch.connection.state = "open";
-        this.#events.emit("open", { epoch });
+        this.#events.emit("open", Object.freeze({ transportEpochId: epoch.id }));
       } catch (error) {
         if (!this.#isCurrent(epoch)) {
           return;
         }
         epoch.intent = "close";
         epoch.connection.state = "closed";
-        this.#events.emit("failed", { epoch, error });
+        this.#events.emit("failed", Object.freeze({ transportEpochId: epoch.id, error }));
         epoch.connection.socket?.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
         epoch.deactivate(error);
       }
@@ -104,17 +129,17 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       const messageSequence = epoch.nextMessageSequence();
       try {
         const message = this.deserialize(data);
-        this.#events.emit("message", {
-          epoch,
-          message,
-        });
+        this.#events.emit("message", Object.freeze({ transportEpochId: epoch.id, message }));
       } catch (error) {
-        this.#events.emit("error", {
-          epoch,
-          error,
-          messageSequence,
-          input: describeRawInput(data),
-        });
+        this.#events.emit(
+          "error",
+          Object.freeze({
+            transportEpochId: epoch.id,
+            error,
+            messageSequence,
+            input: describeRawInput(data),
+          }),
+        );
       }
     });
 
@@ -137,7 +162,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       if (epoch.intent === "close") {
         epoch.connection.state = "closed";
         epoch.deactivate(new UniplsSocketClosedError());
-        this.#events.emit("closed", { epoch, close });
+        this.#events.emit("closed", Object.freeze({ transportEpochId: epoch.id, close }));
         return;
       }
       this.reportDrop(epoch.id, { source: { type: "peer-close" }, close });
@@ -177,25 +202,25 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     events.on("open", (ev) => {
-      if (ev.epoch.id !== epoch.id) {
+      if (ev.transportEpochId !== epoch.id) {
         return;
       }
       result.resolve();
     });
     events.on("closed", (ev) => {
-      if (ev.epoch.id !== epoch.id) {
+      if (ev.transportEpochId !== epoch.id) {
         return;
       }
       result.reject(new UniplsSocketClosedError());
     });
     events.on("dropped", (ev) => {
-      if (ev.epoch.id !== epoch.id) {
+      if (ev.transportEpochId !== epoch.id) {
         return;
       }
       result.reject(new UniplsSocketDroppedError());
     });
     events.on("failed", (ev) => {
-      if (ev.epoch.id !== epoch.id) {
+      if (ev.transportEpochId !== epoch.id) {
         return;
       }
       result.reject(ev.error);
@@ -218,7 +243,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
-  #createSocket(epoch: UniplsTransportEpoch): WebSocket {
+  #createSocket(epoch: UniplsTransportEpoch): WebSocketLike {
     const WebSocket = this.#WebSocket;
     const socket = new WebSocket(this.url);
 
@@ -235,7 +260,6 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     socket.onclose = (ev) => {
       this.#events.emit("raw-close", {
         epoch,
-        socket,
         code: ev.code,
         reason: ev.reason,
         wasClean: ev.wasClean,
@@ -261,7 +285,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     if (!socket || this.state === "dropped") {
       targetEpoch.connection.state = "closed";
       targetEpoch.deactivate(new UniplsSocketClosedError());
-      this.#events.emit("closed", { epoch: targetEpoch });
+      this.#events.emit("closed", Object.freeze({ transportEpochId: targetEpoch.id }));
       return Promise.resolve();
     }
 
@@ -270,12 +294,12 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       finally: () => events.dispose(),
     });
 
-    events.on("closed", ({ epoch }) => {
-      if (targetEpochId !== epoch.id) return;
+    events.on("closed", ({ transportEpochId }) => {
+      if (targetEpochId !== transportEpochId) return;
       result.resolve();
     });
-    events.on("dropped", ({ epoch }) => {
-      if (targetEpochId !== epoch.id) return;
+    events.on("dropped", ({ transportEpochId }) => {
+      if (targetEpochId !== transportEpochId) return;
       result.resolve();
     });
 
@@ -314,7 +338,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     if (socket && socket.readyState < WebSocketReadyState.CLOSING) {
       socket.close(closeCode);
     }
-    this.#events.emit("dropped", { epoch, report: frozenReport });
+    this.#events.emit(
+      "dropped",
+      Object.freeze({ transportEpochId: epoch.id, report: frozenReport }),
+    );
     return true;
   }
 
@@ -342,7 +369,10 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
    * 現在の接続状態が `"connecting"`, `"provisioning"`, `"open"` のいずれかであるとき、接続状態が `"open"` になるのを待ってからデータを送信します。
    * 接続が drop または close されたとしても、再送信は試みられません。
    */
-  enqueue(data: TInput, options?: { signal?: AbortSignal; force?: boolean }): Promise<void> {
+  enqueue(
+    data: TInput,
+    options?: { readonly signal?: AbortSignal; readonly force?: boolean },
+  ): Promise<void> {
     const epoch = this.#epoch;
     const socket = epoch.connection.socket;
     const signal = options?.signal ? AbortSignal.any([epoch.signal, options.signal]) : epoch.signal;
@@ -406,8 +436,8 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     } else {
       events.on(
         "open",
-        ({ epoch: openedEpoch }) => {
-          if (openedEpoch.id !== epoch.id) return;
+        ({ transportEpochId }) => {
+          if (transportEpochId !== epoch.id) return;
           send();
         },
         { once: true },
@@ -415,24 +445,24 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     }
     events.on(
       "closed",
-      ({ epoch: closedEpoch }) => {
-        if (closedEpoch.id !== epoch.id) return;
+      ({ transportEpochId }) => {
+        if (transportEpochId !== epoch.id) return;
         result.reject(new UniplsSocketClosedError());
       },
       { once: true },
     );
     events.on(
       "dropped",
-      ({ epoch: droppedEpoch }) => {
-        if (droppedEpoch.id !== epoch.id) return;
+      ({ transportEpochId }) => {
+        if (transportEpochId !== epoch.id) return;
         result.reject(new UniplsSocketDroppedError());
       },
       { once: true },
     );
     events.on(
       "failed",
-      ({ epoch: failedEpoch, error }) => {
-        if (failedEpoch.id !== epoch.id) return;
+      ({ transportEpochId, error }) => {
+        if (transportEpochId !== epoch.id) return;
         result.reject(error);
       },
       { once: true },
@@ -449,22 +479,26 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 /** `UniplsSocket` が通知する接続単位のイベントです。 */
 export interface UniplsSocketPublicEvents<TOutput> {
   /** WebSocket と初期化処理が完了したときの情報です。 */
-  open: { epoch: UniplsTransportEpoch };
+  open: UniplsSocketEventContext;
   /** 変換済みのメッセージを受信したときの情報です。 */
-  message: { epoch: UniplsTransportEpoch; message: TOutput };
+  message: UniplsSocketEventContext & { readonly message: TOutput };
   /** メッセージ変換に失敗したときの情報です。 */
-  error: {
-    epoch: UniplsTransportEpoch;
-    error: unknown;
-    messageSequence: number;
-    input: UniplsSocketInputMetadata;
+  error: UniplsSocketEventContext & {
+    readonly error: unknown;
+    readonly messageSequence: number;
+    readonly input: UniplsSocketInputMetadata;
   };
   /** 明示的な close が完了したときの情報です。 */
-  closed: { epoch: UniplsTransportEpoch; close?: Readonly<UniplsSocketCloseMetadata> };
+  closed: UniplsSocketEventContext & { readonly close?: Readonly<UniplsSocketCloseMetadata> };
   /** open intent 中に接続を失ったときの情報です。 */
-  dropped: { epoch: UniplsTransportEpoch; report: UniplsSocketDropReport };
+  dropped: UniplsSocketEventContext & { readonly report: UniplsSocketDropReport };
   /** 初期化処理に失敗したときの情報です。 */
-  failed: { epoch: UniplsTransportEpoch; error: unknown };
+  failed: UniplsSocketEventContext & { readonly error: unknown };
+}
+
+/** 低レベルeventが属する物理接続試行を識別します。 */
+export interface UniplsSocketEventContext {
+  readonly transportEpochId: number;
 }
 
 interface UniplsSocketInternalEvents {
@@ -473,7 +507,6 @@ interface UniplsSocketInternalEvents {
   "raw-error": { epoch: UniplsTransportEpoch; error: unknown };
   "raw-close": {
     epoch: UniplsTransportEpoch;
-    socket: WebSocket;
     code: number;
     reason: string;
     wasClean: boolean;
@@ -603,7 +636,7 @@ function describeRawInput(data: WebSocketData): Readonly<UniplsSocketInputMetada
 /** @internal 1回の接続試行が所有する WebSocket と状態を保持します。 */
 class UniplsTransportConnection {
   state: UniplsConnectionState = "closed";
-  socket?: WebSocket;
+  socket?: WebSocketLike;
 
   detach(): void {
     if (!this.socket) {

@@ -1480,17 +1480,17 @@ streamの`closed`は全行でrejectせず、settle gateの勝者を確定し全c
 
 #### Task 13: root public API と型 export を整理する
 
-- [ ] `Unipls` の全 public signature に現れる型を export する。
-- [ ] provisioner、reconnector、drop detector、recovery、subscription の拡張契約を export する。
-- [ ] rootからruntime非依存な`HeartbeatDropDetector`だけをexportし、`NetworkDropDetector`をroot declarationから除く。
-- [ ] subscription handleと`ok`/`reason`でnarrowing可能なfinalization unionをrootからexportし、AsyncIterable adapterのbuffer/overflow policyもpublic typeにする。
-- [ ] `UniplsSocket`、socket error、close code、低レベル固有型を root から `unipls/socket` へ移す。
-- [ ] WebSocket注入用のconstructor/socket/eventをDOM具象型に依存しない最小structural interfaceとして`unipls/socket`からexportし、rootは必要な型だけを参照する。
-- [ ] `castForce` / `requestForce` / `subscribeForce` を高レベル `Unipls` の public declaration から除く。
-- [ ] public declaration に private/internal 型が漏れていないことを API test で確認する。
-- [ ] public declarationが`Symbol.dispose`/`Symbol.asyncDispose`や`esnext.disposable`型libraryを要求せず、`Unipls`から現行の`Symbol.asyncDispose`を除去する。
-- [ ] breaking change を移行メモに記録する。
-- [ ] testの`await using`を`try/finally`と明示的な`await close()`へ置き換え、cleanup完了を省略しない共通test helperを用意する。
+- [x] `Unipls` の全 public signature に現れる型を export する。
+- [x] provisioner、reconnector、drop detector、recovery、subscription の拡張契約を export する。
+- [x] rootからruntime非依存な`HeartbeatDropDetector`だけをexportし、`NetworkDropDetector`をroot declarationから除く。
+- [x] subscription handleと`ok`/`reason`でnarrowing可能なfinalization unionをrootからexportし、AsyncIterable adapterのbuffer/overflow policyもpublic typeにする。
+- [x] `UniplsSocket`、socket error、close code、低レベル固有型を root から `unipls/socket` へ移す。
+- [x] WebSocket注入用のconstructor/socket/eventをDOM具象型に依存しない最小structural interfaceとして`unipls/socket`からexportし、rootは必要な型だけを参照する。
+- [x] `castForce` / `requestForce` / `subscribeForce` を高レベル `Unipls` の public declaration から除く。
+- [x] public declaration に private/internal 型が漏れていないことを API test で確認する。
+- [x] public declarationが`Symbol.dispose`/`Symbol.asyncDispose`や`esnext.disposable`型libraryを要求せず、`Unipls`から現行の`Symbol.asyncDispose`を除去する。
+- [x] breaking change を移行メモに記録する。
+- [x] testの`await using`を`try/finally`と明示的な`await close()`へ置き換え、cleanup完了を省略しない共通test helperを用意する。
 
 完了条件:
 

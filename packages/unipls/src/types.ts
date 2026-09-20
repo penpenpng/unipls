@@ -1,5 +1,52 @@
+/** WebSocket が送受信できるblob形式のbinary dataに必要な公開形です。 */
+export interface WebSocketBlob {
+  /** dataのbyte数です。 */
+  readonly size: number;
+  /** dataのMIME typeです。 */
+  readonly type?: string;
+}
+
 /** WebSocket によって送受信することができるデータを表します。 */
-export type WebSocketData = string | ArrayBufferLike | Blob | ArrayBufferView;
+export type WebSocketData = string | ArrayBufferLike | WebSocketBlob | ArrayBufferView;
+
+/** WebSocketが接続を確立したときのeventに必要な公開形です。 */
+export interface WebSocketOpenEvent {
+  readonly type?: string;
+}
+
+/** WebSocketがmessageを受信したときのeventに必要な公開形です。 */
+export interface WebSocketMessageEvent {
+  readonly data: WebSocketData;
+}
+
+/** WebSocketがtransport errorを通知したときのeventに必要な公開形です。 */
+export interface WebSocketErrorEvent {
+  readonly type?: string;
+  readonly cause?: unknown;
+}
+
+/** WebSocketが接続終了を通知したときのeventに必要な公開形です。 */
+export interface WebSocketCloseEvent {
+  readonly code: number;
+  readonly reason: string;
+  readonly wasClean: boolean;
+}
+
+/** WebSocket実装がevent propertyへ受け付けるlistenerです。 */
+export type WebSocketEventListener<TEvent> = {
+  bivarianceHack(event: TEvent): unknown;
+}["bivarianceHack"];
+
+/** uniplsが通信に使用するWebSocket instanceの最小interfaceです。 */
+export interface WebSocketLike {
+  readonly readyState: number;
+  onopen: WebSocketEventListener<WebSocketOpenEvent> | null;
+  onmessage: WebSocketEventListener<WebSocketMessageEvent> | null;
+  onerror: WebSocketEventListener<WebSocketErrorEvent> | null;
+  onclose: WebSocketEventListener<WebSocketCloseEvent> | null;
+  send(data: WebSocketData): void;
+  close(code?: number, reason?: string): void;
+}
 
 declare const sessionIdBrand: unique symbol;
 declare const connectionIdBrand: unique symbol;
@@ -21,7 +68,7 @@ export type OperationType = "cast" | "next" | "request" | "listen" | "subscribe"
 export type PredicateErrorPolicy = "continue" | "fail";
 
 /** Unipls が WebSocket を生成するときに使用するコンストラクターです。 */
-export type WebSocketConstructor = new (url: string) => WebSocket;
+export type WebSocketConstructor = new (url: string) => WebSocketLike;
 
 /** 現在の WebSocket 接続の状態です。 */
 export type UniplsConnectionState = "connecting" | "provisioning" | "open" | "closed" | "dropped";

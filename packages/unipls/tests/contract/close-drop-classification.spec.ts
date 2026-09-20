@@ -175,8 +175,7 @@ describe("close と drop の分類", () => {
 
     // socket を得られなかった接続試行も明示 close で終了することを確認します。
     await client.close();
-    expect(client.intent).toBe("close");
-    expect(client.state).toBe("closed");
+    expect(client.lifecycle).toMatchObject({ phase: "closed", reason: "open-failed" });
   });
 
   /**
@@ -361,8 +360,6 @@ describe("回復の終端結果", () => {
       phase: "closed",
       reason: "user",
     });
-    expect(scenario.client.intent).toBe("close");
-    expect(scenario.client.state).toBe("closed");
   });
 
   /**
@@ -431,7 +428,6 @@ describe("回復の終端結果", () => {
       outcome,
       drop: rejection?.drop,
     });
-    expect(scenario.client.state).toBe("closed");
     const terminal = scenario.client.lifecycle;
     await scenario.client.close();
     expect(scenario.client.lifecycle).toBe(terminal);

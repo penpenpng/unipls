@@ -5,9 +5,6 @@ export {
   UniplsError,
   UniplsInvalidUsageError,
   UniplsOpenError,
-  UniplsSocketClosedError,
-  UniplsSocketDroppedError,
-  UniplsSocketError,
   UniplsTimeoutError,
 } from "./errors";
 export type {
@@ -35,6 +32,8 @@ export type {
   ConnectionId,
   DropDetectorIdentity,
   DropDetectorFailedDiagnostic,
+  MessageDeserializationFailedDiagnostic,
+  MessagePredicateFailedDiagnostic,
   OperationId,
   OperationType,
   PredicateErrorPolicy,
@@ -44,8 +43,6 @@ export type {
   SessionId,
   StreamCallbackFailedDiagnostic,
   StreamMessageDroppedDiagnostic,
-  UniplsConnectionIntent,
-  UniplsConnectionState,
   UniplsDrop,
   UniplsDropSource,
   UniplsDroppedErrorOutcome,
@@ -54,7 +51,15 @@ export type {
   UniplsLifecycleEvent,
   UniplsLifecycleSnapshot,
   UniplsOpenErrorOutcome,
+  WebSocketBlob,
+  WebSocketCloseEvent,
+  WebSocketConstructor,
   WebSocketData,
+  WebSocketErrorEvent,
+  WebSocketEventListener,
+  WebSocketLike,
+  WebSocketMessageEvent,
+  WebSocketOpenEvent,
 } from "./types";
 export type {
   Disposer,
@@ -72,14 +77,27 @@ export {
   HeartbeatDropDetector,
   type HeartbeatOptions,
 } from "./drop-detector/heartbeat-drop-detector.ts";
-export { Unipls } from "./unipls";
-export { UniplsSocket, UniplsWebSocketCloseCode } from "./unipls-socket";
+export { Unipls, type ConnectionEventContext, type UniplsEvents } from "./unipls";
 export type {
   ConnectionSetupContext,
   SessionSetupContext,
+  UniplsCastParams,
+  UniplsDropRetryStrategy,
   UniplsListenCallbackParams,
   UniplsListenIteratorParams,
+  UniplsListenOptions,
+  UniplsMessageFactory,
+  UniplsNextParams,
+  UniplsParams,
   UniplsProvisioner,
+  UniplsRecoverContext,
+  UniplsRecoveryDecision,
+  UniplsRecoveryPlan,
+  UniplsRecoverStrategy,
+  UniplsRequestParams,
+  UniplsRetryPreset,
+  UniplsRetryStrategy,
   UniplsSubscribeCallbackParams,
   UniplsSubscribeIteratorParams,
+  UniplsSubscribeParams,
 } from "./unipls.interface";
