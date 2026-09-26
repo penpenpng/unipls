@@ -39,7 +39,9 @@ pnpm check
 - 公開entry pointから観測できる保証は`*.spec.ts`、内部実装だけの保証は`*.test.ts`に書きます。
 - `*.spec.ts`からprivate/internal moduleを直接importせず、公開APIまたは`support/`のblack-box harnessを通して観測します。
 - 各contract testには、利用者が書く具体的なcodeと保証される結果をMarkdown形式のJSDocで示します。
-- test名と説明commentは日本語で書きます。commentは理解を助ける非規範的な説明であり、契約そのものは公開文書とassertionで表します。
+- test名は「前提・操作・期待結果」が分かる日本語で書き、英語のAPI用語との境界には空白を入れます。
+- JSDocを利用者視点の契約説明とし、test本文のcommentは外部要因を示す`// !`またはcodeだけでは分からない理由に限定します。test名やcodeの言い換えは書きません。
+- 一つのspecに異なる関心事を混在させず、仕様の階層はfile名と`describe`で表します。共通化する場合は、protocol上重要な操作やassertionを隠さないdomain固有のhelperにします。
 - peer切断、timeout到達、signal abortなど、codeから直接は見えない外部要因は、発生させる行に`// !` commentを付けます。
 - networkや実時間に依存させず、controlled WebSocket、hook、fake timerを使ってeventの順序と競合を決定的にします。
 - `flushMicrotasks()`は、libraryが明示的にmicrotaskへ予約した処理を観測する場合だけ使います。呼出回数に意味を持たせず、可能なら観測可能な状態やPromiseを待ちます。

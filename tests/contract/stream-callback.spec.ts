@@ -1,0 +1,211 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import {
+  type StreamFinalization,
+  type SubscriptionHandle,
+  type UniplsDiagnostic,
+} from "../../src/index.ts";
+import { createReadyClient, flushMicrotasks } from "../support/index.ts";
+
+describe("callback stream", () => {
+  /**
+   * ```ts
+   * const subscription = client.listen({
+   *   next: consume,
+   * });
+   * subscription.unsubscribe();
+   * subscription.unsubscribe(); // 冪等
+   * const finalization = await subscription.closed;
+   * // finalization は frozen な { ok: true, reason: "unsubscribed" }
+   * const stop = () => subscription.unsubscribe(); // framework に渡す明示的 adapter
+   * ```
+   */
+  it("callback subscription を冪等に解除して frozen な終了結果を一度だけ返す", async () => {
+    const { client, socket, close } = await createReadyClient();
+    const messages: string[] = [];
+    const subscription = client.listen({ next: (message) => messages.push(message) });
+
+    // ! ready 接続から届くメッセージを callback へ同期配送します。
+    socket.emitMessage("first");
+    expect(messages).toEqual(["first"]);
+    subscription.unsubscribe();
+    subscription.unsubscribe();
+    const firstFinalization = await subscription.closed;
+    const secondFinalization = await subscription.closed;
+    expect(firstFinalization).toBe(secondFinalization);
+    expect(firstFinalization).toEqual({ ok: true, reason: "unsubscribed" });
+    expect(Object.isFrozen(firstFinalization)).toBe(true);
+    socket.emitMessage("late");
+    expect(messages).toEqual(["first"]);
+    const disposalSymbols = Symbol as typeof Symbol & {
+      readonly dispose?: symbol;
+      readonly asyncDispose?: symbol;
+    };
+    if (disposalSymbols.dispose) expect(disposalSymbols.dispose in subscription).toBe(false);
+    if (disposalSymbols.asyncDispose) {
+      expect(disposalSymbols.asyncDispose in subscription).toBe(false);
+    }
+    await close();
+  });
+
+  /**
+   * ```ts
+   * const continued = client.listen({ next: mayThrow });
+   * const failed = client.listen({ next: mayThrow, callbackError: "unsubscribe" });
+   * const independent = client.listen({ next: consume });
+   * // ! mayThrow が同期的に例外を投げるメッセージが届く
+   * await continued.closed; // 後続メッセージまで継続する
+   * await failed.closed; // callback-error と元の例外で終了する
+   * // independent への同じメッセージのfan-outは止まらない
+   * ```
+   */
+  it("callback の同期例外を診断して policy と他 subscriber から隔離する", async () => {
+    const { client, socket, close } = await createReadyClient();
+    const cause = new Error("callback failed");
+    const diagnostics: UniplsDiagnostic[] = [];
+    const continuedMessages: string[] = [];
+    const independentMessages: string[] = [];
+    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
+    const continued = client.listen({
+      next: (message) => {
+        if (message === "bad") throw cause;
+        continuedMessages.push(message);
+      },
+    });
+    const failed = client.listen({
+      next: () => {
+        throw cause;
+      },
+      callbackError: "unsubscribe",
+    });
+    const independent = client.listen({ next: (message) => independentMessages.push(message) });
+
+    // ! 同じメッセージで2つのcallbackが失敗しても、最後のsubscriberまで配送します。
+    socket.emitMessage("bad");
+    const failedFinalization = await failed.closed;
+    expect(failedFinalization).toEqual({ ok: false, reason: "callback-error", error: cause });
+    expect(independentMessages).toEqual(["bad"]);
+    socket.emitMessage("good");
+    expect(continuedMessages).toEqual(["good"]);
+    await flushMicrotasks();
+    expect(
+      diagnostics.map((diagnostic) =>
+        diagnostic.type === "stream-callback-failed"
+          ? {
+              type: diagnostic.type,
+              severity: diagnostic.severity,
+              cause: diagnostic.cause,
+              policy: diagnostic.policy,
+            }
+          : diagnostic.type,
+      ),
+    ).toEqual([
+      { type: "stream-callback-failed", severity: "error", cause, policy: "continue" },
+      { type: "stream-callback-failed", severity: "error", cause, policy: "unsubscribe" },
+    ]);
+    expect(
+      diagnostics.every(
+        (diagnostic) =>
+          diagnostic.type === "stream-callback-failed" &&
+          Object.isFrozen(diagnostic) &&
+          Object.isFrozen(diagnostic.scope) &&
+          !("message" in diagnostic),
+      ),
+    ).toBe(true);
+    continued.unsubscribe();
+    independent.unsubscribe();
+    await Promise.all([continued.closed, independent.closed]);
+    await close();
+  });
+
+  /**
+   * ```ts
+   * let subscription;
+   * subscription = client.listen({
+   *   callbackError: "unsubscribe",
+   *   next() {
+   *     subscription.unsubscribe();
+   *     throw callbackError;
+   *   },
+   * });
+   * // ! callbackを呼ぶメッセージが届く
+   * // 先に実行された明示解除が勝ち、closedはunsubscribedとして一度だけ解決する
+   * ```
+   */
+  it("callback 内の再入解除と例外を最初に確定した終了理由へ収束させる", async () => {
+    const { client, socket, close } = await createReadyClient();
+    const cause = new Error("callback failed after unsubscribe");
+    const diagnostics: UniplsDiagnostic[] = [];
+    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
+    let subscription!: SubscriptionHandle<StreamFinalization<string>>;
+    subscription = client.listen({
+      callbackError: "unsubscribe",
+      next: () => {
+        subscription.unsubscribe();
+        throw cause;
+      },
+    });
+
+    // ! callbackの再入解除が先にsettle gateを通り、その後のcallback failureは診断だけになります。
+    socket.emitMessage("message");
+    await expect(subscription.closed).resolves.toEqual({ ok: true, reason: "unsubscribed" });
+    await flushMicrotasks();
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      type: "stream-callback-failed",
+      cause,
+      policy: "unsubscribe",
+    });
+    await close();
+  });
+
+  /**
+   * ```ts
+   * const calls = [];
+   * const gate = deferred();
+   * const subscription = client.listen({
+   *   next: async (message) => {
+   *     calls.push(message);
+   *     await gate.promise;
+   *   },
+   * });
+   * // ! gateの完了前に2件のメッセージが届く
+   * // callbackは2回とも直ちに呼ばれ、戻り値のPromiseを待機・診断しない
+   * ```
+   */
+  it("callback が返す Promise を待機せず配送を逐次化しない", async () => {
+    const { client, socket, close } = await createReadyClient();
+    const diagnostics: UniplsDiagnostic[] = [];
+    const calls: string[] = [];
+    const cause = new Error("async callback failed");
+    const returnedPromises: Promise<void>[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
+    const subscription = client.listen({
+      next: (message) => {
+        calls.push(message);
+        const returned = gate.then(() => {
+          throw cause;
+        });
+        returnedPromises.push(returned);
+        return returned;
+      },
+    });
+
+    // ! callbackの最初のPromiseが未完了でも、次のメッセージを直ちに配送します。
+    socket.emitMessage("first");
+    socket.emitMessage("second");
+    expect(calls).toEqual(["first", "second"]);
+    expect(diagnostics).toEqual([]);
+    const observedRejections = returnedPromises.map((returned) => returned.catch((error) => error));
+    release();
+    await expect(Promise.all(observedRejections)).resolves.toEqual([cause, cause]);
+    expect(diagnostics).toEqual([]);
+    subscription.unsubscribe();
+    await subscription.closed;
+    await close();
+  });
+});
