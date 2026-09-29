@@ -800,25 +800,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.#messages.dispatchReady(context.session, message);
       this.#events.emit("message", Object.freeze({ ...context, message }));
     });
-    this.#socket.on("error", ({ transportEpochId, error, messageSequence, input }) => {
-      const context = this.#currentTransportContext(transportEpochId);
-      if (!context) return;
-      if (!this.#logSink) return;
-      const scope = Object.freeze({
-        type: "connection" as const,
-        session: context.session,
-        connection: context.connection,
-        messageSequence,
-      });
-      const diagnostic: UniplsDiagnostic = Object.freeze({
-        type: "message-deserialization-failed",
-        severity: "warning",
-        scope,
-          cause: error,
-        input,
-      });
-      this.#emitDiagnostic(diagnostic);
-    });
     this.#socket.on("failed", ({ transportEpochId, error }) => {
       const context = this.#currentTransportContext(transportEpochId);
       if (context) {
@@ -1228,27 +1209,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     cause: unknown,
     error: UniplsOpenError | UniplsDroppedError,
   ): void {
-    const scope = Object.freeze({ type: "session" as const, session: context.session });
-    const common = {
-      type: "reconnector-failed" as const,
-      severity: "error" as const,
-      scope,
-      failurePoint,
+    this.#emitLog(Object.freeze({
+      level: "error",
+      event: "connection/recovery",
+      message: "接続回復処理に失敗しました。",
+      context: Object.freeze({
+        session: context.session,
+        origin: context.origin,
+        failurePoint,
+        error,
+      }),
       cause,
-    };
-    const diagnostic: UniplsDiagnostic =
-      context.origin === "initial"
-        ? Object.freeze({
-            ...common,
-            context: "initial-open" as const,
-            error: error as UniplsOpenError,
-          })
-        : Object.freeze({
-            ...common,
-            context: "recovery" as const,
-            error: error as UniplsDroppedError,
-          });
-    this.#emitDiagnostic(diagnostic);
+    }));
   }
 
   #createResourceScope(
@@ -1260,18 +1232,17 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       parentSignal,
       onCleanupFailure: ({ cause, scope: owner, name, source: registeredBy }) => {
         if (!this.#logSink) return;
-        const resource = Object.freeze({
-          ...(name === undefined ? {} : { name }),
-          source: registeredBy,
-        });
-        const diagnostic: ResourceCleanupFailedDiagnostic = Object.freeze({
-          type: "resource-cleanup-failed",
-          severity: "error",
-          scope: owner,
-              cause,
-          resource,
-        });
-        this.#emitDiagnostic(diagnostic);
+        this.#emitLog(Object.freeze({
+          level: "error",
+          event: "resource/cleanup",
+          message: "resource の解放処理に失敗しました。",
+          context: Object.freeze({
+            ...owner,
+            ...(name === undefined ? {} : { resourceName: name }),
+            resourceSource: registeredBy,
+          }),
+          cause,
+        }));
       },
     });
   }
@@ -1296,15 +1267,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     cause: unknown,
   ): void {
     if (!this.#logSink) return;
-    const diagnostic: DropDetectorFailedDiagnostic = Object.freeze({
-      type: "drop-detector-failed",
-      severity: "error",
-      scope,
+    this.#emitLog(Object.freeze({
+      level: "error",
+      event: "connection/detection",
+      message: "接続 drop の検出処理に失敗しました。",
+      context: Object.freeze({ ...scope, detector, boundary }),
       cause,
-      detector,
-      boundary,
-    });
-    this.#emitDiagnostic(diagnostic);
+    }));
   }
 
   #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -1563,19 +1532,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     policy: StreamCallbackErrorPolicy,
   ): void {
     if (!this.#logSink) return;
-    const diagnostic: StreamCallbackFailedDiagnostic = Object.freeze({
-      type: "stream-callback-failed",
-      severity: "error",
-      scope: Object.freeze({
-        type: "operation",
-        session: scope.session,
-        operation: scope.operation,
-        operationType: scope.operationType,
-      }),
+    this.#emitLog(Object.freeze({
+      level: "error",
+      event: "operation/message-handler",
+      message: "message handler の実行に失敗しました。",
+      context: Object.freeze({ ...scope, policy }),
       cause,
-      policy,
-    });
-    this.#emitDiagnostic(diagnostic);
+    }));
   }
 
   #emitStreamMessageDroppedDiagnostic(
@@ -1588,19 +1551,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     capacity: number,
   ): void {
     if (!this.#logSink) return;
-    const diagnostic: StreamMessageDroppedDiagnostic = Object.freeze({
-      type: "stream-message-dropped",
-      severity: "warning",
-      scope: Object.freeze({
-        type: "operation",
-        session: scope.session,
-        operation: scope.operation,
-        operationType: scope.operationType,
-      }),
-      strategy,
-      capacity,
-    });
-    this.#emitDiagnostic(diagnostic);
+    this.#emitLog(Object.freeze({
+      level: "warning",
+      event: "operation/message-drop",
+      message: "buffer policy により message が破棄されました。",
+      context: Object.freeze({ ...scope, strategy, capacity }),
+    }));
   }
 
   #processMessage({
@@ -1630,20 +1586,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     } catch (cause) {
       if (policy === "fail") onPredicateFailure(cause);
       if (this.#logSink) {
-        const diagnostic: MessagePredicateFailedDiagnostic = Object.freeze({
-          type: "message-predicate-failed",
-          severity: "error",
-          scope: Object.freeze({
-            type: "operation",
-            session: scope.session,
-            operation: scope.operation,
-            operationType: scope.operationType,
-          }),
-              cause,
-          predicate: predicateType,
-          policy,
-        });
-        this.#emitDiagnostic(diagnostic);
+        this.#emitLog(Object.freeze({
+          level: "error",
+          event: predicateType === "selector" ? "operation/message-selection" : "operation/termination",
+          message: predicateType === "selector"
+            ? "message selection の評価に失敗しました。"
+            : "termination の評価に失敗しました。",
+          context: Object.freeze({ ...scope, policy }),
+          cause,
+        }));
       }
       return "failed";
     }
