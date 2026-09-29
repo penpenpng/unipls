@@ -122,8 +122,6 @@ export type UniplsEvents<TOutput> = {
   };
   /** 接続回復が成功したときに通知されます。 */
   reconnect: UniplsReconnectEvent;
-  /** ライブラリが捕捉した型付きの診断情報です。 */
-  diagnostic: UniplsDiagnostic;
 };
 
 /** 論理セッションを維持しながら WebSocket の送受信と回復を管理する client です。 */
@@ -135,6 +133,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #canonicalDrops = new Map<number, UniplsDrop>();
   #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #reconnector?: UniplsReconnector;
+  #diagnosticSink?: (diagnostic: UniplsDiagnostic) => void;
   #pendingOpen?: PendingOpen;
   #reconnectionPolicy?: ReconnectionPolicyRun;
   #lifecycle: UniplsLifecycleCoordinator;
@@ -172,6 +171,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       this.#events.emit("lifecycle", event);
     });
     this.#reconnector = params.reconnector;
+    this.#diagnosticSink = params.diagnosticSink;
     this.#detectorManager = new DropDetectorManager(params.dropDetectors ?? []);
     this.#bridgeSocketEvents();
   }
@@ -805,7 +805,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#socket.on("error", ({ transportEpochId, error, messageSequence, input }) => {
       const context = this.#currentTransportContext(transportEpochId);
       if (!context) return;
-      if (!this.#events.hasListeners("diagnostic")) return;
+      if (!this.#diagnosticSink) return;
       const scope = Object.freeze({
         type: "connection" as const,
         session: context.session,
@@ -820,7 +820,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         cause: error,
         input,
       });
-      this.#events.emitIsolated("diagnostic", diagnostic);
+      this.#emitDiagnostic(diagnostic);
     });
     this.#socket.on("failed", ({ transportEpochId, error }) => {
       const context = this.#currentTransportContext(transportEpochId);
@@ -1204,6 +1204,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     pending.reject(cause);
   }
 
+  #emitDiagnostic(diagnostic: UniplsDiagnostic): void {
+    try {
+      this.#diagnosticSink?.(diagnostic);
+    } catch {
+      // 診断 sink の失敗は library の処理へ逆流させません。
+    }
+  }
+
   #emitReconnectorDiagnostic(
     context: ReconnectionContext,
     failurePoint: "setup" | "policy",
@@ -1231,7 +1239,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             context: "recovery" as const,
             error: error as UniplsDroppedError,
           });
-    this.#events.emitIsolated("diagnostic", diagnostic);
+    this.#emitDiagnostic(diagnostic);
   }
 
   #createResourceScope(
@@ -1242,7 +1250,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       scope,
       parentSignal,
       onCleanupFailure: ({ cause, scope: owner, name, source: registeredBy }) => {
-        if (!this.#events.hasListeners("diagnostic")) return;
+        if (!this.#diagnosticSink) return;
         const resource = Object.freeze({
           ...(name === undefined ? {} : { name }),
           source: registeredBy,
@@ -1255,7 +1263,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           cause,
           resource,
         });
-        this.#events.emitIsolated("diagnostic", diagnostic);
+        this.#emitDiagnostic(diagnostic);
       },
     });
   }
@@ -1279,7 +1287,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     boundary: "guard" | "run",
     cause: unknown,
   ): void {
-    if (!this.#events.hasListeners("diagnostic")) return;
+    if (!this.#diagnosticSink) return;
     const diagnostic: DropDetectorFailedDiagnostic = Object.freeze({
       type: "drop-detector-failed",
       severity: "error",
@@ -1289,7 +1297,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       detector,
       boundary,
     });
-    this.#events.emitIsolated("diagnostic", diagnostic);
+    this.#emitDiagnostic(diagnostic);
   }
 
   #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -1547,7 +1555,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     cause: unknown,
     policy: StreamCallbackErrorPolicy,
   ): void {
-    if (!this.#events.hasListeners("diagnostic")) return;
+    if (!this.#diagnosticSink) return;
     const diagnostic: StreamCallbackFailedDiagnostic = Object.freeze({
       type: "stream-callback-failed",
       severity: "error",
@@ -1561,7 +1569,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       cause,
       policy,
     });
-    this.#events.emitIsolated("diagnostic", diagnostic);
+    this.#emitDiagnostic(diagnostic);
   }
 
   #emitStreamMessageDroppedDiagnostic(
@@ -1573,7 +1581,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     strategy: "latest" | "drop-oldest" | "drop-newest",
     capacity: number,
   ): void {
-    if (!this.#events.hasListeners("diagnostic")) return;
+    if (!this.#diagnosticSink) return;
     const diagnostic: StreamMessageDroppedDiagnostic = Object.freeze({
       type: "stream-message-dropped",
       severity: "warning",
@@ -1587,7 +1595,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       strategy,
       capacity,
     });
-    this.#events.emitIsolated("diagnostic", diagnostic);
+    this.#emitDiagnostic(diagnostic);
   }
 
   #processMessage({
@@ -1616,7 +1624,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       selected = predicate(message);
     } catch (cause) {
       if (policy === "fail") onPredicateFailure(cause);
-      if (this.#events.hasListeners("diagnostic")) {
+      if (this.#diagnosticSink) {
         const diagnostic: MessagePredicateFailedDiagnostic = Object.freeze({
           type: "message-predicate-failed",
           severity: "error",
@@ -1631,7 +1639,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           predicate: predicateType,
           policy,
         });
-        this.#events.emitIsolated("diagnostic", diagnostic);
+        this.#emitDiagnostic(diagnostic);
       }
       return "failed";
     }
