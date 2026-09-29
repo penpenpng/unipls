@@ -303,7 +303,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * selector に一致する受信メッセージを購読します。
    *
-   * callback の `next` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
+   * callback の `onMessage` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
    * callback の戻り値や Promise は待機しないため、callback delivery は逐次実行を保証しません。
    *
    * @throws {TypeError} selector、terminator、delivery、policyの型が不正な場合に同期的に投げます。
@@ -331,7 +331,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const timeout = params.timeout;
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
-    const callback = params.next;
+    const callback = params.onMessage;
     validateOptionalCallback(params.selector, "selector", "listen");
     validateOptionalCallback(params.terminator, "terminator", "listen");
     validateOperationSignal(signal);
@@ -1337,7 +1337,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   /**
    * メッセージを1件送信し、selector に一致する受信メッセージを購読します。初期化中の場合は ready になるまで送信を待ちます。
    *
-   * callback の `next` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
+   * callback の `onMessage` を指定すると subscription handle、指定しない場合は single-consumer の AsyncSubscription を返します。
    * callback の戻り値や Promise は待機しないため、callback delivery は逐次実行を保証しません。
    *
    * @throws {TypeError} 必須値、deliveryまたはpolicyの型が不正な場合に同期的に投げます。
@@ -1371,7 +1371,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const timeout = params.timeout;
     const retry = params.retry;
     const predicateError = params.predicateError ?? "continue";
-    const callback = params.next;
+    const callback = params.onMessage;
     validateRequiredCallback(selector, "selector", "subscribe");
     validateOptionalCallback(params.terminator, "terminator", "subscribe");
     validateOperationSignal(signal);
