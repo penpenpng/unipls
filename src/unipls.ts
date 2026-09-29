@@ -46,20 +46,15 @@ import type {
 } from "./reconnector/reconnector.ts";
 import type {
   ConnectionId,
-  DropDetectorFailedDiagnostic,
   DropDetectorIdentity,
-  MessagePredicateFailedDiagnostic,
   ReconnectionEngineOutcome,
-  ResourceCleanupFailedDiagnostic,
   SessionId,
-  UniplsDiagnostic,
-  UniplsDiagnosticScope,
+  UniplsLog,
+  UniplsResourceScope,
   UniplsDrop,
   UniplsDroppedErrorOutcome,
   UniplsLifecycleSnapshot,
   PredicateErrorPolicy,
-  StreamCallbackFailedDiagnostic,
-  StreamMessageDroppedDiagnostic,
   WebSocketData,
 } from "./types.ts";
 import { UniplsSocket, type UniplsSocketDropReport } from "./unipls-socket";
@@ -133,7 +128,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #canonicalDrops = new Map<number, UniplsDrop>();
   #provisioner?: UniplsProvisioner<TInput, TOutput>;
   #reconnector?: UniplsReconnector;
-  #diagnosticSink?: (diagnostic: UniplsDiagnostic) => void;
+  #logSink?: (log: UniplsLog) => void;
   #pendingOpen?: PendingOpen;
   #reconnectionPolicy?: ReconnectionPolicyRun;
   #lifecycle: UniplsLifecycleCoordinator;
@@ -166,12 +161,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
   /** 接続先と通信方針を指定して client を作成します。 */
   constructor(params: UniplsParams<TInput, TOutput>) {
-    this.#socket = new UniplsSocket(params);
+    this.#logSink = params.logSink;
+    this.#socket = new UniplsSocket({
+      ...params,
+      logSink: (log) => this.#forwardSocketLog(log),
+    });
     this.#lifecycle = new UniplsLifecycleCoordinator((event) => {
       this.#events.emit("lifecycle", event);
     });
     this.#reconnector = params.reconnector;
-    this.#diagnosticSink = params.diagnosticSink;
     this.#detectorManager = new DropDetectorManager(params.dropDetectors ?? []);
     this.#bridgeSocketEvents();
   }
@@ -805,7 +803,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     this.#socket.on("error", ({ transportEpochId, error, messageSequence, input }) => {
       const context = this.#currentTransportContext(transportEpochId);
       if (!context) return;
-      if (!this.#diagnosticSink) return;
+      if (!this.#logSink) return;
       const scope = Object.freeze({
         type: "connection" as const,
         session: context.session,
@@ -1203,12 +1201,25 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     pending.reject(cause);
   }
 
-  #emitDiagnostic(diagnostic: UniplsDiagnostic): void {
+  #emitLog(log: UniplsLog): void {
     try {
-      this.#diagnosticSink?.(diagnostic);
+      this.#logSink?.(log);
     } catch {
-      // 診断 sink の失敗は library の処理へ逆流させません。
+      // log sink の失敗は library の処理へ逆流させません。
     }
+  }
+
+  #forwardSocketLog(log: UniplsLog): void {
+    const transportEpochId = log.context?.transportEpochId;
+    const transport =
+      typeof transportEpochId === "number" ? this.#currentTransportContext(transportEpochId) : undefined;
+    this.#emitLog(Object.freeze({
+      ...log,
+      context: Object.freeze({
+        ...log.context,
+        ...(transport ? { session: transport.session, connection: transport.connection } : {}),
+      }),
+    }));
   }
 
   #emitReconnectorDiagnostic(
@@ -1241,14 +1252,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   #createResourceScope(
-    scope: UniplsDiagnosticScope,
+    scope: UniplsResourceScope,
     parentSignal?: AbortSignal,
   ): OwnedResourceScope {
     return new OwnedResourceScope({
       scope,
       parentSignal,
       onCleanupFailure: ({ cause, scope: owner, name, source: registeredBy }) => {
-        if (!this.#diagnosticSink) return;
+        if (!this.#logSink) return;
         const resource = Object.freeze({
           ...(name === undefined ? {} : { name }),
           source: registeredBy,
@@ -1279,12 +1290,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   }
 
   #emitDropDetectorDiagnostic(
-    scope: Extract<UniplsDiagnosticScope, { type: "connection" }>,
+    scope: Extract<UniplsResourceScope, { type: "connection" }>,
     detector: DropDetectorIdentity,
     boundary: "guard" | "run",
     cause: unknown,
   ): void {
-    if (!this.#diagnosticSink) return;
+    if (!this.#logSink) return;
     const diagnostic: DropDetectorFailedDiagnostic = Object.freeze({
       type: "drop-detector-failed",
       severity: "error",
@@ -1551,7 +1562,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     cause: unknown,
     policy: StreamCallbackErrorPolicy,
   ): void {
-    if (!this.#diagnosticSink) return;
+    if (!this.#logSink) return;
     const diagnostic: StreamCallbackFailedDiagnostic = Object.freeze({
       type: "stream-callback-failed",
       severity: "error",
@@ -1576,7 +1587,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     strategy: "latest" | "drop-oldest" | "drop-newest",
     capacity: number,
   ): void {
-    if (!this.#diagnosticSink) return;
+    if (!this.#logSink) return;
     const diagnostic: StreamMessageDroppedDiagnostic = Object.freeze({
       type: "stream-message-dropped",
       severity: "warning",
@@ -1618,7 +1629,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       selected = predicate(message);
     } catch (cause) {
       if (policy === "fail") onPredicateFailure(cause);
-      if (this.#diagnosticSink) {
+      if (this.#logSink) {
         const diagnostic: MessagePredicateFailedDiagnostic = Object.freeze({
           type: "message-predicate-failed",
           severity: "error",
