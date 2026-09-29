@@ -375,7 +375,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
               type: "iterator",
               buffer: buffer as ReturnType<typeof normalizeStreamBuffer>,
               onMessageDropped: (strategy, capacity) => {
-                this.#emitStreamMessageDroppedDiagnostic(scope, strategy, capacity);
+                this.#logStreamMessageDropped(scope, strategy, capacity);
               },
             }
           : {
@@ -384,7 +384,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
               policy: callbackError as StreamCallbackErrorPolicy,
               onCallbackError: (cause, policy) => {
                 if (policy === "unsubscribe") scope.failCallback(cause);
-                this.#emitStreamCallbackFailedDiagnostic(scope, cause, policy);
+                this.#logStreamCallbackFailure(scope, cause, policy);
               },
             },
       signal,
@@ -603,15 +603,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const connection = this.#currentTransportContext(transportEpochId)?.connection;
     if (!connection) throw new UniplsSocketDroppedError();
     const mode = { type: "transport" as const, connection };
-    const diagnosticScope = Object.freeze({
+    const resourceScope = Object.freeze({
       type: "connection" as const,
       session: sessionId,
       connection,
     });
-    const connectionScope = this.#createResourceScope(diagnosticScope, signal);
+    const connectionScope = this.#createResourceScope(resourceScope, signal);
     this.#connectionScopes.set(transportEpochId, connectionScope);
-    const transaction = this.#createResourceScope(diagnosticScope);
-    const setupTransaction = this.#createResourceScope(diagnosticScope);
+    const transaction = this.#createResourceScope(resourceScope);
+    const setupTransaction = this.#createResourceScope(resourceScope);
     let setupCommitted = false;
     const assertCapability = () => {
       this.#assertCurrentTransport(transportEpochId, signal);
@@ -693,11 +693,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       }
       await this.#detectorManager.setup({
         transaction,
-        createScope: () => this.#createResourceScope(diagnosticScope, signal),
+        createScope: () => this.#createResourceScope(resourceScope, signal),
         createContext: (identity, scope, fail) =>
           this.#createDropDetectorContext(transportEpochId, signal, identity, scope, fail),
         onRuntimeFailure: (identity, boundary, cause) => {
-          this.#emitDropDetectorDiagnostic(diagnosticScope, identity, boundary, cause);
+          this.#logDropDetectorFailure(resourceScope, identity, boundary, cause);
         },
       });
       this.#assertCurrentTransport(transportEpochId, signal);
@@ -961,10 +961,10 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const { context } = run;
     if (context.origin === "initial") {
       const error = this.#terminateInitial("reconnector-failed", context, cause);
-      this.#emitReconnectorDiagnostic(context, failurePoint, cause, error);
+      this.#logReconnectorFailure(context, failurePoint, cause, error);
     } else {
       const error = this.#terminateRecovery("reconnector-failed", cause);
-      if (error) this.#emitReconnectorDiagnostic(context, failurePoint, cause, error);
+      if (error) this.#logReconnectorFailure(context, failurePoint, cause, error);
     }
   }
 
@@ -1203,7 +1203,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }));
   }
 
-  #emitReconnectorDiagnostic(
+  #logReconnectorFailure(
     context: ReconnectionContext,
     failurePoint: "setup" | "policy",
     cause: unknown,
@@ -1260,7 +1260,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     transaction.deferReturned(returned);
   }
 
-  #emitDropDetectorDiagnostic(
+  #logDropDetectorFailure(
     scope: Extract<UniplsResourceScope, { type: "connection" }>,
     detector: DropDetectorIdentity,
     boundary: "guard" | "run",
@@ -1399,7 +1399,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
               type: "iterator",
               buffer: buffer as ReturnType<typeof normalizeStreamBuffer>,
               onMessageDropped: (strategy, capacity) => {
-                this.#emitStreamMessageDroppedDiagnostic(scope, strategy, capacity);
+                this.#logStreamMessageDropped(scope, strategy, capacity);
               },
             }
           : {
@@ -1408,7 +1408,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
               policy: callbackError as StreamCallbackErrorPolicy,
               onCallbackError: (cause, policy) => {
                 if (policy === "unsubscribe") scope.failCallback(cause);
-                this.#emitStreamCallbackFailedDiagnostic(scope, cause, policy);
+                this.#logStreamCallbackFailure(scope, cause, policy);
               },
             },
       signal,
@@ -1522,7 +1522,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     );
   }
 
-  #emitStreamCallbackFailedDiagnostic(
+  #logStreamCallbackFailure(
     scope: Readonly<{
       operation: import("./types.ts").OperationId;
       operationType: import("./types.ts").OperationType;
@@ -1541,7 +1541,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }));
   }
 
-  #emitStreamMessageDroppedDiagnostic(
+  #logStreamMessageDropped(
     scope: Readonly<{
       operation: import("./types.ts").OperationId;
       operationType: import("./types.ts").OperationType;
