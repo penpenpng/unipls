@@ -26,8 +26,8 @@ export type StreamBufferOptions =
 /** callback でメッセージを受け取る stream の指定です。 */
 export interface StreamCallbackDelivery<T> {
   /** 一致したメッセージごとに同期的に呼ばれます。戻り値や Promise の完了は待機しません。 */
-  next: (message: T) => unknown;
-  /** `next` が同期的に例外を投げた場合の処理方法です。既定値は `"continue"` です。 */
+  onMessage: (message: T) => unknown;
+  /** `onMessage` が同期的に例外を投げた場合の処理方法です。既定値は `"continue"` です。 */
   callbackError?: StreamCallbackErrorPolicy;
   /** callback delivery では buffer を使用できません。 */
   buffer?: never;
@@ -36,7 +36,7 @@ export interface StreamCallbackDelivery<T> {
 /** AsyncIterable でメッセージを受け取る stream の指定です。 */
 export interface StreamIteratorDelivery {
   /** callback を省略すると single-consumer の AsyncIterable を返します。 */
-  next?: never;
+  onMessage?: never;
   /** callback error policy は callback delivery だけで使用できます。 */
   callbackError?: never;
   /**
