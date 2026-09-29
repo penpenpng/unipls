@@ -203,7 +203,6 @@ export type MessageDeserializationFailedDiagnostic = Readonly<{
   type: "message-deserialization-failed";
   severity: "warning";
   scope: Extract<UniplsDiagnosticScope, { type: "connection" }>;
-  occurredAt: number;
   cause: unknown;
   input: Readonly<{
     kind: "text" | "array-buffer" | "typed-array" | "blob";
@@ -216,7 +215,6 @@ export type MessagePredicateFailedDiagnostic = Readonly<{
   type: "message-predicate-failed";
   severity: "error";
   scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
-  occurredAt: number;
   cause: unknown;
   predicate: "selector" | "terminator";
   policy: PredicateErrorPolicy;
@@ -227,7 +225,6 @@ export type StreamCallbackFailedDiagnostic = Readonly<{
   type: "stream-callback-failed";
   severity: "error";
   scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
-  occurredAt: number;
   cause: unknown;
   policy: import("./async-results.ts").StreamCallbackErrorPolicy;
 }>;
@@ -237,7 +234,6 @@ export type StreamMessageDroppedDiagnostic = Readonly<{
   type: "stream-message-dropped";
   severity: "warning";
   scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
-  occurredAt: number;
   strategy: "latest" | "drop-oldest" | "drop-newest";
   capacity: number;
 }>;
@@ -247,7 +243,6 @@ export type ResourceCleanupFailedDiagnostic = Readonly<{
   type: "resource-cleanup-failed";
   severity: "error";
   scope: UniplsDiagnosticScope;
-  occurredAt: number;
   cause: unknown;
   resource: Readonly<{
     name?: string;
@@ -260,7 +255,6 @@ export type DropDetectorFailedDiagnostic = Readonly<{
   type: "drop-detector-failed";
   severity: "error";
   scope: Extract<UniplsDiagnosticScope, { type: "connection" }>;
-  occurredAt: number;
   cause: unknown;
   detector: DropDetectorIdentity;
   boundary: "guard" | "run";
@@ -272,8 +266,7 @@ export type ReconnectorFailedDiagnostic =
       type: "reconnector-failed";
       severity: "error";
       scope: Extract<UniplsDiagnosticScope, { type: "session" }>;
-      occurredAt: number;
-      context: "initial-open";
+          context: "initial-open";
       failurePoint: "setup" | "policy";
       cause: unknown;
       error: import("./errors.ts").UniplsOpenError;
@@ -282,8 +275,7 @@ export type ReconnectorFailedDiagnostic =
       type: "reconnector-failed";
       severity: "error";
       scope: Extract<UniplsDiagnosticScope, { type: "session" }>;
-      occurredAt: number;
-      context: "recovery";
+          context: "recovery";
       failurePoint: "setup" | "policy";
       cause: unknown;
       error: import("./errors.ts").UniplsDroppedError;
