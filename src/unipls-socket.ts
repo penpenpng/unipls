@@ -13,6 +13,7 @@ import type {
   WebSocketConstructor,
   WebSocketData,
   WebSocketLike,
+  UniplsLog,
 } from "./types.ts";
 
 /** 低レベルWebSocket clientの接続先と変換方法を指定します。 */
@@ -27,6 +28,8 @@ export interface UniplsSocketParams<TInput = WebSocketData, TOutput = WebSocketD
   readonly WebSocket?: WebSocketConstructor;
   /** 接続成立を待つ最大時間をミリ秒で指定します。 */
   readonly timeout?: number;
+  /** 構造化ログを同期的に受け取ります。sink の例外は socket の処理へ伝播しません。 */
+  readonly logSink?: (log: UniplsLog) => void;
 }
 
 /**
@@ -46,6 +49,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
   /** WebSocket 接続の成立を待つ最大時間です。 */
   protected timeout: number;
   #WebSocket: WebSocketConstructor;
+  #logSink?: (log: UniplsLog) => void;
   #epoch: UniplsTransportEpoch = UniplsTransportEpoch.dead();
   #events = new EventBus<UniplsSocketPublicEvents<TOutput> & UniplsSocketInternalEvents>();
   /** 接続単位のevent listenerを登録し、解除関数を返します。 */
@@ -86,11 +90,13 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     deserializer = (data) => data as TOutput,
     WebSocket = (globalThis as { WebSocket?: WebSocketConstructor }).WebSocket,
     timeout = 5000,
+    logSink,
   }: UniplsSocketParams<TInput, TOutput>) {
     this.#url = url;
     this.serialize = serializer;
     this.deserialize = deserializer;
     this.timeout = timeout;
+    this.#logSink = logSink;
 
     if (!WebSocket) {
       throw new UniplsInvalidUsageError(
@@ -133,15 +139,17 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
         const message = this.deserialize(data);
         this.#events.emit("message", Object.freeze({ transportEpochId: epoch.id, message }));
       } catch (error) {
-        this.#events.emit(
-          "error",
-          Object.freeze({
+        this.#emitLog(Object.freeze({
+          level: "warning",
+          event: "message/deserialization",
+          message: "受信メッセージの変換に失敗しました。",
+          context: Object.freeze({
             transportEpochId: epoch.id,
-            error,
             messageSequence,
             input: describeRawInput(data),
           }),
-        );
+          cause: error,
+        }));
       }
     });
 
@@ -473,6 +481,14 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     return result.promise;
   }
 
+  #emitLog(log: UniplsLog): void {
+    try {
+      this.#logSink?.(log);
+    } catch {
+      // log sink の失敗は socket の処理へ逆流させません。
+    }
+  }
+
   #isCurrent(epoch: UniplsTransportEpoch): boolean {
     return this.#epoch === epoch && !epoch.signal.aborted;
   }
@@ -484,12 +500,6 @@ export interface UniplsSocketPublicEvents<TOutput> {
   open: UniplsSocketEventContext;
   /** 変換済みのメッセージを受信したときの情報です。 */
   message: UniplsSocketEventContext & { readonly message: TOutput };
-  /** メッセージ変換に失敗したときの情報です。 */
-  error: UniplsSocketEventContext & {
-    readonly error: unknown;
-    readonly messageSequence: number;
-    readonly input: UniplsSocketInputMetadata;
-  };
   /** 明示的な close が完了したときの情報です。 */
   closed: UniplsSocketEventContext & { readonly close?: Readonly<UniplsSocketCloseMetadata> };
   /** open intent 中に接続を失ったときの情報です。 */
