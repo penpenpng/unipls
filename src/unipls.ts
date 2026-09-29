@@ -816,8 +816,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         type: "message-deserialization-failed",
         severity: "warning",
         scope,
-        occurredAt: Date.now(),
-        cause: error,
+          cause: error,
         input,
       });
       this.#emitDiagnostic(diagnostic);
@@ -1223,7 +1222,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       type: "reconnector-failed" as const,
       severity: "error" as const,
       scope,
-      occurredAt: Date.now(),
       failurePoint,
       cause,
     };
@@ -1259,8 +1257,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           type: "resource-cleanup-failed",
           severity: "error",
           scope: owner,
-          occurredAt: Date.now(),
-          cause,
+              cause,
           resource,
         });
         this.#emitDiagnostic(diagnostic);
@@ -1292,7 +1289,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       type: "drop-detector-failed",
       severity: "error",
       scope,
-      occurredAt: Date.now(),
       cause,
       detector,
       boundary,
@@ -1565,7 +1561,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         operation: scope.operation,
         operationType: scope.operationType,
       }),
-      occurredAt: Date.now(),
       cause,
       policy,
     });
@@ -1591,7 +1586,6 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         operation: scope.operation,
         operationType: scope.operationType,
       }),
-      occurredAt: Date.now(),
       strategy,
       capacity,
     });
@@ -1634,8 +1628,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             operation: scope.operation,
             operationType: scope.operationType,
           }),
-          occurredAt: Date.now(),
-          cause,
+              cause,
           predicate: predicateType,
           policy,
         });
