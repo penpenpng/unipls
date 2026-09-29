@@ -1,5 +1,5 @@
 import { UniplsInvalidUsageError } from "./errors.ts";
-import type { UniplsDiagnosticScope } from "./types.ts";
+import type { UniplsResourceScope } from "./types.ts";
 
 /** 同期処理または PromiseLike として完了する処理です。 */
 export type MaybePromise<T> = T | PromiseLike<T>;
@@ -32,7 +32,7 @@ interface ResourceEntry {
 
 interface CleanupFailure {
   readonly cause: unknown;
-  readonly scope: UniplsDiagnosticScope;
+  readonly scope: UniplsResourceScope;
   readonly name?: string;
   readonly source: ResourceRegistrationSource;
 }
@@ -42,7 +42,7 @@ export class OwnedResourceScope implements ResourceScope {
   readonly #controller = new AbortController();
   readonly #entries: ResourceEntry[] = [];
   readonly #names = new Set<string>();
-  readonly #scope: UniplsDiagnosticScope;
+  readonly #scope: UniplsResourceScope;
   readonly #onCleanupFailure: (failure: CleanupFailure) => void;
   #accepting = true;
   #disposePromise?: Promise<void>;
@@ -60,7 +60,7 @@ export class OwnedResourceScope implements ResourceScope {
   }
 
   constructor(params: {
-    scope: UniplsDiagnosticScope;
+    scope: UniplsResourceScope;
     onCleanupFailure: (failure: CleanupFailure) => void;
     parentSignal?: AbortSignal;
   }) {
