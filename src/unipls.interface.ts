@@ -12,7 +12,7 @@ import type {
   ConnectionId,
   PredicateErrorPolicy,
   SessionId,
-  UniplsDiagnostic,
+  UniplsLog,
   WebSocketConstructor,
   WebSocketData,
 } from "./types.ts";
@@ -38,8 +38,8 @@ export interface UniplsParams<TInput = WebSocketData, TOutput = WebSocketData> {
   reconnector?: UniplsReconnector;
   /** ready な接続を監視する drop detector を登録順に指定します。 */
   dropDetectors?: UniplsDropDetector<TInput, TOutput>[];
-  /** ライブラリが捕捉した診断情報を同期的に受け取ります。sink の例外はライブラリの処理へ伝播しません。 */
-  diagnosticSink?: (diagnostic: UniplsDiagnostic) => void;
+  /** ライブラリの構造化ログを同期的に受け取ります。sink の例外はライブラリの処理へ伝播しません。 */
+  logSink?: (log: UniplsLog) => void;
 }
 
 /** 論理 session が終了するまで維持する resource を登録する context です。 */
