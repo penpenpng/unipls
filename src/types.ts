@@ -179,117 +179,26 @@ export type ReconnectionEngineOutcome =
   | "reconnector-failed"
   | "session-closed";
 
-/** 診断情報が属する公開リソースの範囲です。 */
-export type UniplsDiagnosticScope =
-  | Readonly<{
-      type: "session";
-      session: SessionId;
-    }>
-  | Readonly<{
-      type: "connection";
-      session: SessionId;
-      connection: ConnectionId;
-      messageSequence?: number;
-    }>
-  | Readonly<{
-      type: "operation";
-      session: SessionId;
-      operation: OperationId;
-      operationType: OperationType;
-    }>;
+/** Unipls が出力するログの重要度です。 */
+export type UniplsLogLevel = "debug" | "info" | "warning" | "error";
 
-/** 受信メッセージの変換に失敗したことを通知する診断情報です。 */
-export type MessageDeserializationFailedDiagnostic = Readonly<{
-  type: "message-deserialization-failed";
-  severity: "warning";
-  scope: Extract<UniplsDiagnosticScope, { type: "connection" }>;
-  cause: unknown;
-  input: Readonly<{
-    kind: "text" | "array-buffer" | "typed-array" | "blob";
-    size?: number;
-  }>;
+/** ログの相関と追加情報を保持する context です。 */
+export type UniplsLogContext = Readonly<{
+  session?: SessionId;
+  connection?: ConnectionId;
+  operation?: OperationId;
+  operationType?: OperationType;
+  [key: string]: unknown;
 }>;
 
-/** operation の selector または terminator が失敗したことを通知する診断情報です。 */
-export type MessagePredicateFailedDiagnostic = Readonly<{
-  type: "message-predicate-failed";
-  severity: "error";
-  scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
-  cause: unknown;
-  predicate: "selector" | "terminator";
-  policy: PredicateErrorPolicy;
-}>;
-
-/** stream の callback が同期的に失敗したことを通知する診断情報です。 */
-export type StreamCallbackFailedDiagnostic = Readonly<{
-  type: "stream-callback-failed";
-  severity: "error";
-  scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
-  cause: unknown;
-  policy: import("./async-results.ts").StreamCallbackErrorPolicy;
-}>;
-
-/** lossy buffer policy によってメッセージを破棄したことを通知する診断情報です。 */
-export type StreamMessageDroppedDiagnostic = Readonly<{
-  type: "stream-message-dropped";
-  severity: "warning";
-  scope: Extract<UniplsDiagnosticScope, { type: "operation" }>;
-  strategy: "latest" | "drop-oldest" | "drop-newest";
-  capacity: number;
-}>;
-
-/** resource の解放処理が失敗したことを通知する診断情報です。 */
-export type ResourceCleanupFailedDiagnostic = Readonly<{
-  type: "resource-cleanup-failed";
-  severity: "error";
-  scope: UniplsDiagnosticScope;
-  cause: unknown;
-  resource: Readonly<{
-    name?: string;
-    source: import("./resource-scope.ts").ResourceRegistrationSource;
-  }>;
-}>;
-
-/** drop detector の監督対象 callback または task が失敗したことを通知する診断情報です。 */
-export type DropDetectorFailedDiagnostic = Readonly<{
-  type: "drop-detector-failed";
-  severity: "error";
-  scope: Extract<UniplsDiagnosticScope, { type: "connection" }>;
-  cause: unknown;
-  detector: DropDetectorIdentity;
-  boundary: "guard" | "run";
-}>;
-
-/** reconnector の実行に失敗したことを通知する診断情報です。 */
-export type ReconnectorFailedDiagnostic =
-  | Readonly<{
-      type: "reconnector-failed";
-      severity: "error";
-      scope: Extract<UniplsDiagnosticScope, { type: "session" }>;
-          context: "initial-open";
-      failurePoint: "setup" | "policy";
-      cause: unknown;
-      error: import("./errors.ts").UniplsOpenError;
-    }>
-  | Readonly<{
-      type: "reconnector-failed";
-      severity: "error";
-      scope: Extract<UniplsDiagnosticScope, { type: "session" }>;
-          context: "recovery";
-      failurePoint: "setup" | "policy";
-      cause: unknown;
-      error: import("./errors.ts").UniplsDroppedError;
-    }>;
-
-/** Unipls が継続不能または継続可能な内部失敗を通知する診断情報です。 */
-export type UniplsDiagnostic =
-  | ReconnectorFailedDiagnostic
-  | MessageDeserializationFailedDiagnostic
-  | MessagePredicateFailedDiagnostic
-  | StreamCallbackFailedDiagnostic
-  | StreamMessageDroppedDiagnostic
-  | ResourceCleanupFailedDiagnostic
-  | DropDetectorFailedDiagnostic;
+/** Unipls が log sink へ同期的に渡す構造化ログです。 */
+export interface UniplsLog {
+  readonly level: UniplsLogLevel;
+  readonly event: string;
+  readonly message: string;
+  readonly context?: UniplsLogContext;
+  readonly cause?: unknown;
+}
 
 /** 終了した論理セッション、または未開始状態を表す不変なスナップショットです。 */
 export type ClosedLifecycleSnapshot =
