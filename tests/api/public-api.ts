@@ -7,6 +7,7 @@ import {
   type StreamFinalization,
   type UniplsDropDetector,
   type UniplsParams,
+  type UniplsLog,
   type UniplsProvisioner,
   type UniplsRecoverStrategy,
   type UniplsReconnector,
@@ -26,6 +27,13 @@ const params: UniplsParams<string, string> = {
   WebSocket,
   serializer: (message) => message,
   deserializer: (data) => String(data),
+  logSink: (log: UniplsLog) => {
+    void log.level;
+    void log.event;
+    void log.message;
+    void log.context;
+    void log.cause;
+  },
 };
 const client = new Unipls(params);
 const socketParams: UniplsSocketParams<string, string> = params;

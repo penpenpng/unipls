@@ -70,7 +70,7 @@ const response = await client.request({
 ```ts
 const subscription = client.listen({
   selector: (message) => message.type === "notification",
-  next: (message) => {
+  onMessage: (message) => {
     renderNotification(message);
   },
 });
@@ -110,7 +110,7 @@ try {
 const subscription = client.subscribe({
   query: { type: "subscribe-room", roomId },
   selector: (message) => message.type === "room-event" && message.roomId === roomId,
-  next: (message) => updateRoom(message),
+  onMessage: (message) => updateRoom(message),
 });
 ```
 
@@ -193,7 +193,7 @@ callbackの同期例外も既定では診断を通知して購読を継続しま
 
 ```ts
 const subscription = client.listen({
-  next: consume,
+  onMessage: consume,
   predicateError: "fail",
   callbackError: "unsubscribe",
 });
@@ -212,7 +212,7 @@ client.listen({ buffer: { capacity: 32, overflow: "drop-newest" } });
 
 - 数値は指定件数を保持し、超過時にerrorにします。
 - `"latest"`は最新1件だけを残します。
-- lossy policyでmessageを破棄すると`diagnostic` eventが発生します。
+- lossy policyでmessageを破棄すると`message/overflow`ログが発生します。
 - このbufferはclient内部の速度差を吸収するだけで、peerへのbackpressureは提供しません。
 
 ## streamの終了結果

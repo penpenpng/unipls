@@ -16,16 +16,14 @@ describe("接続試行の分離", () => {
    * // ! 接続が drop し、reconnector が新しい接続試行を開始する
    * // ! その後、古い WebSocket の event や detector の callback が発生する
    * // 古い callback は
-   * // message、diagnostic、drop、lifecycle のいずれも変更しない
+   * // message、log、drop、lifecycle のいずれも変更しない
    * ```
    */
   it("回復試行の開始後は古い接続のイベントを無視する", async () => {
     // 公開 event の observer を登録し、最初の接続を ready にします。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
     const messages: string[] = [];
-    const diagnostics: unknown[] = [];
     scenario.client.on("message", ({ message }) => messages.push(message));
-    scenario.client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
 
     const opening = scenario.beginOpen();
     const first = scenario.transport.connection(0);
@@ -52,7 +50,7 @@ describe("接続試行の分離", () => {
     // 古い処理が lifecycle、公開 event、新しい socket のどれも変更しないことを確認します。
     expect(scenario.client.lifecycle).toBe(reconnecting);
     expect(messages).toEqual([]);
-    expect(diagnostics).toEqual([]);
+    expect(scenario.logs).toEqual([]);
     expect(scenario.transport.connection(1).closeRequests).toEqual([]);
     expect(firstDetector.cleanupCount).toBe(1);
     expect(first.listenerCount("open")).toBe(0);

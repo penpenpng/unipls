@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { Unipls, type UniplsDiagnostic } from "../../src/index.ts";
+import { Unipls, type UniplsLog } from "../../src/index.ts";
 import { ControlledWebSocketServer, flushMicrotasks } from "../support/index.ts";
 
 describe("operation の message dispatch", () => {
@@ -8,7 +8,7 @@ describe("operation の message dispatch", () => {
    * ```ts
    * const opening = client.open({
    *   async setupConnection(ctx) {
-   *     ctx.listen({ selector: isChallenge, next: consumeChallenge });
+   *     ctx.listen({ selector: isChallenge, onMessage: consumeChallenge });
    *     await authenticate();
    *   },
    * });
@@ -36,7 +36,7 @@ describe("operation の message dispatch", () => {
       setupConnection: async (context) => {
         context.listen({
           selector: () => true,
-          next: (message) => provisioningMessages.push(message),
+          onMessage: (message) => provisioningMessages.push(message),
         });
         await provisioningGate;
       },
@@ -108,12 +108,12 @@ describe("operation の message dispatch", () => {
    */
   it("predicate failure を該当 operation に隔離して policy と診断を適用する", async () => {
     const transport = new ControlledWebSocketServer();
+    const diagnostics: UniplsLog[] = [];
     const client = new Unipls<string, string>({
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
+      logSink: (log) => diagnostics.push(log),
     });
-    const diagnostics: UniplsDiagnostic[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const opening = client.open();
     const socket = transport.current;
     socket.emitOpen();
@@ -137,20 +137,18 @@ describe("operation の message dispatch", () => {
     await expect(continued).resolves.toBe("good");
     await flushMicrotasks();
     expect(diagnostics).toHaveLength(2);
-    expect(diagnostics.map((diagnostic) => diagnostic.type)).toEqual([
-      "message-predicate-failed",
-      "message-predicate-failed",
+    expect(diagnostics.map((log) => [log.level, log.event, log.context?.policy])).toEqual([
+      ["warning", "operation/selection", "continue"],
+      ["error", "operation/selection", "fail"],
     ]);
     expect(
       diagnostics.every(
-        (diagnostic) =>
-          diagnostic.type === "message-predicate-failed" &&
-          diagnostic.cause === cause &&
-          Object.isFrozen(diagnostic) &&
-          Object.isFrozen(diagnostic.scope) &&
-          !("message" in diagnostic) &&
-          !("connection" in diagnostic.scope) &&
-          !("messageSequence" in diagnostic.scope),
+        (log) =>
+          log.cause === cause &&
+          Object.isFrozen(log) &&
+          Object.isFrozen(log.context) &&
+          !("connection" in (log.context ?? {})) &&
+          !("messageSequence" in (log.context ?? {})),
       ),
     ).toBe(true);
     const closing = client.close();
@@ -162,7 +160,7 @@ describe("operation の message dispatch", () => {
    * ```ts
    * const response = client.next({ selector: isValidMessage });
    * // ! deserializer が最初の raw message で例外を投げる
-   * // connection-scoped diagnostic が通知され、response は終了しない
+   * // connection 情報を含むログが通知され、response は終了しない
    * // ! 次の raw message は正常に変換できる
    * await response; // 正常な後続 message で解決する
    * ```
@@ -170,16 +168,16 @@ describe("operation の message dispatch", () => {
   it("deserializer failure の message だけを破棄して後続 message を処理する", async () => {
     const transport = new ControlledWebSocketServer();
     const cause = new Error("deserialization failed");
-    const diagnostics: UniplsDiagnostic[] = [];
+    const diagnostics: UniplsLog[] = [];
     const client = new Unipls<string, string>({
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
+      logSink: (log) => diagnostics.push(log),
       deserializer: (data) => {
         if (data === "bad") throw cause;
         return String(data);
       },
     });
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const opening = client.open();
     const socket = transport.current;
     socket.emitOpen();
@@ -193,14 +191,17 @@ describe("operation の message dispatch", () => {
     await flushMicrotasks();
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({
-      type: "message-deserialization-failed",
-      severity: "warning",
+      event: "message/deserialization",
+      level: "warning",
       cause,
-      scope: { type: "connection", messageSequence: 1 },
-      input: { kind: "text", size: 3 },
+      context: { messageSequence: 1, input: { kind: "text", size: 3 } },
     });
+    const lifecycle = client.lifecycle;
+    if (lifecycle.phase !== "open") throw new Error("Expected open lifecycle");
+    expect(diagnostics[0]?.context?.session).toBe(lifecycle.session);
+    expect(diagnostics[0]?.context?.connection).toBe(lifecycle.connection);
     expect(Object.isFrozen(diagnostics[0])).toBe(true);
-    expect(Object.isFrozen(diagnostics[0]?.scope)).toBe(true);
+    expect(Object.isFrozen(diagnostics[0]?.context)).toBe(true);
     const closing = client.close();
     socket.emitClose();
     await closing;

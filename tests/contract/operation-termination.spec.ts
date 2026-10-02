@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { Unipls, UniplsTimeoutError, type UniplsDiagnostic } from "../../src/index.ts";
+import { Unipls, UniplsTimeoutError, type UniplsLog } from "../../src/index.ts";
 import {
   ControlledProvisioner,
   ControlledWebSocketServer,
@@ -169,12 +169,12 @@ describe("operation の timeout、abort、resource 解放", () => {
    */
   it("request の predicate failure を policy に従って隔離する", async () => {
     const transport = new ControlledWebSocketServer();
+    const diagnostics: UniplsLog[] = [];
     const client = new Unipls<string, string>({
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
+      logSink: (log) => diagnostics.push(log),
     });
-    const diagnostics: UniplsDiagnostic[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const opening = client.open();
     const socket = transport.current;
     socket.emitOpen();
@@ -201,9 +201,10 @@ describe("operation の timeout、abort、resource 解放", () => {
     await expect(continued).resolves.toBe("good");
     await flushMicrotasks();
     expect(diagnostics).toHaveLength(2);
-    expect(diagnostics.every((diagnostic) => diagnostic.type === "message-predicate-failed")).toBe(
-      true,
-    );
+    expect(diagnostics.map((log) => [log.event, log.level])).toEqual([
+      ["operation/selection", "warning"],
+      ["operation/selection", "error"],
+    ]);
     const closing = client.close();
     socket.emitClose();
     await closing;

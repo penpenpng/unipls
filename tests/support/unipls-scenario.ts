@@ -1,4 +1,4 @@
-import { Unipls, type UniplsLifecycleSnapshot } from "../../src/index.ts";
+import { Unipls, type UniplsLifecycleSnapshot, type UniplsLog } from "../../src/index.ts";
 import {
   ControlledWebSocketServer,
   type ControlledCloseEventInit,
@@ -18,6 +18,7 @@ export class UniplsRaceScenario {
   readonly reconnector = new ControlledReconnector();
   readonly detectors: ControlledDropDetector[];
   readonly client: Unipls<string, string>;
+  readonly logs: UniplsLog[] = [];
 
   constructor({
     detectorCount = 2,
@@ -32,6 +33,7 @@ export class UniplsRaceScenario {
       WebSocket: this.transport.WebSocket,
       ...(reconnectable ? { reconnector: this.reconnector } : {}),
       dropDetectors: this.detectors,
+      logSink: (log) => this.logs.push(log),
     });
   }
 

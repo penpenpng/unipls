@@ -9,7 +9,7 @@ import {
   type SessionSetupContext,
   type StreamFinalization,
   type SubscriptionHandle,
-  type UniplsDiagnostic,
+  type UniplsLog,
 } from "../../src/index.ts";
 import {
   ControlledReconnector,
@@ -24,7 +24,7 @@ describe("provisioning capability と resource scope", () => {
    * await client.open({
    *   async setupConnection(ctx) {
    *     await ctx.cast("authenticate");
-   *     const subscription = ctx.subscribe({ query: "restore", selector, next: consume });
+   *     const subscription = ctx.subscribe({ query: "restore", selector, onMessage: consume });
    *     // ! ready前に応答が届く
    *     await subscription.closed;
    *   },
@@ -62,7 +62,7 @@ describe("provisioning capability と resource scope", () => {
         subscription = ctx.subscribe({
           query: "restore",
           selector: (message) => message === "restored",
-          next: (message) => received.push(message),
+          onMessage: (message) => received.push(message),
         });
         setupStarted();
         requestedResponse = await requested;
@@ -91,7 +91,7 @@ describe("provisioning capability と resource scope", () => {
     expect(() => context.request({ query: "late", selector: () => true })).toThrow(
       UniplsInvalidUsageError,
     );
-    expect(() => context.subscribe({ query: "late", selector: () => true, next() {} })).toThrow(
+    expect(() => context.subscribe({ query: "late", selector: () => true, onMessage() {} })).toThrow(
       UniplsInvalidUsageError,
     );
 
@@ -213,22 +213,22 @@ describe("provisioning capability と resource scope", () => {
    *     throw setupError;
    *   },
    * });
-   * // setupErrorをopen failureのcauseに保ち、cleanup失敗は個別diagnosticにする
+   * // setupErrorをopen failureのcauseに保ち、cleanup失敗は個別ログにする
    * ```
    */
   it("setup failureでtransactionだけをLIFO rollbackしてcleanup失敗を診断する", async () => {
     // 同期・非同期で失敗するdisposerと元のsetup errorを用意します。
     const transport = new ControlledWebSocketServer();
+    const diagnostics: UniplsLog[] = [];
     const client = new Unipls<string, string>({
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
+      logSink: (log) => diagnostics.push(log),
     });
     const setupError = new Error("setup failed");
     const firstCleanupError = new Error("third cleanup failed");
     const secondCleanupError = new Error("second cleanup failed");
     const order: string[] = [];
-    const diagnostics: UniplsDiagnostic[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const opening = client.open({
       setupConnection(ctx) {
         ctx.defer(
@@ -267,28 +267,23 @@ describe("provisioning capability と resource scope", () => {
     expect(order).toEqual(["third", "second:start", "second:end", "first"]);
     await flushMicrotasks();
     expect(
-      diagnostics.map((diagnostic) =>
-        diagnostic.type === "resource-cleanup-failed"
-          ? {
-              cause: diagnostic.cause,
-              name: diagnostic.resource.name,
-              source: diagnostic.resource.source,
-            }
-          : diagnostic.type,
-      ),
+      diagnostics.map((log) => ({
+        event: log.event,
+        cause: log.cause,
+        name: log.context?.resourceName,
+        source: log.context?.resourceSource,
+      })),
     ).toEqual([
-      { cause: firstCleanupError, name: "third", source: "defer" },
-      { cause: secondCleanupError, name: undefined, source: "defer" },
+      { event: "resource/cleanup", cause: firstCleanupError, name: "third", source: "defer" },
+      { event: "resource/cleanup", cause: secondCleanupError, name: undefined, source: "defer" },
     ]);
     expect(
       diagnostics.every(
-        (diagnostic) =>
-          diagnostic.type === "resource-cleanup-failed" &&
-          Object.isFrozen(diagnostic) &&
-          Object.isFrozen(diagnostic.scope) &&
-          Object.isFrozen(diagnostic.resource) &&
-          !("disposer" in diagnostic.resource) &&
-          !("registrationIndex" in diagnostic.resource),
+        (log) =>
+          Object.isFrozen(log) &&
+          Object.isFrozen(log.context) &&
+          !("disposer" in (log.context ?? {})) &&
+          !("registrationIndex" in (log.context ?? {})),
       ),
     ).toBe(true);
   });
@@ -448,7 +443,7 @@ describe("provisioning capability と resource scope", () => {
       const transport = new ControlledWebSocketServer();
       const reconnector = new ControlledReconnector();
       const cause = new Error(`${boundary} failed`);
-      const diagnostics: UniplsDiagnostic[] = [];
+      const diagnostics: UniplsLog[] = [];
       let trigger!: () => void;
       let survivorDrop!: () => void;
       let detectorSignal!: AbortSignal;
@@ -460,6 +455,7 @@ describe("provisioning capability と resource scope", () => {
         url: "wss://unipls.test/socket",
         WebSocket: transport.WebSocket,
         reconnector,
+        logSink: (log) => diagnostics.push(log),
         dropDetectors: [
           {
             name: "supervised",
@@ -488,7 +484,6 @@ describe("provisioning capability と resource scope", () => {
           },
         ],
       });
-      client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
       const opening = client.open({ setupConnection() {} });
       const socket = transport.current;
       socket.emitOpen();
@@ -505,19 +500,15 @@ describe("provisioning capability と resource scope", () => {
       expect(client.lifecycle.phase).toBe("open");
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]).toMatchObject({
-        type: "drop-detector-failed",
-        severity: "error",
+        event: "resilience/drop-detection",
+        level: "warning",
         cause,
-        boundary,
-        detector: { registrationIndex: 0, name: "supervised" },
+        context: { boundary, detector: { registrationIndex: 0, name: "supervised" } },
       });
-      if (diagnostics[0]?.type !== "drop-detector-failed") {
-        throw new Error("drop detector failure diagnosticがありません");
-      }
-      expect(diagnostics[0].detector).toBe(detectorIdentity);
+      expect(diagnostics[0]?.context?.detector).toBe(detectorIdentity);
       expect(Object.isFrozen(diagnostics[0])).toBe(true);
-      expect(Object.isFrozen(diagnostics[0].scope)).toBe(true);
-      expect(Object.isFrozen(diagnostics[0].detector)).toBe(true);
+      expect(Object.isFrozen(diagnostics[0]?.context)).toBe(true);
+      expect(Object.isFrozen(diagnostics[0]?.context?.detector)).toBe(true);
 
       // 生存しているdetectorは引き続き同じconnectionを監視し、dropを報告できます。
       survivorDrop();

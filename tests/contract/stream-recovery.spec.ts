@@ -13,7 +13,7 @@ describe("stream の recovery", () => {
   /**
    * ```ts
    * // ! clientがrecovery中で次の接続を待っている
-   * const subscription = client.listen({ next: consume, timeout: 100 });
+   * const subscription = client.listen({ onMessage: consume, timeout: 100 });
    * // provisioning中のmessageはconsumeへ届かない
    * // ! 代替接続がreadyになり、その後application messageが届く
    * // ready後だけconsumeへ届き、timeoutは最初の受付時から継続する
@@ -31,7 +31,7 @@ describe("stream の recovery", () => {
       const recovery = scenario.reconnector.invocations.take();
       const received: string[] = [];
       const subscription = scenario.client.listen({
-        next: (message) => received.push(message),
+        onMessage: (message) => received.push(message),
         timeout: 100,
       });
       await vi.advanceTimersByTimeAsync(90);

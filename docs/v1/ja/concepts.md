@@ -72,9 +72,9 @@ connectionを再確立できることと、送信済みのcommandを安全に再
 
 ## 終了と診断を分ける
 
-operationを続けられない失敗は、Promiseのrejectまたはstreamの終了結果になります。一方、一つのmessageの変換失敗やobserver callbackの例外など、他の処理を継続できる失敗は`diagnostic` eventで通知されます。
+operationを続けられない失敗は、Promiseのrejectまたはstreamの終了結果になります。一つのmessageの変換失敗やcallbackの例外などは、設定した`logSink`へ同期的に通知されます。
 
-diagnosticにはapplication message本体を含めません。監視先へ機密情報が意図せず流れないよう、operation ID、処理方針、raw inputの種類やsizeなど、診断に必要なmetadataだけを公開します。
+message関連ログにはapplication message本体を含めません。監視先へ機密情報が意図せず流れないよう、operation ID、処理方針、raw inputの種類やsizeなど、診断に必要なmetadataだけを公開します。
 
 詳しくは[エラーと診断](./errors.md)を参照してください。
 

@@ -11,7 +11,7 @@ import {
   type ConnectionAttemptSnapshot,
   type ConnectionId,
   type SessionId,
-  type UniplsDiagnostic,
+  type UniplsLog,
   type UniplsDrop,
 } from "../../src/index.ts";
 import {
@@ -20,7 +20,7 @@ import {
   UniplsRaceScenario,
 } from "../support/index.ts";
 
-describe("public event、error、diagnostic", () => {
+describe("public event、error、log", () => {
   /**
    * ```ts
    * const stop = client.on("open", observeOnce, { once: true });
@@ -208,19 +208,17 @@ describe("public event、error、diagnostic", () => {
 
   /**
    * ```ts
-   * client.on("diagnostic", () => { throw observerError; });
-   * client.on("diagnostic", collectDiagnostic);
+   * const client = new Unipls({ url, logSink: () => { throw observerError; } });
    * const response = client.next({ selector });
    * // ! deserializerがraw messageで失敗する
    * // message破棄の確定後、次のmicrotaskで全observerを相互に隔離して通知する
    * ```
    */
-  it("diagnosticをmicrotaskで隔離fan-outしconsoleへ出力しない", async () => {
-    // 最初のobserverだけが失敗する診断経路と、後続messageを待つoperationを作ります。
+  it("同期 log sink の例外を処理から隔離しconsoleへ出力しない", async () => {
     const transport = new ControlledWebSocketServer();
     const cause = new Error("deserialization failed");
-    const observerCause = new Error("diagnostic observer failed");
-    const diagnostics: UniplsDiagnostic[] = [];
+    const observerCause = new Error("log sink failed");
+    const diagnostics: UniplsLog[] = [];
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -231,20 +229,20 @@ describe("public event、error、diagnostic", () => {
         if (data === "bad") throw cause;
         return String(data);
       },
+      logSink(log) {
+        diagnostics.push(log);
+        throw observerCause;
+      },
     });
-    client.on("diagnostic", () => {
-      throw observerCause;
-    });
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const opening = client.open();
     const socket = transport.current;
     socket.emitOpen();
     await opening;
     const response = client.next({ selector: (message) => message === "good" });
 
-    // ! 変換失敗は同期処理へ逆流せず、diagnosticはまだ配送されません。
+    // ! 変換失敗のログは同期配送され、sinkの例外は処理へ逆流しません。
     expect(() => socket.emitMessage("bad")).not.toThrow();
-    expect(diagnostics).toEqual([]);
+    expect(diagnostics).toHaveLength(1);
     socket.emitMessage("good");
     await expect(response).resolves.toBe("good");
     await flushMicrotasks();
@@ -252,17 +250,14 @@ describe("public event、error、diagnostic", () => {
     // 先行observerのthrow後も同じ不変snapshotを後続observerへ配送します。
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({
-      type: "message-deserialization-failed",
+      event: "message/deserialization",
+      level: "warning",
       cause,
-      input: { kind: "text", size: 3 },
+      context: { input: { kind: "text", size: 3 } },
     });
     expect(Object.isFrozen(diagnostics[0])).toBe(true);
-    if (diagnostics[0]?.type !== "message-deserialization-failed") {
-      throw new Error("deserialization diagnosticがありません");
-    }
-    expect(Object.isFrozen(diagnostics[0].scope)).toBe(true);
-    expect(Object.isFrozen(diagnostics[0].input)).toBe(true);
-    expect("message" in diagnostics[0]).toBe(false);
+    expect(Object.isFrozen(diagnostics[0]?.context)).toBe(true);
+    expect(Object.isFrozen(diagnostics[0]?.context?.input)).toBe(true);
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();

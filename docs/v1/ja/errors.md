@@ -72,41 +72,28 @@ if (result.ok) {
 
 正常終了は`terminated`、`unsubscribed`、`closed`です。異常終了は`aborted`、`timeout`、`open-error`、`dropped`、`buffer-overflow`、`callback-error`、`fatal-error`です。
 
-## diagnostic event
+## 構造化ログ
 
-message単位の変換失敗、callbackの例外、lossy bufferによる破棄、extensionやcleanupの失敗などは、有限な`UniplsDiagnostic` unionとして通知されます。
+message単位の変換失敗、callbackの例外、lossy bufferによる破棄、extensionやcleanupの失敗などは、client作成時に指定する同期`logSink`へ渡されます。`Unipls`と`UniplsSocket`の両方で指定できます。
 
 ```ts
-const stop = client.on("diagnostic", (diagnostic) => {
-  switch (diagnostic.type) {
-    case "message-deserialization-failed":
-      logger.warn("受信値を変換できませんでした", diagnostic);
-      break;
-    case "message-predicate-failed":
-      logger.error("selectorが失敗しました", diagnostic);
-      break;
-    case "stream-callback-failed":
-      logger.error("stream callbackが失敗しました", diagnostic);
-      break;
-    case "stream-message-dropped":
-      metrics.increment("stream.message_dropped");
-      break;
-    case "resource-cleanup-failed":
-      logger.error("resource cleanupが失敗しました", diagnostic);
-      break;
-    case "drop-detector-failed":
-      logger.error("drop detectorが停止しました", diagnostic);
-      break;
-    case "reconnector-failed":
-      logger.error("reconnectorが失敗しました", diagnostic);
-      break;
-  }
+import { Unipls, type UniplsLog } from "unipls";
+
+const client = new Unipls({
+  url,
+  logSink: (log: UniplsLog) => {
+    logger.log(log.level, log.message, {
+      event: log.event,
+      ...log.context,
+      cause: log.cause,
+    });
+  },
 });
 ```
 
-diagnostic listenerがない場合、libraryはconsoleへ代替出力しません。必要な監視基盤へ明示的に接続してください。
+ログの公開契約は`level`、`event`、`message`、任意の`context`と`cause`です。`event`と`context`は拡張可能で、個別のevent名やmetadataの網羅的なunionではありません。`debug`は詳細な正常経路、`info`は重要な状態変化、`warning`は処理を継続できる異常や情報損失、`error`は処理単位や必須のsubsystemの失敗を表します。sinkの例外はlibraryへ伝播せず、sinkを省略してもconsoleへ代替出力しません。
 
-### diagnosticがoperationを終了するとは限らない
+### ログがoperationを終了するとは限らない
 
 既定では、次の失敗を他のmessageやconsumerから隔離し、処理を継続します。
 
@@ -120,7 +107,7 @@ diagnostic listenerがない場合、libraryはconsoleへ代替出力しませ�
 
 ### message本体を含めない
 
-診断収集先へ機密情報が流れないよう、message関連diagnosticはapplication message本体を含みません。
+ログ収集先へ機密情報が流れないよう、message関連ログはapplication message本体を含みません。
 
 - deserialization failure: connection内のsequence、raw inputのkindとsize
 - predicate/callback failure: operation scope、policy、cause
@@ -130,7 +117,7 @@ diagnostic listenerがない場合、libraryはconsoleへ代替出力しませ�
 
 ## 公開event
 
-高レベルclientで購読できるeventは次の8種類です。
+高レベルclientで購読できるeventは次の7種類です。
 
 | event        | 通知されるとき                                      |
 | ------------ | --------------------------------------------------- |
@@ -141,7 +128,6 @@ diagnostic listenerがない場合、libraryはconsoleへ代替出力しませ�
 | `closed`     | 論理sessionが終了した                               |
 | `lifecycle`  | lifecycle snapshotが遷移した                        |
 | `reconnect`  | replacement connectionがreadyになった               |
-| `diagnostic` | library境界で継続可能または継続不能な失敗を捕捉した |
 
 ```ts
 const stop = client.on("message", ({ message, session, connection }) => {
@@ -151,7 +137,7 @@ const stop = client.on("message", ({ message, session, connection }) => {
 stop();
 ```
 
-event listenerの例外は、他のlistenerやclient lifecycleから隔離されます。diagnosticは元の処理結果を確定した後のmicrotaskで通知されます。
+event listenerの例外は、他のlistenerやclient lifecycleから隔離されます。`logSink`はログの発生箇所で同期的に呼ばれます。
 
 ## 低レベルsocketのerror
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { UniplsBufferOverflowError, type UniplsDiagnostic } from "../../src/index.ts";
+import { UniplsBufferOverflowError } from "../../src/index.ts";
 import { createReadyClient, flushMicrotasks } from "../support/index.ts";
 
 describe("stream buffer", () => {
@@ -14,9 +14,7 @@ describe("stream buffer", () => {
    * ```
    */
   it("既定 capacity 64 の境界を超えると重複診断なしで buffer overflow になる", async () => {
-    const { client, socket, close } = await createReadyClient();
-    const diagnostics: UniplsDiagnostic[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
+    const { client, socket, close, logs } = await createReadyClient();
     const messages = client.listen({});
     let settled = false;
     void messages.closed.then(() => {
@@ -37,7 +35,7 @@ describe("stream buffer", () => {
     expect(finalization.error).toBeInstanceOf(UniplsBufferOverflowError);
     const iterator = messages[Symbol.asyncIterator]();
     await expect(iterator.next()).rejects.toBe(finalization.error);
-    expect(diagnostics).toEqual([]);
+    expect(logs).toEqual([]);
     await close();
   });
 
@@ -65,13 +63,11 @@ describe("stream buffer", () => {
    * const oldest = client.listen({ buffer: { capacity: 2, overflow: "drop-oldest" } });
    * const newest = client.listen({ buffer: { capacity: 2, overflow: "drop-newest" } });
    * // ! 各bufferのcapacityを超えるメッセージが届く
-   * // policyどおりのメッセージを保持し、破棄1件ごとにwarning diagnosticを通知する
+   * // policyどおりのメッセージを保持し、破棄1件ごとにwarningログを通知する
    * ```
    */
   it("lossy buffer policy を適用して破棄ごとの診断を通知する", async () => {
-    const { client, socket, close } = await createReadyClient();
-    const diagnostics: UniplsDiagnostic[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
+    const { client, socket, close, logs } = await createReadyClient();
     const latest = client.listen({
       selector: (message) => message.startsWith("L"),
       buffer: "latest",
@@ -99,28 +95,19 @@ describe("stream buffer", () => {
     await expect(newestIterator.next()).resolves.toEqual({ done: false, value: "N1" });
     await expect(newestIterator.next()).resolves.toEqual({ done: false, value: "N2" });
     expect(
-      diagnostics.map((diagnostic) =>
-        diagnostic.type === "stream-message-dropped"
-          ? {
-              severity: diagnostic.severity,
-              strategy: diagnostic.strategy,
-              capacity: diagnostic.capacity,
-              hasMessage: "message" in diagnostic,
-            }
-          : diagnostic.type,
-      ),
+      logs.map((log) => ({
+        level: log.level,
+        event: log.event,
+        strategy: log.context?.strategy,
+        capacity: log.context?.capacity,
+      })),
     ).toEqual([
-      { severity: "warning", strategy: "latest", capacity: 1, hasMessage: false },
-      { severity: "warning", strategy: "drop-oldest", capacity: 2, hasMessage: false },
-      { severity: "warning", strategy: "drop-newest", capacity: 2, hasMessage: false },
+      { level: "warning", event: "message/overflow", strategy: "latest", capacity: 1 },
+      { level: "warning", event: "message/overflow", strategy: "drop-oldest", capacity: 2 },
+      { level: "warning", event: "message/overflow", strategy: "drop-newest", capacity: 2 },
     ]);
     expect(
-      diagnostics.every(
-        (diagnostic) =>
-          diagnostic.type === "stream-message-dropped" &&
-          Object.isFrozen(diagnostic) &&
-          Object.isFrozen(diagnostic.scope),
-      ),
+      logs.every((log) => Object.isFrozen(log) && Object.isFrozen(log.context)),
     ).toBe(true);
     latest.unsubscribe();
     oldest.unsubscribe();
@@ -132,13 +119,13 @@ describe("stream buffer", () => {
   /**
    * ```ts
    * const latest = client.listen({ buffer: "latest" });
-   * // diagnostic listenerは登録しない
+   * // logSinkは時刻を必要としない
    * // ! buffer capacityを超えるメッセージが届く
-   * // latestの保持値は更新するが、診断recordは生成しない
+   * // latestの保持値は更新され、ログに時刻は含まれない
    * ```
    */
-  it("診断 listener がない lossy buffer では診断 record 生成を省略する", async () => {
-    const { client, socket, close } = await createReadyClient();
+  it("lossy buffer のログに時刻を含めない", async () => {
+    const { client, socket, close, logs } = await createReadyClient();
     const messages = client.listen({ buffer: "latest" });
     const now = vi.spyOn(Date, "now");
     now.mockClear();
@@ -147,6 +134,8 @@ describe("stream buffer", () => {
     socket.emitMessage("old");
     socket.emitMessage("latest");
     expect(now).not.toHaveBeenCalled();
+    expect(logs).toHaveLength(1);
+    expect("occurredAt" in logs[0]!).toBe(false);
     now.mockRestore();
     const iterator = messages[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({ done: false, value: "latest" });

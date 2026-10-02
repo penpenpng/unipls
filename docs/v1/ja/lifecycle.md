@@ -136,7 +136,7 @@ setupConnection(ctx) {
 }
 ```
 
-cleanupが失敗しても、残りのcleanupと本来のclose/drop処理は継続します。失敗は`resource-cleanup-failed` diagnosticとして観測できます。
+cleanupが失敗しても、残りのcleanupと本来のclose/drop処理は継続します。失敗は`resource/cleanup`ログとして観測できます。
 
 ## openとcloseの境界
 

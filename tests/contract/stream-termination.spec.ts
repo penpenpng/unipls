@@ -39,7 +39,7 @@ describe("stream の終了結果", () => {
 
   /**
    * ```ts
-   * const callbackStream = client.listen({ next: consume });
+   * const callbackStream = client.listen({ onMessage: consume });
    * const iterableStream = client.listen({});
    * await client.close();
    * // 両方のclosedは { ok: true, reason: "closed" }
@@ -53,7 +53,7 @@ describe("stream の終了結果", () => {
       WebSocket: transport.WebSocket,
     });
     const socket = await openClient(client, transport);
-    const callbackStream = client.listen({ next: () => {} });
+    const callbackStream = client.listen({ onMessage: () => {} });
     const iterableStream = client.listen({});
     const pending = iterableStream[Symbol.asyncIterator]().next();
     const closing = client.close();

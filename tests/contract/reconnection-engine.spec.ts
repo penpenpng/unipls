@@ -4,7 +4,6 @@ import {
   UniplsClosedError,
   UniplsDroppedError,
   UniplsOpenError,
-  type UniplsDiagnostic,
 } from "../../src/index.ts";
 import { flushMicrotasks, UniplsRaceScenario } from "../support/index.ts";
 
@@ -164,12 +163,12 @@ describe("再接続エンジン", () => {
    *   },
    * };
    * const client = new Unipls({ url, reconnector });
-   * client.on("diagnostic", ({ error, cause }) => {
+   * const client = new Unipls({ url, logSink: ({ context, cause }) => {
    *   // error は open() が投げる UniplsOpenError と同じ参照で、cause は policyError
    * });
    * const opening = client.open();
    * // ! 初回接続が失敗し、reconnector.setup() が呼ばれる
-   * await opening; // diagnostic.error と同じ UniplsOpenError を投げる
+   * await opening; // log.context.error と同じ UniplsOpenError を投げる
    * ```
    */
   it.each([
@@ -181,8 +180,6 @@ describe("再接続エンジン", () => {
       // reconnector が同期 throw または非同期 reject する初回失敗を作ります。
       const scenario = new UniplsRaceScenario({ detectorCount: 0 });
       const cause = new Error(`${failurePoint} failed`);
-      const diagnostics: UniplsDiagnostic[] = [];
-      scenario.client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
       if (reject) scenario.reconnector.rejectNextSetup(cause);
       else scenario.reconnector.failNextSetup(cause);
       const opening = scenario.beginOpen();
@@ -193,22 +190,20 @@ describe("再接続エンジン", () => {
       );
       await flushMicrotasks();
 
-      // open、lifecycle、diagnostic が同じ原因と terminal error を共有します。
+      // open、lifecycle、log が同じ原因と terminal error を共有します。
       if (!error) throw new Error("Expected open failure");
       expect(error).toMatchObject({ outcome: "reconnector-failed", cause });
       expect(error.stage).toBeUndefined();
-      expect(diagnostics).toHaveLength(1);
-      expect(diagnostics[0]).toMatchObject({
-        type: "reconnector-failed",
-        context: "initial-open",
-        failurePoint,
+      expect(scenario.logs).toHaveLength(1);
+      expect(scenario.logs[0]).toMatchObject({
+        event: "resilience/reconnection",
+        level: "error",
+        context: { origin: "initial", failurePoint, error },
         cause,
       });
-      if (diagnostics[0]?.type !== "reconnector-failed") throw new Error("Expected diagnostic");
-      expect(diagnostics[0].error).toBe(error);
-      expect(diagnostics[0].cause).toBe(error.cause);
-      expect(Object.isFrozen(diagnostics[0])).toBe(true);
-      expect(Object.isFrozen(diagnostics[0].scope)).toBe(true);
+      expect(scenario.logs[0]?.cause).toBe(error.cause);
+      expect(Object.isFrozen(scenario.logs[0])).toBe(true);
+      expect(Object.isFrozen(scenario.logs[0]?.context)).toBe(true);
     },
   );
 
@@ -352,7 +347,7 @@ describe("再接続エンジン", () => {
    * const client = new Unipls({ url, reconnector });
    * await client.open();
    * const waiting = client.next({ selector, retry: "wait" });
-   * client.on("diagnostic", ({ error }) => {
+   * const client = new Unipls({ url, logSink: ({ context }) => {
    *   // error は waiting と closed event が受け取る UniplsDroppedError と同じ参照
    * });
    * // ! ready 接続が drop し、回復のために呼ばれた setup() が reject する
@@ -363,9 +358,7 @@ describe("再接続エンジン", () => {
     // ready 接続の drop 後に policy Promise を reject させます。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const cause = new Error("policy rejected");
-    const diagnostics: UniplsDiagnostic[] = [];
     const closed: UniplsDroppedError[] = [];
-    scenario.client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     scenario.client.on("closed", ({ error }) => {
       if (error instanceof UniplsDroppedError) closed.push(error);
     });
@@ -382,15 +375,13 @@ describe("再接続エンジン", () => {
     // session と診断が同じ dropped error を保持して一度だけ終了します。
     expect(closed).toHaveLength(1);
     expect(closed[0]).toMatchObject({ outcome: "reconnector-failed", cause });
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({
-      type: "reconnector-failed",
-      context: "recovery",
-      failurePoint: "policy",
+    expect(scenario.logs).toHaveLength(1);
+    expect(scenario.logs[0]).toMatchObject({
+      event: "resilience/reconnection",
+      level: "error",
+      context: { origin: "recovery", failurePoint: "policy", error: closed[0] },
       cause,
     });
-    if (diagnostics[0]?.type !== "reconnector-failed") throw new Error("Expected diagnostic");
-    expect(diagnostics[0].error).toBe(closed[0]);
     expect(operationError).toBe(closed[0]);
     expect(scenario.client.lifecycle).toMatchObject({
       phase: "closed",

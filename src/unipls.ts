@@ -380,7 +380,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             }
           : {
               type: "callback",
-              next: callback,
+              onMessage: callback,
               policy: callbackError as StreamCallbackErrorPolicy,
               onCallbackError: (cause, policy) => {
                 if (policy === "unsubscribe") scope.failCallback(cause);
@@ -1211,7 +1211,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   ): void {
     this.#emitLog(Object.freeze({
       level: "error",
-      event: "connection/recovery",
+      event: "resilience/reconnection",
       message: "接続回復処理に失敗しました。",
       context: Object.freeze({
         session: context.session,
@@ -1268,8 +1268,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   ): void {
     if (!this.#logSink) return;
     this.#emitLog(Object.freeze({
-      level: "error",
-      event: "connection/detection",
+      level: "warning",
+      event: "resilience/drop-detection",
       message: "接続 drop の検出処理に失敗しました。",
       context: Object.freeze({ ...scope, detector, boundary }),
       cause,
@@ -1404,7 +1404,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
             }
           : {
               type: "callback",
-              next: callback,
+              onMessage: callback,
               policy: callbackError as StreamCallbackErrorPolicy,
               onCallbackError: (cause, policy) => {
                 if (policy === "unsubscribe") scope.failCallback(cause);
@@ -1533,7 +1533,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   ): void {
     if (!this.#logSink) return;
     this.#emitLog(Object.freeze({
-      level: "error",
+      level: policy === "continue" ? "warning" : "error",
       event: "operation/message-handler",
       message: "message handler の実行に失敗しました。",
       context: Object.freeze({ ...scope, policy }),
@@ -1553,7 +1553,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     if (!this.#logSink) return;
     this.#emitLog(Object.freeze({
       level: "warning",
-      event: "operation/message-drop",
+      event: "message/overflow",
       message: "buffer policy により message が破棄されました。",
       context: Object.freeze({ ...scope, strategy, capacity }),
     }));
@@ -1587,8 +1587,8 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       if (policy === "fail") onPredicateFailure(cause);
       if (this.#logSink) {
         this.#emitLog(Object.freeze({
-          level: "error",
-          event: predicateType === "selector" ? "operation/message-selection" : "operation/termination",
+          level: policy === "continue" ? "warning" : "error",
+          event: predicateType === "selector" ? "operation/selection" : "operation/termination",
           message: predicateType === "selector"
             ? "message selection の評価に失敗しました。"
             : "termination の評価に失敗しました。",

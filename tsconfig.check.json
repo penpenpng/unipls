@@ -12,5 +12,6 @@
     "tests/unit/**/*.test.ts",
     "tests/support/**/*.ts",
     "tests/support/**/*.mts"
-  ]
+  ],
+  "exclude": []
 }

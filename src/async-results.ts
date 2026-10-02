@@ -135,18 +135,18 @@ export interface StreamDeliveryAdapter<T> {
 /** @internal callback delivery を stream lifecycle へ接続します。 */
 export class CallbackStreamDelivery<T> implements StreamDeliveryAdapter<T> {
   readonly handle: SubscriptionHandle<StreamFinalization<T>>;
-  readonly #next: (message: T) => unknown;
+  readonly #onMessage: (message: T) => unknown;
   readonly #policy: StreamCallbackErrorPolicy;
   readonly #onCallbackError: (cause: unknown, policy: StreamCallbackErrorPolicy) => void;
 
   constructor(params: {
-    next: (message: T) => unknown;
+    onMessage: (message: T) => unknown;
     policy: StreamCallbackErrorPolicy;
     unsubscribe: () => void;
     closed: Promise<StreamFinalization<T>>;
     onCallbackError: (cause: unknown, policy: StreamCallbackErrorPolicy) => void;
   }) {
-    this.#next = params.next;
+    this.#onMessage = params.onMessage;
     this.#policy = params.policy;
     this.#onCallbackError = params.onCallbackError;
     this.handle = Object.freeze({ unsubscribe: params.unsubscribe, closed: params.closed });
@@ -154,7 +154,7 @@ export class CallbackStreamDelivery<T> implements StreamDeliveryAdapter<T> {
 
   push(message: T): void {
     try {
-      this.#next(message);
+      this.#onMessage(message);
     } catch (cause) {
       this.#onCallbackError(cause, this.#policy);
     }

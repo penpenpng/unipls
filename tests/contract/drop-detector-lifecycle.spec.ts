@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { Unipls, type UniplsDiagnostic, type UniplsDrop } from "../../src/index.ts";
+import { Unipls, type UniplsLog, type UniplsDrop } from "../../src/index.ts";
 import {
   ControlledReconnector,
   ControlledWebSocketServer,
@@ -23,13 +23,13 @@ describe("drop detector の lifecycle", () => {
    * ```
    */
   it("非同期cleanupと個別の失敗を完了してからdrop recoveryへ進む", async () => {
-    // cleanupの途中を保留し、reconnector開始と各diagnosticの順序を観測します。
+    // cleanupの途中を保留し、reconnector開始と各logの順序を観測します。
     const transport = new ControlledWebSocketServer();
     const reconnector = new ControlledReconnector();
     const secondFailure = new Error("second cleanup failed");
     const thirdFailure = new Error("third cleanup failed");
     const order: string[] = [];
-    const diagnostics: UniplsDiagnostic[] = [];
+    const diagnostics: UniplsLog[] = [];
     const drops: UniplsDrop[] = [];
     let releaseSecond!: () => void;
     const secondGate = new Promise<void>((resolve) => {
@@ -39,6 +39,7 @@ describe("drop detector の lifecycle", () => {
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
       reconnector,
+      logSink: (log) => diagnostics.push(log),
       dropDetectors: [
         {
           name: "cleanup-probe",
@@ -66,7 +67,6 @@ describe("drop detector の lifecycle", () => {
         },
       ],
     });
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     client.on("dropped", ({ drop }) => drops.push(drop));
     const opening = client.open({ setupConnection() {} });
     transport.current.emitOpen();
@@ -86,18 +86,15 @@ describe("drop detector の lifecycle", () => {
     const recovery = reconnector.invocations.take();
     expect(recovery.context.cause).toBe(drops[0]);
     expect(
-      diagnostics.map((diagnostic) =>
-        diagnostic.type === "resource-cleanup-failed"
-          ? {
-              cause: diagnostic.cause,
-              name: diagnostic.resource.name,
-              source: diagnostic.resource.source,
-            }
-          : diagnostic.type,
-      ),
+      diagnostics.map((log) => ({
+        event: log.event,
+        cause: log.cause,
+        name: log.context?.resourceName,
+        source: log.context?.resourceSource,
+      })),
     ).toEqual([
-      { cause: thirdFailure, name: undefined, source: "setup-return" },
-      { cause: secondFailure, name: "second", source: "defer" },
+      { event: "resource/cleanup", cause: thirdFailure, name: undefined, source: "setup-return" },
+      { event: "resource/cleanup", cause: secondFailure, name: "second", source: "defer" },
     ]);
 
     recovery.cancel();
@@ -117,7 +114,7 @@ describe("drop detector の lifecycle", () => {
     const transport = new ControlledWebSocketServer();
     const reconnector = new ControlledReconnector();
     const cleanupFailure = new Error("detector cleanup failed");
-    const diagnostics: UniplsDiagnostic[] = [];
+    const diagnostics: UniplsLog[] = [];
     let cleanupCount = 0;
     let releaseCleanup!: () => void;
     const cleanupGate = new Promise<void>((resolve) => {
@@ -127,6 +124,7 @@ describe("drop detector の lifecycle", () => {
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
       reconnector,
+      logSink: (log) => diagnostics.push(log),
       dropDetectors: [
         {
           setup() {
@@ -139,7 +137,6 @@ describe("drop detector の lifecycle", () => {
         },
       ],
     });
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const opening = client.open({ setupConnection() {} });
     const socket = transport.current;
     socket.emitOpen();
@@ -160,9 +157,10 @@ describe("drop detector の lifecycle", () => {
     expect(reconnector.invocations.size).toBe(0);
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({
-      type: "resource-cleanup-failed",
+      event: "resource/cleanup",
+      level: "error",
       cause: cleanupFailure,
-      resource: { source: "setup-return" },
+      context: { resourceSource: "setup-return" },
     });
   });
 });

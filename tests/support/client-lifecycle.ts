@@ -1,25 +1,29 @@
-import { Unipls } from "../../src/index.ts";
+import { Unipls, type UniplsLog } from "../../src/index.ts";
 import { ControlledWebSocketServer, type ControlledWebSocket } from "./controlled-websocket.ts";
 
 export interface ReadyClientScenario {
   readonly client: Unipls<string, string>;
   readonly transport: ControlledWebSocketServer;
   readonly socket: ControlledWebSocket;
+  readonly logs: UniplsLog[];
   close(): Promise<void>;
 }
 
 /** 標準設定のreadyなclientと、明示的なcleanupをまとめて返します。 */
 export async function createReadyClient(): Promise<ReadyClientScenario> {
   const transport = new ControlledWebSocketServer();
+  const logs: UniplsLog[] = [];
   const client = new Unipls<string, string>({
     url: "wss://unipls.test/socket",
     WebSocket: transport.WebSocket,
+    logSink: (log) => logs.push(log),
   });
   const socket = await openClient(client, transport);
   return {
     client,
     transport,
     socket,
+    logs,
     close: () => closeClient(client, socket),
   };
 }

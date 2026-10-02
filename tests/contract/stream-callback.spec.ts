@@ -3,7 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   type StreamFinalization,
   type SubscriptionHandle,
-  type UniplsDiagnostic,
 } from "../../src/index.ts";
 import { createReadyClient, flushMicrotasks } from "../support/index.ts";
 
@@ -11,7 +10,7 @@ describe("callback stream", () => {
   /**
    * ```ts
    * const subscription = client.listen({
-   *   next: consume,
+   *   onMessage: consume,
    * });
    * subscription.unsubscribe();
    * subscription.unsubscribe(); // 冪等
@@ -23,7 +22,7 @@ describe("callback stream", () => {
   it("callback subscription を冪等に解除して frozen な終了結果を一度だけ返す", async () => {
     const { client, socket, close } = await createReadyClient();
     const messages: string[] = [];
-    const subscription = client.listen({ next: (message) => messages.push(message) });
+    const subscription = client.listen({ onMessage: (message) => messages.push(message) });
 
     // ! ready 接続から届くメッセージを callback へ同期配送します。
     socket.emitMessage("first");
@@ -50,9 +49,9 @@ describe("callback stream", () => {
 
   /**
    * ```ts
-   * const continued = client.listen({ next: mayThrow });
-   * const failed = client.listen({ next: mayThrow, callbackError: "unsubscribe" });
-   * const independent = client.listen({ next: consume });
+   * const continued = client.listen({ onMessage: mayThrow });
+   * const failed = client.listen({ onMessage: mayThrow, callbackError: "unsubscribe" });
+   * const independent = client.listen({ onMessage: consume });
    * // ! mayThrow が同期的に例外を投げるメッセージが届く
    * await continued.closed; // 後続メッセージまで継続する
    * await failed.closed; // callback-error と元の例外で終了する
@@ -60,25 +59,23 @@ describe("callback stream", () => {
    * ```
    */
   it("callback の同期例外を診断して policy と他 subscriber から隔離する", async () => {
-    const { client, socket, close } = await createReadyClient();
+    const { client, socket, close, logs } = await createReadyClient();
     const cause = new Error("callback failed");
-    const diagnostics: UniplsDiagnostic[] = [];
     const continuedMessages: string[] = [];
     const independentMessages: string[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const continued = client.listen({
-      next: (message) => {
+      onMessage: (message) => {
         if (message === "bad") throw cause;
         continuedMessages.push(message);
       },
     });
     const failed = client.listen({
-      next: () => {
+      onMessage: () => {
         throw cause;
       },
       callbackError: "unsubscribe",
     });
-    const independent = client.listen({ next: (message) => independentMessages.push(message) });
+    const independent = client.listen({ onMessage: (message) => independentMessages.push(message) });
 
     // ! 同じメッセージで2つのcallbackが失敗しても、最後のsubscriberまで配送します。
     socket.emitMessage("bad");
@@ -89,28 +86,13 @@ describe("callback stream", () => {
     expect(continuedMessages).toEqual(["good"]);
     await flushMicrotasks();
     expect(
-      diagnostics.map((diagnostic) =>
-        diagnostic.type === "stream-callback-failed"
-          ? {
-              type: diagnostic.type,
-              severity: diagnostic.severity,
-              cause: diagnostic.cause,
-              policy: diagnostic.policy,
-            }
-          : diagnostic.type,
-      ),
+      logs.map((log) => ({ event: log.event, level: log.level, cause: log.cause, policy: log.context?.policy })),
     ).toEqual([
-      { type: "stream-callback-failed", severity: "error", cause, policy: "continue" },
-      { type: "stream-callback-failed", severity: "error", cause, policy: "unsubscribe" },
+      { event: "operation/message-handler", level: "warning", cause, policy: "continue" },
+      { event: "operation/message-handler", level: "error", cause, policy: "unsubscribe" },
     ]);
     expect(
-      diagnostics.every(
-        (diagnostic) =>
-          diagnostic.type === "stream-callback-failed" &&
-          Object.isFrozen(diagnostic) &&
-          Object.isFrozen(diagnostic.scope) &&
-          !("message" in diagnostic),
-      ),
+      logs.every((log) => Object.isFrozen(log) && Object.isFrozen(log.context)),
     ).toBe(true);
     continued.unsubscribe();
     independent.unsubscribe();
@@ -123,7 +105,7 @@ describe("callback stream", () => {
    * let subscription;
    * subscription = client.listen({
    *   callbackError: "unsubscribe",
-   *   next() {
+   *   onMessage() {
    *     subscription.unsubscribe();
    *     throw callbackError;
    *   },
@@ -133,14 +115,12 @@ describe("callback stream", () => {
    * ```
    */
   it("callback 内の再入解除と例外を最初に確定した終了理由へ収束させる", async () => {
-    const { client, socket, close } = await createReadyClient();
+    const { client, socket, close, logs } = await createReadyClient();
     const cause = new Error("callback failed after unsubscribe");
-    const diagnostics: UniplsDiagnostic[] = [];
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     let subscription!: SubscriptionHandle<StreamFinalization<string>>;
     subscription = client.listen({
       callbackError: "unsubscribe",
-      next: () => {
+      onMessage: () => {
         subscription.unsubscribe();
         throw cause;
       },
@@ -150,11 +130,12 @@ describe("callback stream", () => {
     socket.emitMessage("message");
     await expect(subscription.closed).resolves.toEqual({ ok: true, reason: "unsubscribed" });
     await flushMicrotasks();
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({
-      type: "stream-callback-failed",
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      event: "operation/message-handler",
+      level: "error",
       cause,
-      policy: "unsubscribe",
+      context: { policy: "unsubscribe" },
     });
     await close();
   });
@@ -164,7 +145,7 @@ describe("callback stream", () => {
    * const calls = [];
    * const gate = deferred();
    * const subscription = client.listen({
-   *   next: async (message) => {
+   *   onMessage: async (message) => {
    *     calls.push(message);
    *     await gate.promise;
    *   },
@@ -174,8 +155,7 @@ describe("callback stream", () => {
    * ```
    */
   it("callback が返す Promise を待機せず配送を逐次化しない", async () => {
-    const { client, socket, close } = await createReadyClient();
-    const diagnostics: UniplsDiagnostic[] = [];
+    const { client, socket, close, logs } = await createReadyClient();
     const calls: string[] = [];
     const cause = new Error("async callback failed");
     const returnedPromises: Promise<void>[] = [];
@@ -183,9 +163,8 @@ describe("callback stream", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    client.on("diagnostic", (diagnostic) => diagnostics.push(diagnostic));
     const subscription = client.listen({
-      next: (message) => {
+      onMessage: (message) => {
         calls.push(message);
         const returned = gate.then(() => {
           throw cause;
@@ -199,11 +178,11 @@ describe("callback stream", () => {
     socket.emitMessage("first");
     socket.emitMessage("second");
     expect(calls).toEqual(["first", "second"]);
-    expect(diagnostics).toEqual([]);
+    expect(logs).toEqual([]);
     const observedRejections = returnedPromises.map((returned) => returned.catch((error) => error));
     release();
     await expect(Promise.all(observedRejections)).resolves.toEqual([cause, cause]);
-    expect(diagnostics).toEqual([]);
+    expect(logs).toEqual([]);
     subscription.unsubscribe();
     await subscription.closed;
     await close();

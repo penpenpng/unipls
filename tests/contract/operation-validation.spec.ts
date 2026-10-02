@@ -155,7 +155,7 @@ describe("operation の入力と受付", () => {
       () => unsafe.next({ selector: () => true, retry: "resend" }),
       () => unsafe.request({ query: "request", selector: () => true, retry: {} }),
       () => unsafe.listen({ callbackError: "continue" }),
-      () => unsafe.listen({ next: () => {}, buffer: 1 }),
+      () => unsafe.listen({ onMessage: () => {}, buffer: 1 }),
       () => unsafe.subscribe({ query: "subscribe", selector: () => true, signal: {} }),
     ];
     for (const operation of invalidOptions) expect(operation).toThrow(TypeError);

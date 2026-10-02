@@ -5,9 +5,50 @@ import {
   UniplsSocketClosedError,
   UniplsSocketDroppedError,
 } from "../../src/socket.ts";
+import type { UniplsLog } from "../../src/index.ts";
 import { ControlledWebSocketServer } from "../support/index.ts";
 
 describe("低レベルsocketの公開契約", () => {
+  it("変換失敗を同期ログへ渡し、sink の例外を隔離する", async () => {
+    const transport = new ControlledWebSocketServer();
+    const cause = new Error("decode failed");
+    const logs: UniplsLog[] = [];
+    const client = new UniplsSocket<string, string>({
+      url: "wss://unipls.test/socket",
+      WebSocket: transport.WebSocket,
+      deserializer(data) {
+        if (data === "bad") throw cause;
+        return String(data);
+      },
+      logSink(log) {
+        logs.push(log);
+        throw new Error("sink failed");
+      },
+    });
+    const messages: string[] = [];
+    client.on("message", ({ message }) => messages.push(message));
+    const opening = client.open();
+    const socket = transport.current;
+    socket.emitOpen();
+    await opening;
+
+    expect(() => socket.emitMessage("bad")).not.toThrow();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      level: "warning",
+      event: "message/deserialization",
+      cause,
+      context: { transportEpochId: client.transportEpochId, messageSequence: 1 },
+    });
+    expect(Object.isFrozen(logs[0])).toBe(true);
+    expect(Object.isFrozen(logs[0]?.context)).toBe(true);
+    socket.emitMessage("good");
+    expect(messages).toEqual(["good"]);
+    const closing = client.close();
+    socket.emitClose();
+    await closing;
+  });
+
   /**
    * ```ts
    * import { UniplsSocket } from "unipls/socket";
