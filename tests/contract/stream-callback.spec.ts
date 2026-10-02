@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  type StreamFinalization,
-  type SubscriptionHandle,
-} from "../../src/index.ts";
+import { type StreamFinalization, type SubscriptionHandle } from "../../src/index.ts";
 import { createReadyClient, flushMicrotasks } from "../support/index.ts";
 
 describe("callback stream", () => {
@@ -75,7 +72,9 @@ describe("callback stream", () => {
       },
       callbackError: "unsubscribe",
     });
-    const independent = client.listen({ onMessage: (message) => independentMessages.push(message) });
+    const independent = client.listen({
+      onMessage: (message) => independentMessages.push(message),
+    });
 
     // ! 同じメッセージで2つのcallbackが失敗しても、最後のsubscriberまで配送します。
     socket.emitMessage("bad");
@@ -86,14 +85,17 @@ describe("callback stream", () => {
     expect(continuedMessages).toEqual(["good"]);
     await flushMicrotasks();
     expect(
-      logs.map((log) => ({ event: log.event, level: log.level, cause: log.cause, policy: log.context?.policy })),
+      logs.map((log) => ({
+        event: log.event,
+        level: log.level,
+        cause: log.cause,
+        policy: log.context?.policy,
+      })),
     ).toEqual([
       { event: "operation/message-handler", level: "warning", cause, policy: "continue" },
       { event: "operation/message-handler", level: "error", cause, policy: "unsubscribe" },
     ]);
-    expect(
-      logs.every((log) => Object.isFrozen(log) && Object.isFrozen(log.context)),
-    ).toBe(true);
+    expect(logs.every((log) => Object.isFrozen(log) && Object.isFrozen(log.context))).toBe(true);
     continued.unsubscribe();
     independent.unsubscribe();
     await Promise.all([continued.closed, independent.closed]);

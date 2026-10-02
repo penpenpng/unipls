@@ -91,9 +91,9 @@ describe("provisioning capability と resource scope", () => {
     expect(() => context.request({ query: "late", selector: () => true })).toThrow(
       UniplsInvalidUsageError,
     );
-    expect(() => context.subscribe({ query: "late", selector: () => true, onMessage() {} })).toThrow(
-      UniplsInvalidUsageError,
-    );
+    expect(() =>
+      context.subscribe({ query: "late", selector: () => true, onMessage() {} }),
+    ).toThrow(UniplsInvalidUsageError);
 
     // session contextと高レベルclientにはbarrierを迂回するmethodが型として存在しません。
     const sessionHasCast: "cast" extends keyof SessionSetupContext ? true : false = false;

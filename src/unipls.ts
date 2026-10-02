@@ -1193,14 +1193,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
   #forwardSocketLog(log: UniplsLog): void {
     const transportEpochId = log.context?.transportEpochId;
     const transport =
-      typeof transportEpochId === "number" ? this.#currentTransportContext(transportEpochId) : undefined;
-    this.#emitLog(Object.freeze({
-      ...log,
-      context: Object.freeze({
-        ...log.context,
-        ...(transport ? { session: transport.session, connection: transport.connection } : {}),
+      typeof transportEpochId === "number"
+        ? this.#currentTransportContext(transportEpochId)
+        : undefined;
+    this.#emitLog(
+      Object.freeze({
+        ...log,
+        context: Object.freeze({
+          ...log.context,
+          ...(transport ? { session: transport.session, connection: transport.connection } : {}),
+        }),
       }),
-    }));
+    );
   }
 
   #logReconnectorFailure(
@@ -1209,40 +1213,41 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     cause: unknown,
     error: UniplsOpenError | UniplsDroppedError,
   ): void {
-    this.#emitLog(Object.freeze({
-      level: "error",
-      event: "resilience/reconnection",
-      message: "接続回復処理に失敗しました。",
-      context: Object.freeze({
-        session: context.session,
-        origin: context.origin,
-        failurePoint,
-        error,
+    this.#emitLog(
+      Object.freeze({
+        level: "error",
+        event: "resilience/reconnection",
+        message: "接続回復処理に失敗しました。",
+        context: Object.freeze({
+          session: context.session,
+          origin: context.origin,
+          failurePoint,
+          error,
+        }),
+        cause,
       }),
-      cause,
-    }));
+    );
   }
 
-  #createResourceScope(
-    scope: UniplsResourceScope,
-    parentSignal?: AbortSignal,
-  ): OwnedResourceScope {
+  #createResourceScope(scope: UniplsResourceScope, parentSignal?: AbortSignal): OwnedResourceScope {
     return new OwnedResourceScope({
       scope,
       parentSignal,
       onCleanupFailure: ({ cause, scope: owner, name, source: registeredBy }) => {
         if (!this.#logSink) return;
-        this.#emitLog(Object.freeze({
-          level: "error",
-          event: "resource/cleanup",
-          message: "resource の解放処理に失敗しました。",
-          context: Object.freeze({
-            ...owner,
-            ...(name === undefined ? {} : { resourceName: name }),
-            resourceSource: registeredBy,
+        this.#emitLog(
+          Object.freeze({
+            level: "error",
+            event: "resource/cleanup",
+            message: "resource の解放処理に失敗しました。",
+            context: Object.freeze({
+              ...owner,
+              ...(name === undefined ? {} : { resourceName: name }),
+              resourceSource: registeredBy,
+            }),
+            cause,
           }),
-          cause,
-        }));
+        );
       },
     });
   }
@@ -1267,13 +1272,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     cause: unknown,
   ): void {
     if (!this.#logSink) return;
-    this.#emitLog(Object.freeze({
-      level: "warning",
-      event: "resilience/drop-detection",
-      message: "接続 drop の検出処理に失敗しました。",
-      context: Object.freeze({ ...scope, detector, boundary }),
-      cause,
-    }));
+    this.#emitLog(
+      Object.freeze({
+        level: "warning",
+        event: "resilience/drop-detection",
+        message: "接続 drop の検出処理に失敗しました。",
+        context: Object.freeze({ ...scope, detector, boundary }),
+        cause,
+      }),
+    );
   }
 
   #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -1532,13 +1539,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     policy: StreamCallbackErrorPolicy,
   ): void {
     if (!this.#logSink) return;
-    this.#emitLog(Object.freeze({
-      level: policy === "continue" ? "warning" : "error",
-      event: "operation/message-handler",
-      message: "message handler の実行に失敗しました。",
-      context: Object.freeze({ ...scope, policy }),
-      cause,
-    }));
+    this.#emitLog(
+      Object.freeze({
+        level: policy === "continue" ? "warning" : "error",
+        event: "operation/message-handler",
+        message: "message handler の実行に失敗しました。",
+        context: Object.freeze({ ...scope, policy }),
+        cause,
+      }),
+    );
   }
 
   #logStreamMessageDropped(
@@ -1551,12 +1560,14 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     capacity: number,
   ): void {
     if (!this.#logSink) return;
-    this.#emitLog(Object.freeze({
-      level: "warning",
-      event: "message/overflow",
-      message: "buffer policy により message が破棄されました。",
-      context: Object.freeze({ ...scope, strategy, capacity }),
-    }));
+    this.#emitLog(
+      Object.freeze({
+        level: "warning",
+        event: "message/overflow",
+        message: "buffer policy により message が破棄されました。",
+        context: Object.freeze({ ...scope, strategy, capacity }),
+      }),
+    );
   }
 
   #processMessage({
@@ -1586,15 +1597,18 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     } catch (cause) {
       if (policy === "fail") onPredicateFailure(cause);
       if (this.#logSink) {
-        this.#emitLog(Object.freeze({
-          level: policy === "continue" ? "warning" : "error",
-          event: predicateType === "selector" ? "operation/selection" : "operation/termination",
-          message: predicateType === "selector"
-            ? "message selection の評価に失敗しました。"
-            : "termination の評価に失敗しました。",
-          context: Object.freeze({ ...scope, policy }),
-          cause,
-        }));
+        this.#emitLog(
+          Object.freeze({
+            level: policy === "continue" ? "warning" : "error",
+            event: predicateType === "selector" ? "operation/selection" : "operation/termination",
+            message:
+              predicateType === "selector"
+                ? "message selection の評価に失敗しました。"
+                : "termination の評価に失敗しました。",
+            context: Object.freeze({ ...scope, policy }),
+            cause,
+          }),
+        );
       }
       return "failed";
     }

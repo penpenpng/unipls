@@ -182,8 +182,18 @@ export type ReconnectionEngineOutcome =
 /** @internal resource ownership とログ相関に使用する scope です。 */
 export type UniplsResourceScope =
   | Readonly<{ type: "session"; session: SessionId }>
-  | Readonly<{ type: "connection"; session: SessionId; connection: ConnectionId; messageSequence?: number }>
-  | Readonly<{ type: "operation"; session: SessionId; operation: OperationId; operationType: OperationType }>;
+  | Readonly<{
+      type: "connection";
+      session: SessionId;
+      connection: ConnectionId;
+      messageSequence?: number;
+    }>
+  | Readonly<{
+      type: "operation";
+      session: SessionId;
+      operation: OperationId;
+      operationType: OperationType;
+    }>;
 
 /** Unipls が出力するログの重要度です。 */
 export type UniplsLogLevel = "debug" | "info" | "warning" | "error";

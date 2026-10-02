@@ -139,17 +139,19 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
         const message = this.deserialize(data);
         this.#events.emit("message", Object.freeze({ transportEpochId: epoch.id, message }));
       } catch (error) {
-        this.#emitLog(Object.freeze({
-          level: "warning",
-          event: "message/deserialization",
-          message: "受信メッセージの変換に失敗しました。",
-          context: Object.freeze({
-            transportEpochId: epoch.id,
-            messageSequence,
-            input: describeRawInput(data),
+        this.#emitLog(
+          Object.freeze({
+            level: "warning",
+            event: "message/deserialization",
+            message: "受信メッセージの変換に失敗しました。",
+            context: Object.freeze({
+              transportEpochId: epoch.id,
+              messageSequence,
+              input: describeRawInput(data),
+            }),
+            cause: error,
           }),
-          cause: error,
-        }));
+        );
       }
     });
 

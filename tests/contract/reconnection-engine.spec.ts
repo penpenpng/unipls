@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  UniplsClosedError,
-  UniplsDroppedError,
-  UniplsOpenError,
-} from "../../src/index.ts";
+import { UniplsClosedError, UniplsDroppedError, UniplsOpenError } from "../../src/index.ts";
 import { flushMicrotasks, UniplsRaceScenario } from "../support/index.ts";
 
 async function openReady(scenario: UniplsRaceScenario): Promise<void> {

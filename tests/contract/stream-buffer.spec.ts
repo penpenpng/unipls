@@ -106,9 +106,7 @@ describe("stream buffer", () => {
       { level: "warning", event: "message/overflow", strategy: "drop-oldest", capacity: 2 },
       { level: "warning", event: "message/overflow", strategy: "drop-newest", capacity: 2 },
     ]);
-    expect(
-      logs.every((log) => Object.isFrozen(log) && Object.isFrozen(log.context)),
-    ).toBe(true);
+    expect(logs.every((log) => Object.isFrozen(log) && Object.isFrozen(log.context))).toBe(true);
     latest.unsubscribe();
     oldest.unsubscribe();
     newest.unsubscribe();
