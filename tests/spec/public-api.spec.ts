@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import * as browser from "../../src/browser.ts";
+import * as dropDetectors from "../../src/drop-detectors.ts";
 import * as root from "../../src/index.ts";
+import * as reconnectors from "../../src/reconnectors.ts";
 import * as socket from "../../src/socket.ts";
 import type {
   AsyncSubscription,
   ConnectionSetupContext,
-  DropDetectorContext,
-  ReconnectionContext,
   ResourceScope,
   SessionSetupContext,
   StreamBufferOptions,
@@ -15,7 +14,6 @@ import type {
   SubscriptionHandle,
   Unipls,
   UniplsCastParams,
-  UniplsDropDetector,
   UniplsDropRetryStrategy,
   UniplsEvents,
   UniplsListenCallbackParams,
@@ -24,7 +22,6 @@ import type {
   UniplsNextParams,
   UniplsParams,
   UniplsProvisioner,
-  UniplsReconnector,
   UniplsRecoverContext,
   UniplsRecoveryDecision,
   UniplsRecoveryPlan,
@@ -37,6 +34,8 @@ import type {
   UniplsSubscribeParams,
   WebSocketConstructor,
 } from "../../src/index.ts";
+import type { ReconnectionContext, UniplsReconnector } from "../../src/reconnectors.ts";
+import type { DropDetectorContext, UniplsDropDetector } from "../../src/drop-detectors.ts";
 import type {
   UniplsSocketEventContext,
   UniplsSocketParams,
@@ -99,17 +98,16 @@ void narrowFinalization;
 describe("public APIのentry point境界", () => {
   /**
    * ```ts
-   * import { Unipls, HeartbeatDropDetector } from "unipls";
+   * import { Unipls } from "unipls";
+   * import { ImmediateReconnector } from "unipls/reconnectors";
+   * import { HeartbeatDropDetector, NetworkDropDetector } from "unipls/drop-detectors";
    * import { UniplsSocket } from "unipls/socket";
-   * import { NetworkDropDetector } from "unipls/browser";
-   * // 各entry pointには用途の異なるruntime valueを混在させない
+   * // core、optional extensions、low-level transportを別entry pointで提供する
    * ```
    */
-  it("高レベル、低レベル、browser固有のruntime exportを分離する", () => {
+  it("core、extensions、低レベルruntime exportを分離する", () => {
     // package利用者が名前付きimportできるruntime valueをentry pointごとに固定します。
     expect(Object.keys(root).sort()).toEqual([
-      "HeartbeatDropDetector",
-      "ImmediateReconnector",
       "Unipls",
       "UniplsBufferOverflowError",
       "UniplsClosedError",
@@ -128,7 +126,11 @@ describe("public APIのentry point境界", () => {
       "UniplsTimeoutError",
       "UniplsWebSocketCloseCode",
     ]);
-    expect(Object.keys(browser)).toEqual(["NetworkDropDetector"]);
+    expect(Object.keys(reconnectors).sort()).toEqual(["ImmediateReconnector"]);
+    expect(Object.keys(dropDetectors).sort()).toEqual([
+      "HeartbeatDropDetector",
+      "NetworkDropDetector",
+    ]);
   });
 
   /**

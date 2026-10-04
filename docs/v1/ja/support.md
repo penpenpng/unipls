@@ -40,13 +40,14 @@ operationのuser signal、resource scope、timeoutを合成するため、native
 
 ## entry point
 
-| import先         | 内容                                    | 利用環境            |
-| ---------------- | --------------------------------------- | ------------------- |
-| `unipls`         | 高レベルclientとruntime非依存の拡張契約 | すべての対応runtime |
-| `unipls/socket`  | 低レベルWebSocket client                | すべての対応runtime |
-| `unipls/browser` | `NetworkDropDetector`                   | browser             |
+| import先                | 内容                                    | 利用環境            |
+| ----------------------- | --------------------------------------- | ------------------- |
+| `unipls`                | 高レベルclientとruntime非依存の拡張契約 | すべての対応runtime |
+| `unipls/socket`         | 低レベルWebSocket client                | すべての対応runtime |
+| `unipls/reconnectors`   | 再接続policyと`ImmediateReconnector` | すべての対応runtime |
+| `unipls/drop-detectors` | heartbeatとofflineのdrop detector       | すべての対応runtime |
 
-package rootは`window`へアクセスせず、browser固有moduleを読み込みません。`unipls/browser`をbrowser以外で利用した場合の動作は保証しません。
+`NetworkDropDetector`は`setup()`でoffline listenerを登録するときに`window`へアクセスします。`unipls/drop-detectors`のimport時にはbrowser APIへアクセスしません。
 
 ## CIで確認する範囲
 

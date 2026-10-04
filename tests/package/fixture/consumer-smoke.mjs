@@ -106,8 +106,13 @@ export async function runConsumerSmoke({ browser = false } = {}) {
       });
     const root = await import("unipls");
     const socketEntry = await import("unipls/socket");
+    const dropDetectorEntry = await import("unipls/drop-detectors");
     if (guardedWindow) restoreGlobal("window", previousWindow);
     assert(!("NetworkDropDetector" in root), "rootにbrowser固有exportが含まれています。");
+    assert(
+      typeof dropDetectorEntry.NetworkDropDetector === "function",
+      "Node.jsでdrop-detectors entryをimportできませんでした。",
+    );
 
     // globalも注入もない構成だけを同期的な利用誤りとして拒否します。
     if (guardedWebSocket) replaceGlobalValue("WebSocket", undefined);
@@ -259,7 +264,7 @@ export async function runConsumerSmoke({ browser = false } = {}) {
     laterSecond.abort(secondReason);
     assert(combined.reason === firstReason, "AbortSignal.anyが後続abortでreasonを変更しました。");
 
-    return { checks: 15 };
+    return { checks: 16 };
   } finally {
     restoreGlobal("WebSocket", previousWebSocket);
     if (!browser) restoreGlobal("window", previousWindow);

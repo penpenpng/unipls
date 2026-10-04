@@ -1,17 +1,15 @@
 import {
-  HeartbeatDropDetector,
-  ImmediateReconnector,
   Unipls,
   type AsyncSubscription,
   type ConnectionSetupContext,
   type StreamFinalization,
-  type UniplsDropDetector,
   type UniplsParams,
   type UniplsLog,
   type UniplsProvisioner,
   type UniplsRecoverStrategy,
-  type UniplsReconnector,
 } from "unipls";
+import { ImmediateReconnector, type UniplsReconnector } from "unipls/reconnectors";
+import { HeartbeatDropDetector, type UniplsDropDetector } from "unipls/drop-detectors";
 import {
   UniplsSocket,
   UniplsSocketClosedError,

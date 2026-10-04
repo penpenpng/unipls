@@ -4,14 +4,14 @@
 
 ## directoryの役割
 
-| path                | 役割                                                                                                                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `spec/**/*.spec.ts` | `unipls`、`unipls/socket`、`unipls/browser`の公開entry pointから観測できる挙動をblack-boxで検証します。lifecycle、operation、event、error、resource cleanupなど、利用者との契約を扱います。       |
-| `unit/**/*.test.ts` | 内部resource、組み込みextension、test harnessなど、公開契約ではない実装単位を検証します。ここで観測する内部構造は互換性を保証しません。                                                           |
-| `api/`              | build後のpackage名importをTypeScriptで型検査します。`public-api.ts`は実行するtestではなく、compileに成功すること自体がtestです。DOM libraryなしのconsumerでも公開型を利用できることを確認します。 |
-| `package/`          | packageをtarball化して一時directoryへinstallし、exports、同梱file、Node.js上のruntime behavior、consumer側の型検査、deep importの拒否を検証します。`fixture/`はその隔離consumerです。             |
-| `runtime/`          | CIのruntime matrixとbrowser smoke testを補助します。tarballをNode.js、Deno、Bun、およびPlaywrightのChromium、Firefox、WebKitから利用します。                                                      |
-| `support/`          | WebSocket、extension、時系列を決定的に制御するharnessと共通helperを置きます。production APIではなく、必要な挙動は`unit/`で検証します。                                                            |
+| path                | 役割                                                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spec/**/*.spec.ts` | `unipls`、`unipls/socket`、`unipls/reconnectors`、`unipls/drop-detectors`の公開entry pointから観測できる挙動をblack-boxで検証します。lifecycle、operation、event、error、resource cleanupなど、利用者との契約を扱います。 |
+| `unit/**/*.test.ts` | 内部resource、組み込みextension、test harnessなど、公開契約ではない実装単位を検証します。ここで観測する内部構造は互換性を保証しません。                                                                                   |
+| `api/`              | build後のpackage名importをTypeScriptで型検査します。`public-api.ts`は実行するtestではなく、compileに成功すること自体がtestです。DOM libraryなしのconsumerでも公開型を利用できることを確認します。                         |
+| `package/`          | packageをtarball化して一時directoryへinstallし、exports、同梱file、Node.js上のruntime behavior、consumer側の型検査、deep importの拒否を検証します。`fixture/`はその隔離consumerです。                                     |
+| `runtime/`          | CIのruntime matrixとbrowser smoke testを補助します。tarballをNode.js、Deno、Bun、およびPlaywrightのChromium、Firefox、WebKitから利用します。                                                                              |
+| `support/`          | WebSocket、extension、時系列を決定的に制御するharnessと共通helperを置きます。production APIではなく、必要な挙動は`unit/`で検証します。                                                                                    |
 
 `spec`と`unit`はVite+の別projectとして収集されるため、公開仕様の失敗と内部実装の失敗を分けて確認できます。`api`、`package`、`runtime`は目的が異なるため、通常のtest runnerとは別の検査として実行します。
 
