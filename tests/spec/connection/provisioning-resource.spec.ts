@@ -466,7 +466,9 @@ describe("provisioning capability と resource scope", () => {
                 cleanupCount += 1;
               });
               const fail = () => {
-                if (failureMode === "sync") throw cause;
+                if (failureMode === "sync") {
+                  throw cause;
+                }
                 return Promise.reject(cause);
               };
               trigger = boundary === "guard" ? ctx.guard(fail) : () => ctx.run(fail);

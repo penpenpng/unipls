@@ -1,5 +1,7 @@
 function assert(condition, message) {
-  if (!condition) throw new Error(message);
+  if (!condition) {
+    throw new Error(message);
+  }
 }
 
 async function rejectionOf(promise) {
@@ -28,7 +30,9 @@ class TestWebSocket {
   }
 
   send(data) {
-    if (this.readyState !== 1) throw new Error("WebSocketがopenではありません。");
+    if (this.readyState !== 1) {
+      throw new Error("WebSocketがopenではありません。");
+    }
     this.sent.push(data);
   }
 
@@ -54,14 +58,18 @@ class TestWebSocket {
 
 function currentSocket() {
   const socket = TestWebSocket.instances.at(-1);
-  if (!socket) throw new Error("WebSocketが作成されていません。");
+  if (!socket) {
+    throw new Error("WebSocketが作成されていません。");
+  }
   return socket;
 }
 
 function replaceGlobalValue(name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
   if (descriptor && !descriptor.configurable) {
-    if (!("value" in descriptor) || !descriptor.writable) return false;
+    if (!("value" in descriptor) || !descriptor.writable) {
+      return false;
+    }
     globalThis[name] = value;
     return true;
   }
@@ -71,14 +79,19 @@ function replaceGlobalValue(name, value) {
 
 function replaceGlobalGetter(name, get) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
-  if (descriptor && !descriptor.configurable) return false;
+  if (descriptor && !descriptor.configurable) {
+    return false;
+  }
   Object.defineProperty(globalThis, name, { get, configurable: true });
   return true;
 }
 
 function restoreGlobal(name, descriptor) {
-  if (descriptor) Object.defineProperty(globalThis, name, descriptor);
-  else delete globalThis[name];
+  if (descriptor) {
+    Object.defineProperty(globalThis, name, descriptor);
+  } else {
+    delete globalThis[name];
+  }
 }
 
 function handlersAreDetached(socket) {
@@ -107,7 +120,9 @@ export async function runConsumerSmoke({ browser = false } = {}) {
     const root = await import("unipls");
     const socketEntry = await import("unipls/socket");
     const dropDetectorEntry = await import("unipls/drop-detectors");
-    if (guardedWindow) restoreGlobal("window", previousWindow);
+    if (guardedWindow) {
+      restoreGlobal("window", previousWindow);
+    }
     assert(!("NetworkDropDetector" in root), "rootにbrowser固有exportが含まれています。");
     assert(
       typeof dropDetectorEntry.NetworkDropDetector === "function",
@@ -115,7 +130,9 @@ export async function runConsumerSmoke({ browser = false } = {}) {
     );
 
     // globalも注入もない構成だけを同期的な利用誤りとして拒否します。
-    if (guardedWebSocket) replaceGlobalValue("WebSocket", undefined);
+    if (guardedWebSocket) {
+      replaceGlobalValue("WebSocket", undefined);
+    }
     let configurationError;
     try {
       new root.Unipls({
@@ -267,6 +284,8 @@ export async function runConsumerSmoke({ browser = false } = {}) {
     return { checks: 16 };
   } finally {
     restoreGlobal("WebSocket", previousWebSocket);
-    if (!browser) restoreGlobal("window", previousWindow);
+    if (!browser) {
+      restoreGlobal("window", previousWindow);
+    }
   }
 }

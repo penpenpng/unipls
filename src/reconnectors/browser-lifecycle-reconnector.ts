@@ -46,7 +46,9 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     actions: UniplsReconnectorActions,
     ctx: ReconnectionContext,
   ): ReturnType<UniplsReconnector["setup"]> {
-    if (ctx.signal.aborted) return;
+    if (ctx.signal.aborted) {
+      return;
+    }
     const cycle = ctx.origin === "initial" ? ctx.signal : (ctx.drop ?? ctx.signal);
     const retries = this.#retries.get(cycle) ?? 0;
     if (retries >= this.#maxRetries) {
@@ -71,7 +73,9 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     const stopDelegate = () => {
       const run = delegateRun;
       delegateRun = undefined;
-      if (!run) return;
+      if (!run) {
+        return;
+      }
       run.active = false;
       const disposer = run.disposer;
       run.disposer = undefined;
@@ -88,20 +92,26 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       stopDelegate();
     };
     const cleanup = () => {
-      if (disposed) return;
+      if (disposed) {
+        return;
+      }
       disposed = true;
       clearWaiting();
       unsubscribe();
       ctx.signal.removeEventListener("abort", cleanup);
     };
     const reconnect = () => {
-      if (disposed || ctx.signal.aborted || !eligible()) return;
+      if (disposed || ctx.signal.aborted || !eligible()) {
+        return;
+      }
       this.#retries.set(cycle, retries + 1);
       cleanup();
       actions.reconnect();
     };
     const onRecovery = () => {
-      if (!eligible() || disposed || timer !== undefined) return;
+      if (!eligible() || disposed || timer !== undefined) {
+        return;
+      }
       clearWaiting();
       timer = setTimeout(reconnect, this.#delay);
     };
@@ -116,18 +126,25 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     if (eligible()) {
       if (lifecycle) {
         // 過去に発生した復帰イベントを待ち直さないよう、cycle ごとに一度試します。
-        if (first) onRecovery();
+        if (first) {
+          onRecovery();
+        }
       } else {
         const run: { active: boolean; disposer?: () => void } = { active: true };
         delegateRun = run;
         const select = (action: () => void) => {
-          if (!run.active || disposed || ctx.signal.aborted) return;
+          if (!run.active || disposed || ctx.signal.aborted) {
+            return;
+          }
           cleanup();
           action();
         };
         const register = (disposer: void | (() => void)) => {
-          if (run.active && !disposed) run.disposer = disposer ?? undefined;
-          else disposeDelegate(disposer);
+          if (run.active && !disposed) {
+            run.disposer = disposer ?? undefined;
+          } else {
+            disposeDelegate(disposer);
+          }
           return cleanup;
         };
         let result: ReturnType<UniplsReconnector["setup"]>;
@@ -135,7 +152,9 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
           result = this.#defaultReconnector.setup(
             {
               reconnect: () => {
-                if (run.active) reconnect();
+                if (run.active) {
+                  reconnect();
+                }
               },
               cancel: () => select(actions.cancel),
               exhaust: (cause) => select(() => actions.exhaust(cause)),

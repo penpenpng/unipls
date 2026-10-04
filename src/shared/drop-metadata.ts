@@ -9,8 +9,12 @@ export function snapshotDropMetadata(
   }
   const ancestors = new Set<object>();
   const copy = (value: DropMetadataValue): DropMetadataValue => {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (value === null || typeof value === "string" || typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
     if (typeof value !== "object" || ancestors.has(value)) {
       throw new TypeError("Drop metadata must contain finite JSON values without cycles.");
     }

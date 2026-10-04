@@ -1,6 +1,14 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
+  lint: {
+    categories: {
+      correctness: "error",
+    },
+    rules: {
+      curly: ["error", "all"],
+    },
+  },
   test: {
     projects: [
       {

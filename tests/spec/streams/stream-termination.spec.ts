@@ -114,7 +114,9 @@ describe("stream の終了結果", () => {
     const subscription = scenario.client.listen({ retry: "wait" });
     const pending = subscription[Symbol.asyncIterator]().next();
     const cause = new Error(`recovery ${mode}`);
-    if (mode === "setup-failure") scenario.reconnector.failNextSetup(cause);
+    if (mode === "setup-failure") {
+      scenario.reconnector.failNextSetup(cause);
+    }
 
     // ! 指定したrecovery terminal outcomeがsessionとstreamを一度だけ終了します。
     scenario.drop();
@@ -122,11 +124,17 @@ describe("stream の終了結果", () => {
     if (mode !== "setup-failure" && snapshot.phase !== "recovering") {
       throw new Error("Expected recovery");
     }
-    if (mode === "cancel") scenario.reconnector.invocations.take().cancel();
-    if (mode === "exhaust") scenario.reconnector.invocations.take().exhaust(cause);
+    if (mode === "cancel") {
+      scenario.reconnector.invocations.take().cancel();
+    }
+    if (mode === "exhaust") {
+      scenario.reconnector.invocations.take().exhaust(cause);
+    }
     const finalization = await subscription.closed;
     expect(finalization.ok).toBe(false);
-    if (finalization.ok) throw new Error("Expected failure");
+    if (finalization.ok) {
+      throw new Error("Expected failure");
+    }
     expect(finalization.reason).toBe("dropped");
     expect(finalization.error).toBeInstanceOf(UniplsDroppedError);
     expect((finalization.error as UniplsDroppedError).outcome).toBe(outcome);

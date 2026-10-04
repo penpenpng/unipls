@@ -218,7 +218,9 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
   }
 
   push(message: T): void {
-    if (this.#finalization) return;
+    if (this.#finalization) {
+      return;
+    }
     if (this.#pending) {
       const pending = this.#pending;
       this.#pending = undefined;
@@ -234,7 +236,9 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
       return;
     }
     const strategy = this.#buffer.diagnosticStrategy;
-    if (!strategy) throw new Error("Lossy buffer strategy is missing");
+    if (!strategy) {
+      throw new Error("Lossy buffer strategy is missing");
+    }
     if (this.#buffer.overflow === "drop-oldest") {
       this.#messages.shift();
       this.#messages.push(message);
@@ -243,14 +247,21 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
   }
 
   finish(finalization: StreamFinalization<T>): void {
-    if (this.#finalization) return;
+    if (this.#finalization) {
+      return;
+    }
     this.#finalization = finalization;
     this.#messages.length = 0;
-    if (!this.#pending) return;
+    if (!this.#pending) {
+      return;
+    }
     const pending = this.#pending;
     this.#pending = undefined;
-    if (finalization.ok) pending.resolve({ done: true, value: undefined });
-    else pending.reject(finalization.error);
+    if (finalization.ok) {
+      pending.resolve({ done: true, value: undefined });
+    } else {
+      pending.reject(finalization.error);
+    }
   }
 
   #next(): Promise<IteratorResult<T>> {

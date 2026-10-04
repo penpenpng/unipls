@@ -3,7 +3,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 function assert(condition, message) {
-  if (!condition) throw new Error(message);
+  if (!condition) {
+    throw new Error(message);
+  }
 }
 
 let rejected = false;

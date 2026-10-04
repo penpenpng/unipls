@@ -62,7 +62,9 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
     }
 
     waitingForReconnect = true;
-    if (retry !== "wait") params.pauseForReconnect();
+    if (retry !== "wait") {
+      params.pauseForReconnect();
+    }
     const query = params.getQuery();
     const selector = params.getSelector();
 

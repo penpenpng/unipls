@@ -158,7 +158,9 @@ describe("operation の入力と受付", () => {
       () => unsafe.listen({ onMatch: () => {}, buffer: 1 }),
       () => unsafe.subscribe({ query: "subscribe", selector: () => true, signal: {} }),
     ];
-    for (const operation of invalidOptions) expect(operation).toThrow(TypeError);
+    for (const operation of invalidOptions) {
+      expect(operation).toThrow(TypeError);
+    }
     expect(client.lifecycle).toBe(idle);
     expect(transport.connections).toHaveLength(0);
   });

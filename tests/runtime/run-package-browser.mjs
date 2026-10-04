@@ -7,7 +7,9 @@ import { chromium, firefox, webkit } from "playwright";
 const browserTypes = { chromium, firefox, webkit };
 const browserName = process.argv[2];
 const browserType = browserTypes[browserName];
-if (!browserType) throw new Error(`Unknown browser: ${browserName}`);
+if (!browserType) {
+  throw new Error(`Unknown browser: ${browserName}`);
+}
 
 const root = process.cwd();
 const server = createServer(async (request, response) => {
@@ -43,7 +45,9 @@ const server = createServer(async (request, response) => {
 });
 await new Promise((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
 const address = server.address();
-if (!address || typeof address === "string") throw new Error("HTTP server did not start");
+if (!address || typeof address === "string") {
+  throw new Error("HTTP server did not start");
+}
 
 const browser = await browserType.launch({ headless: true });
 try {

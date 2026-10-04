@@ -56,7 +56,9 @@ export class EventBus<TEvents extends Record<string, any>> {
     const listeners = [...this.getListeners(event)];
     queueMicrotask(() => {
       for (const [listener, options] of listeners) {
-        if (options.once) this.off(event, listener);
+        if (options.once) {
+          this.off(event, listener);
+        }
         try {
           listener(args);
         } catch {
@@ -94,7 +96,9 @@ class EventBusView<TEvents extends Record<string, any>> {
     listener: EventListener<TEvents, K>,
     options?: { once?: boolean },
   ): () => void {
-    if (this.#disposed) return () => {};
+    if (this.#disposed) {
+      return () => {};
+    }
     const cleanup = this.#events.on(event, listener, options);
     this.#cleanups.add(cleanup);
 
@@ -106,7 +110,9 @@ class EventBusView<TEvents extends Record<string, any>> {
 
   /** この view から登録したすべての listener を解除します。 */
   dispose(): void {
-    if (this.#disposed) return;
+    if (this.#disposed) {
+      return;
+    }
     this.#disposed = true;
     for (const cleanup of this.#cleanups) {
       cleanup();

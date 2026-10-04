@@ -142,12 +142,16 @@ describe("operation の recovery", () => {
     // ! drop の時点で既定 fail だけが終了し、wait と resend は次の ready を待ちます。
     scenario.drop();
     const dropSnapshot = scenario.client.lifecycle;
-    if (dropSnapshot.phase !== "recovering") throw new Error("Expected recovery");
+    if (dropSnapshot.phase !== "recovering") {
+      throw new Error("Expected recovery");
+    }
     const failedError = await failed.then(
       () => undefined,
       (error) => error,
     );
-    if (!(failedError instanceof UniplsDroppedError)) throw new Error("Expected drop error");
+    if (!(failedError instanceof UniplsDroppedError)) {
+      throw new Error("Expected drop error");
+    }
     expect(failedError).toMatchObject({ outcome: "operation-failed" });
     expect(failedError.drop).toBe(dropSnapshot.drop);
     const recovery = scenario.reconnector.invocations.take();

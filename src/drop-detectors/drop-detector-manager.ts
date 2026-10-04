@@ -49,7 +49,9 @@ export class DropDetectorManager<TInput, TOutput> {
       const scope = params.createScope(identity);
       let failed = false;
       const fail = (boundary: "guard" | "run", cause: unknown) => {
-        if (failed || scope.signal.aborted) return;
+        if (failed || scope.signal.aborted) {
+          return;
+        }
         failed = true;
         params.onRuntimeFailure(identity, boundary, cause);
         void scope.dispose(cause);
@@ -63,7 +65,9 @@ export class DropDetectorManager<TInput, TOutput> {
         throw cause;
       }
       try {
-        if (returned !== undefined) scope.deferReturned(returned);
+        if (returned !== undefined) {
+          scope.deferReturned(returned);
+        }
         scope.commitTo(params.transaction, `drop-detector:${identity.registrationIndex}`);
       } catch (cause) {
         await scope.dispose(cause);

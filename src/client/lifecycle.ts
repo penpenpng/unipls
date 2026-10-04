@@ -92,7 +92,9 @@ export class UniplsLifecycleCoordinator {
 
   get recoveryDrop(): UniplsDrop {
     const drop = this.#requireSession().recoveryDrop;
-    if (!drop) throw new Error("Recovery drop is missing");
+    if (!drop) {
+      throw new Error("Recovery drop is missing");
+    }
     return drop;
   }
 
@@ -115,7 +117,9 @@ export class UniplsLifecycleCoordinator {
   }
 
   beginSession(): ConnectionId {
-    if (this.#session) throw new Error("A logical session is already active");
+    if (this.#session) {
+      throw new Error("A logical session is already active");
+    }
     this.#session = {
       id: this.#ids.session(),
       controller: new AbortController(),
@@ -272,7 +276,9 @@ export class UniplsLifecycleCoordinator {
 
   closeByUser(reason: unknown): void {
     const session = this.#session;
-    if (!session) return;
+    if (!session) {
+      return;
+    }
     if (session.activeAttempt) {
       const attempt = session.activeAttempt;
       this.#appendAttempt(
@@ -363,7 +369,9 @@ export class UniplsLifecycleCoordinator {
   #beginAttempt(origin: ConnectionAttemptOrigin): ConnectionId {
     const session = this.#requireSession();
     const drop = origin === "recovery" ? session.recoveryDrop : undefined;
-    if (origin === "recovery" && !drop) throw new Error("Recovery drop is missing");
+    if (origin === "recovery" && !drop) {
+      throw new Error("Recovery drop is missing");
+    }
     const connection = this.#ids.connection();
     const attempt: ActiveAttempt = {
       sequence: session.nextSequence,
@@ -401,7 +409,9 @@ export class UniplsLifecycleCoordinator {
   }
 
   #requireSession(): LogicalSession {
-    if (!this.#session) throw new Error("There is no active logical session");
+    if (!this.#session) {
+      throw new Error("There is no active logical session");
+    }
     return this.#session;
   }
 

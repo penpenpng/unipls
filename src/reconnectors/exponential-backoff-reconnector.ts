@@ -29,11 +29,18 @@ export class ExponentialBackoffReconnector implements UniplsReconnector {
     this.#factor = options.factor ?? 2;
     this.#random = options.random ?? Math.random;
 
-    if (!(this.#maxRetries >= 0)) throw new RangeError("maxRetries は0以上で指定してください。");
-    if (!(this.#initialDelay >= 0))
+    if (!(this.#maxRetries >= 0)) {
+      throw new RangeError("maxRetries は0以上で指定してください。");
+    }
+    if (!(this.#initialDelay >= 0)) {
       throw new RangeError("initialDelay は0以上で指定してください。");
-    if (!(this.#maxDelay >= 0)) throw new RangeError("maxDelay は0以上で指定してください。");
-    if (!(this.#factor >= 1)) throw new RangeError("factor は1以上で指定してください。");
+    }
+    if (!(this.#maxDelay >= 0)) {
+      throw new RangeError("maxDelay は0以上で指定してください。");
+    }
+    if (!(this.#factor >= 1)) {
+      throw new RangeError("factor は1以上で指定してください。");
+    }
   }
 
   setup(

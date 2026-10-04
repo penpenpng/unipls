@@ -39,8 +39,11 @@ function run(command, args, cwd = packageDirectory) {
     const child = spawn(command, args, { cwd, stdio: "inherit" });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
-      if (code === 0) resolvePromise();
-      else reject(new Error(`${command} failed: code=${code}, signal=${signal}`));
+      if (code === 0) {
+        resolvePromise();
+      } else {
+        reject(new Error(`${command} failed: code=${code}, signal=${signal}`));
+      }
     });
   });
 }

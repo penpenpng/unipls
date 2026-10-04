@@ -30,7 +30,9 @@ export class MessageDispatcher<T> {
     return Object.freeze({
       operation,
       unregister: () => {
-        if (!registered) return;
+        if (!registered) {
+          return;
+        }
         registered = false;
         this.#registrations.delete(operation);
       },

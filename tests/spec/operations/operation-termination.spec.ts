@@ -181,7 +181,9 @@ describe("operation の timeout、abort、resource 解放", () => {
     await opening;
     const cause = new Error("request predicate failed");
     const mayThrow = (message: string) => {
-      if (message === "bad") throw cause;
+      if (message === "bad") {
+        throw cause;
+      }
       return message === "good";
     };
     const continued = client.request({ query: "continued", selector: mayThrow });

@@ -390,17 +390,23 @@ describe("回復の終端結果", () => {
     });
     const closedErrors: UniplsDroppedError[] = [];
     scenario.client.on("closed", ({ error }) => {
-      if (error instanceof UniplsDroppedError) closedErrors.push(error);
+      if (error instanceof UniplsDroppedError) {
+        closedErrors.push(error);
+      }
     });
     await openScenario(scenario);
     const firstOpen = scenario.client.lifecycle;
-    if (firstOpen.phase !== "open") throw new Error("Expected an open session");
+    if (firstOpen.phase !== "open") {
+      throw new Error("Expected an open session");
+    }
     const waiting = scenario.client.next({
       selector: () => false,
       retry: "wait",
     });
     const cause = new Error(`${mode} cause`);
-    if (mode === "setup-failure") scenario.reconnector.failNextSetup(cause);
+    if (mode === "setup-failure") {
+      scenario.reconnector.failNextSetup(cause);
+    }
 
     // 接続を drop した後、指定された回復終了操作を選びます。
     scenario.drop(0);
@@ -421,7 +427,9 @@ describe("回復の終端結果", () => {
     expect(closedErrors).toHaveLength(1);
     expect(rejection).toBe(closedErrors[0]);
     expect(rejection).toMatchObject({ name: "UniplsDroppedError", outcome });
-    if (recovery) expect(recovery.cleanupCount).toBe(1);
+    if (recovery) {
+      expect(recovery.cleanupCount).toBe(1);
+    }
     expect(scenario.client.lifecycle).toMatchObject({
       phase: "closed",
       reason: "dropped",

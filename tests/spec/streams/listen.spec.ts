@@ -79,7 +79,9 @@ describe("Unipls.listen の主要シナリオ", () => {
     scenario.drop();
     const failedFinalization = await failed.closed;
     expect(failedFinalization.ok).toBe(false);
-    if (failedFinalization.ok) throw new Error("failure結果が必要です");
+    if (failedFinalization.ok) {
+      throw new Error("failure結果が必要です");
+    }
     expect(failedFinalization.reason).toBe("dropped");
     expect(failedFinalization.error).toBeInstanceOf(UniplsDroppedError);
     const recovery = scenario.reconnector.invocations.take();

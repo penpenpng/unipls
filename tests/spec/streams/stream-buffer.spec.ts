@@ -22,7 +22,9 @@ describe("stream buffer", () => {
     });
 
     // ! 64件までは未処理メッセージを保持してstreamを継続します。
-    for (let index = 0; index < 64; index += 1) socket.emitMessage(`message-${index}`);
+    for (let index = 0; index < 64; index += 1) {
+      socket.emitMessage(`message-${index}`);
+    }
     await flushMicrotasks();
     expect(settled).toBe(false);
 
@@ -30,7 +32,9 @@ describe("stream buffer", () => {
     socket.emitMessage("overflow");
     const finalization = await messages.closed;
     expect(finalization.ok).toBe(false);
-    if (finalization.ok) throw new Error("Expected failure");
+    if (finalization.ok) {
+      throw new Error("Expected failure");
+    }
     expect(finalization.reason).toBe("buffer-overflow");
     expect(finalization.error).toBeInstanceOf(UniplsBufferOverflowError);
     const iterator = messages[Symbol.asyncIterator]();

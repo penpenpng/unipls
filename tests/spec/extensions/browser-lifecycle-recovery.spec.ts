@@ -31,7 +31,9 @@ class BrowserTarget implements BrowserLifecycleEventTarget {
   }
   emit(type: string): void {
     const listeners = [...(this.listeners.get(type) ?? [])];
-    for (const callback of listeners) callback({ type });
+    for (const callback of listeners) {
+      callback({ type });
+    }
   }
   get listenerCount(): number {
     return [...this.listeners.values()].reduce((sum, listeners) => sum + listeners.size, 0);
@@ -116,8 +118,11 @@ describe("browser lifecycle recovery", () => {
       env.document.visibilityState = "hidden";
       env.document.emit("visibilitychange");
       await vi.advanceTimersByTimeAsync(10);
-      if (suspend === "freeze") env.document.emit("freeze");
-      else env.window.emit("pagehide");
+      if (suspend === "freeze") {
+        env.document.emit("freeze");
+      } else {
+        env.window.emit("pagehide");
+      }
       await vi.advanceTimersByTimeAsync(100);
       expect(transport.connections).toHaveLength(1);
       env.document.visibilityState = "visible";
@@ -332,7 +337,9 @@ describe("browser lifecycle recovery", () => {
       reason: DropReasons.BROWSER_LIFECYCLE_PROBE_TIMEOUT,
       metadata: { detail: { triggers: ["resume"] } },
     });
-    if (drops[0].source.type !== "detector") throw new Error("Expected detector source");
+    if (drops[0].source.type !== "detector") {
+      throw new Error("Expected detector source");
+    }
     const detail = drops[0].source.metadata?.detail as { triggers: readonly string[] };
     expect(Object.isFrozen(detail)).toBe(true);
     expect(Object.isFrozen(detail.triggers)).toBe(true);

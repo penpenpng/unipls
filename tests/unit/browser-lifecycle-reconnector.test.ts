@@ -32,7 +32,9 @@ function fixture(defaultReconnector: UniplsReconnector) {
 
 describe("BrowserLifecycleReconnector defaultReconnector", () => {
   afterEach(() => {
-    for (const session of sessions.splice(0)) session.abort();
+    for (const session of sessions.splice(0)) {
+      session.abort();
+    }
     vi.useRealTimers();
   });
 
@@ -49,16 +51,22 @@ describe("BrowserLifecycleReconnector defaultReconnector", () => {
       const dispose = vi.fn();
       const cause = new Error("policy");
       const setup = vi.fn((actions: UniplsReconnectorActions) => {
-        if (decision === "cancel") actions.cancel();
-        else actions.exhaust(cause);
+        if (decision === "cancel") {
+          actions.cancel();
+        } else {
+          actions.exhaust(cause);
+        }
         actions.reconnect();
         return dispose;
       });
       const f = fixture({ setup });
       const cleanup = await f.reconnector.setup(f.actions, f.ctx);
       expect(setup.mock.calls[0]).toEqual([expect.any(Object), f.ctx]);
-      if (decision === "cancel") expect(f.actions.cancel).toHaveBeenCalledOnce();
-      else expect(f.actions.exhaust).toHaveBeenCalledWith(cause);
+      if (decision === "cancel") {
+        expect(f.actions.cancel).toHaveBeenCalledOnce();
+      } else {
+        expect(f.actions.exhaust).toHaveBeenCalledWith(cause);
+      }
       expect(f.actions.reconnect).not.toHaveBeenCalled();
       expect(dispose).toHaveBeenCalledOnce();
       cleanup?.();

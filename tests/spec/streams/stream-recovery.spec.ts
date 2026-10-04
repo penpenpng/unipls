@@ -46,7 +46,9 @@ describe("stream の recovery", () => {
       await vi.advanceTimersByTimeAsync(10);
       const finalization = await subscription.closed;
       expect(finalization.ok).toBe(false);
-      if (finalization.ok) throw new Error("Expected failure");
+      if (finalization.ok) {
+        throw new Error("Expected failure");
+      }
       expect(finalization.reason).toBe("timeout");
       expect(finalization.error).toBeInstanceOf(UniplsTimeoutError);
 

@@ -116,7 +116,9 @@ export class OwnedResourceScope implements ResourceScope {
 
   /** cleanup を一度だけ開始し、競合する呼び出しへ同じ Promise を返します。 */
   dispose(reason?: unknown): Promise<void> {
-    if (this.#disposePromise) return this.#disposePromise;
+    if (this.#disposePromise) {
+      return this.#disposePromise;
+    }
     this.#accepting = false;
     this.#controller.abort(reason);
     this.#disposePromise = new Promise<void>((resolve) => {

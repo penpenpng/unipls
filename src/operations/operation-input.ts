@@ -33,19 +33,25 @@ export function validateOptionalCallback(
   property: string,
   operation: string,
 ): void {
-  if (value !== undefined) validateRequiredCallback(value, property, operation);
+  if (value !== undefined) {
+    validateRequiredCallback(value, property, operation);
+  }
 }
 
 /** @internal AbortSignalのnative brandを検証します。 */
 export function validateOperationSignal(signal: unknown): void {
-  if (signal === undefined) return;
+  if (signal === undefined) {
+    return;
+  }
   const abortedGetter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
   try {
     abortedGetter?.call(signal);
   } catch {
     throw new TypeError("signal には AbortSignal を指定してください。");
   }
-  if (!abortedGetter) throw new TypeError("実行環境が AbortSignal を提供していません。");
+  if (!abortedGetter) {
+    throw new TypeError("実行環境が AbortSignal を提供していません。");
+  }
 }
 
 /** @internal predicate failure policyを検証します。 */
@@ -110,7 +116,9 @@ export function validateStreamDelivery(
 
 /** @internal open()へ渡すprovisionerの公開形を検証します。 */
 export function validateProvisioner(value: unknown): void {
-  if (value === undefined) return;
+  if (value === undefined) {
+    return;
+  }
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new TypeError("provisioner にはsetup hookを持つobjectを指定してください。");
   }

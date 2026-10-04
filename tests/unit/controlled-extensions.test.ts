@@ -64,7 +64,9 @@ describe("制御可能な拡張 hook", () => {
     );
     const reconnection = reconnector.invocations.take();
     reconnection.reconnect();
-    if (typeof cleanup === "function") cleanup();
+    if (typeof cleanup === "function") {
+      cleanup();
+    }
 
     // 別の cancel 操作と disposer を実行します。
     const secondCleanup = reconnector.setup(
@@ -85,7 +87,9 @@ describe("制御可能な拡張 hook", () => {
     );
     const cancelledReconnection = reconnector.invocations.take();
     cancelledReconnection.cancel();
-    if (typeof secondCleanup === "function") secondCleanup();
+    if (typeof secondCleanup === "function") {
+      secondCleanup();
+    }
 
     // detector の drop callback と cleanup を実行します。
     const dropCalls = new CallbackProbe();

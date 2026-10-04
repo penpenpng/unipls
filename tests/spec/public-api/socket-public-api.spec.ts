@@ -17,7 +17,9 @@ describe("低レベルsocketの公開契約", () => {
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
       deserializer(data) {
-        if (data === "bad") throw cause;
+        if (data === "bad") {
+          throw cause;
+        }
         return String(data);
       },
       logSink(log) {

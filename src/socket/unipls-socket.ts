@@ -203,7 +203,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       signal: epoch.signal,
       finally: () => {
         events.dispose();
-        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+        }
       },
     });
 
@@ -308,11 +310,15 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     events.on("closed", ({ transportEpochId }) => {
-      if (targetEpochId !== transportEpochId) return;
+      if (targetEpochId !== transportEpochId) {
+        return;
+      }
       result.resolve();
     });
     events.on("dropped", ({ transportEpochId }) => {
-      if (targetEpochId !== transportEpochId) return;
+      if (targetEpochId !== transportEpochId) {
+        return;
+      }
       result.resolve();
     });
 
@@ -441,7 +447,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       events.on(
         "raw-open",
         ({ epoch: openedEpoch }) => {
-          if (openedEpoch.id !== epoch.id) return;
+          if (openedEpoch.id !== epoch.id) {
+            return;
+          }
           send();
         },
         { once: true },
@@ -450,7 +458,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       events.on(
         "open",
         ({ transportEpochId }) => {
-          if (transportEpochId !== epoch.id) return;
+          if (transportEpochId !== epoch.id) {
+            return;
+          }
           send();
         },
         { once: true },
@@ -459,7 +469,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on(
       "closed",
       ({ transportEpochId }) => {
-        if (transportEpochId !== epoch.id) return;
+        if (transportEpochId !== epoch.id) {
+          return;
+        }
         result.reject(new UniplsSocketClosedError());
       },
       { once: true },
@@ -467,7 +479,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on(
       "dropped",
       ({ transportEpochId }) => {
-        if (transportEpochId !== epoch.id) return;
+        if (transportEpochId !== epoch.id) {
+          return;
+        }
         result.reject(new UniplsSocketDroppedError());
       },
       { once: true },
@@ -475,7 +489,9 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     events.on(
       "failed",
       ({ transportEpochId, error }) => {
-        if (transportEpochId !== epoch.id) return;
+        if (transportEpochId !== epoch.id) {
+          return;
+        }
         result.reject(error);
       },
       { once: true },

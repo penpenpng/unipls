@@ -85,7 +85,9 @@ describe("複数 operation を伴う回復", () => {
       await expect(stream.closed).resolves.toMatchObject({ ok: false, reason: "dropped" });
     } else {
       replacement.emitMessage("ignored");
-      if (testCase.response === "updated") replacement.emitMessage("original");
+      if (testCase.response === "updated") {
+        replacement.emitMessage("original");
+      }
       replacement.emitMessage(testCase.response);
       await expect(response).resolves.toBe(testCase.response);
       await expect(stream[Symbol.asyncIterator]().next()).resolves.toEqual({
@@ -136,9 +138,13 @@ describe("複数 operation を伴う回復", () => {
         ? expect(pending).rejects.toBe(cause)
         : expect(pending).resolves.toEqual({ done: true, value: undefined });
     // ! operationまたはsessionの終了が、回復判断より先に確定します。
-    if (ending === "abort") controller.abort(cause);
-    else if (ending === "unsubscribe") stream.unsubscribe();
-    else await closeClient(scenario.client, replacement);
+    if (ending === "abort") {
+      controller.abort(cause);
+    } else if (ending === "unsubscribe") {
+      stream.unsubscribe();
+    } else {
+      await closeClient(scenario.client, replacement);
+    }
     const finalization = await stream.closed;
     await pendingAssertion;
     expect(finalization).toEqual(
@@ -147,13 +153,18 @@ describe("複数 operation を伴う回復", () => {
         : { ok: true, reason: ending === "close" ? "closed" : "unsubscribed" },
     );
     // ! 終了後に非同期の回復判断が返ります。
-    if (settlement === "resolve") invocation.resolve({ query: lateQuery });
-    else invocation.reject(new Error("late recovery failure"));
+    if (settlement === "resolve") {
+      invocation.resolve({ query: lateQuery });
+    } else {
+      invocation.reject(new Error("late recovery failure"));
+    }
     await flushMicrotasks();
     expect(lateQuery).not.toHaveBeenCalled();
     expect(replacement.sent).toEqual([]);
     expect(await stream.closed).toBe(finalization);
-    if (ending !== "close") await closeClient(scenario.client, replacement);
+    if (ending !== "close") {
+      await closeClient(scenario.client, replacement);
+    }
   });
 
   /**
@@ -326,7 +337,9 @@ describe("複数 operation を伴う回復", () => {
       reason: "buffer-overflow",
       error: expect.any(UniplsBufferOverflowError),
     });
-    if (finalization.ok) throw new Error("failure結果が必要です");
+    if (finalization.ok) {
+      throw new Error("failure結果が必要です");
+    }
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toBe(finalization.error);
     await expect(response).resolves.toBe("overflow");
     // ! 再び接続を回復しても、終了したstreamのqueryは送信しません。

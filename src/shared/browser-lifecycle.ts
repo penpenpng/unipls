@@ -67,7 +67,9 @@ export class BrowserLifecycleSource {
 
   /** 接続試行の間も観測を継続し、session 終了時に所有権を解放します。 */
   retainSession(signal: AbortSignal): void {
-    if (signal.aborted || this.#sessions.has(signal)) return;
+    if (signal.aborted || this.#sessions.has(signal)) {
+      return;
+    }
     this.#sessions.add(signal);
     const release = this.#retain();
     signal.addEventListener(
@@ -85,7 +87,9 @@ export class BrowserLifecycleSource {
     this.#listeners.add(listener);
     let active = true;
     return () => {
-      if (!active) return;
+      if (!active) {
+        return;
+      }
       active = false;
       this.#listeners.delete(listener);
       release();
@@ -103,7 +107,9 @@ export class BrowserLifecycleSource {
       }
     }
     return () => {
-      if (--this.#owners !== 0) return;
+      if (--this.#owners !== 0) {
+        return;
+      }
       this.#frozen = false;
       this.#pageHidden = false;
       for (const type of ["pagehide", "pageshow", "offline", "online"]) {
@@ -122,8 +128,12 @@ export class BrowserLifecycleSource {
     } else {
       trigger = event.type as BrowserLifecycleTrigger;
     }
-    if (trigger === "freeze") this.#frozen = true;
-    if (trigger === "pagehide") this.#pageHidden = true;
+    if (trigger === "freeze") {
+      this.#frozen = true;
+    }
+    if (trigger === "pagehide") {
+      this.#pageHidden = true;
+    }
     if (trigger === "resume" || trigger === "pageshow") {
       this.#frozen = false;
       this.#pageHidden = false;
@@ -137,6 +147,8 @@ export class BrowserLifecycleSource {
     const notification = Object.freeze({ ...this.snapshot, trigger, recovery });
     // 通知中に購読が切り替わっても、新しい購読者に同じイベントを再配信しません。
     const listeners = [...this.#listeners];
-    for (const listener of listeners) listener(notification);
+    for (const listener of listeners) {
+      listener(notification);
+    }
   };
 }

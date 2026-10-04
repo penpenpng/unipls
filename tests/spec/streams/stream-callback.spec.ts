@@ -37,7 +37,9 @@ describe("callback stream", () => {
       readonly dispose?: symbol;
       readonly asyncDispose?: symbol;
     };
-    if (disposalSymbols.dispose) expect(disposalSymbols.dispose in subscription).toBe(false);
+    if (disposalSymbols.dispose) {
+      expect(disposalSymbols.dispose in subscription).toBe(false);
+    }
     if (disposalSymbols.asyncDispose) {
       expect(disposalSymbols.asyncDispose in subscription).toBe(false);
     }
@@ -62,7 +64,9 @@ describe("callback stream", () => {
     const independentMessages: string[] = [];
     const continued = client.listen({
       onMatch: (message) => {
-        if (message === "bad") throw cause;
+        if (message === "bad") {
+          throw cause;
+        }
         continuedMessages.push(message);
       },
     });

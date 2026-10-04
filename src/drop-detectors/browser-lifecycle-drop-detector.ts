@@ -36,14 +36,17 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
     this.#options = { ...options };
     this.name = options.name;
     for (const value of [options.timeout ?? 5_000, options.coalesceDelay ?? 100]) {
-      if (!Number.isFinite(value) || value < 0)
+      if (!Number.isFinite(value) || value < 0) {
         throw new RangeError("Probe timing must be finite and non-negative.");
+      }
     }
   }
 
   setup(ctx: DropDetectorContext<TInput, TOutput>): void {
     const options = this.#options;
-    if (ctx.sessionSignal) options.source.retainSession(ctx.sessionSignal);
+    if (ctx.sessionSignal) {
+      options.source.retainSession(ctx.sessionSignal);
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let active: AbortController | undefined;
     let generation = 0;
@@ -55,17 +58,25 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
       active = undefined;
     };
     const schedule = (trigger: BrowserLifecycleTrigger, recovery: boolean) => {
-      if (ctx.signal.aborted || options.source.snapshot.suspended) return;
+      if (ctx.signal.aborted || options.source.snapshot.suspended) {
+        return;
+      }
       if (active || timer !== undefined) {
-        if (!recovery) return;
+        if (!recovery) {
+          return;
+        }
         // 復帰前の probe だけを破棄し、同じ復帰のイベント群はまとめます。
-        if (timer !== undefined) return;
+        if (timer !== undefined) {
+          return;
+        }
         cancel();
       }
       const epoch = generation;
       timer = setTimeout(() => {
         timer = undefined;
-        if (ctx.signal.aborted || options.source.snapshot.suspended) return;
+        if (ctx.signal.aborted || options.source.snapshot.suspended) {
+          return;
+        }
         const controller = new AbortController();
         active = controller;
         ctx.run(async (signal) => {
@@ -76,16 +87,24 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
               signal: AbortSignal.any([signal, controller.signal]),
             });
           } catch (cause) {
-            if (signal.aborted || controller.signal.aborted || epoch !== generation) return;
-            if (!(cause instanceof UniplsTimeoutError)) throw cause;
+            if (signal.aborted || controller.signal.aborted || epoch !== generation) {
+              return;
+            }
+            if (!(cause instanceof UniplsTimeoutError)) {
+              throw cause;
+            }
             const state = options.source.snapshot;
-            if (state.suspended || ((options.deferWhileHidden ?? true) && state.hidden)) return;
+            if (state.suspended || ((options.deferWhileHidden ?? true) && state.hidden)) {
+              return;
+            }
             ctx.drop({
               reason: DropReasons.BROWSER_LIFECYCLE_PROBE_TIMEOUT,
               metadata: { trigger },
             });
           } finally {
-            if (active === controller) active = undefined;
+            if (active === controller) {
+              active = undefined;
+            }
           }
         });
       }, options.coalesceDelay ?? 100);

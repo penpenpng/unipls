@@ -109,7 +109,9 @@ describe("AsyncIterable stream", () => {
     const cause = new Error("terminator failed");
     const selectorCalls: string[] = [];
     const mayThrow = (message: string) => {
-      if (message === "bad") throw cause;
+      if (message === "bad") {
+        throw cause;
+      }
       return false;
     };
     const continued = client.listen({
@@ -149,7 +151,9 @@ describe("AsyncIterable stream", () => {
     const { client, socket, close } = await createReadyClient();
     const cause = new Error("selector failed");
     const mayThrow = (message: string) => {
-      if (message === "bad") throw cause;
+      if (message === "bad") {
+        throw cause;
+      }
       return true;
     };
     const continued = client.listen({ selector: mayThrow });

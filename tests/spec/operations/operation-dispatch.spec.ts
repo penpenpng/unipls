@@ -120,7 +120,9 @@ describe("operation の message dispatch", () => {
     await opening;
     const cause = new Error("predicate failed");
     const mayThrow = (message: string) => {
-      if (message === "bad") throw cause;
+      if (message === "bad") {
+        throw cause;
+      }
       return message === "good";
     };
     const continued = client.next({ selector: mayThrow });
@@ -174,7 +176,9 @@ describe("operation の message dispatch", () => {
       WebSocket: transport.WebSocket,
       logSink: (log) => diagnostics.push(log),
       deserializer: (data) => {
-        if (data === "bad") throw cause;
+        if (data === "bad") {
+          throw cause;
+        }
         return String(data);
       },
     });
@@ -197,7 +201,9 @@ describe("operation の message dispatch", () => {
       context: { messageSequence: 1, input: { kind: "text", size: 3 } },
     });
     const lifecycle = client.lifecycle;
-    if (lifecycle.phase !== "open") throw new Error("Expected open lifecycle");
+    if (lifecycle.phase !== "open") {
+      throw new Error("Expected open lifecycle");
+    }
     expect(diagnostics[0]?.context?.session).toBe(lifecycle.session);
     expect(diagnostics[0]?.context?.connection).toBe(lifecycle.connection);
     expect(Object.isFrozen(diagnostics[0])).toBe(true);
@@ -225,7 +231,9 @@ describe("operation の message dispatch", () => {
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
       serializer: (message) => {
-        if (serializerCause !== undefined) throw serializerCause;
+        if (serializerCause !== undefined) {
+          throw serializerCause;
+        }
         return message;
       },
     });

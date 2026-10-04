@@ -115,7 +115,9 @@ describe("Unipls.subscribe の主要シナリオ", () => {
     scenario.drop();
     const failedFinalization = await failed.closed;
     expect(failedFinalization.ok).toBe(false);
-    if (failedFinalization.ok) throw new Error("failure結果が必要です");
+    if (failedFinalization.ok) {
+      throw new Error("failure結果が必要です");
+    }
     expect(failedFinalization.reason).toBe("dropped");
     expect(failedFinalization.error).toBeInstanceOf(UniplsDroppedError);
     const recovery = scenario.reconnector.invocations.take();
@@ -193,7 +195,9 @@ describe("Unipls.subscribe の主要シナリオ", () => {
       await vi.advanceTimersByTimeAsync(100);
       const timeoutFinalization = await timed.closed;
       expect(timeoutFinalization.ok).toBe(false);
-      if (timeoutFinalization.ok) throw new Error("failure結果が必要です");
+      if (timeoutFinalization.ok) {
+        throw new Error("failure結果が必要です");
+      }
       expect(timeoutFinalization.reason).toBe("timeout");
       expect(timeoutFinalization.error).toBeInstanceOf(UniplsTimeoutError);
 

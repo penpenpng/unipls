@@ -53,7 +53,9 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
     this.session = params.session;
     this.operationType = params.operationType;
     const signals = [this.#controller.signal];
-    if (params.signal) signals.push(params.signal);
+    if (params.signal) {
+      signals.push(params.signal);
+    }
     if (params.timeout !== undefined) {
       this.#timeoutController = new AbortController();
       signals.push(this.#timeoutController.signal);
@@ -86,14 +88,22 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
       params.onAbort(this.signal.reason);
     };
     this.signal.addEventListener("abort", this.#onAbort, { once: true });
-    if (this.signal.aborted) this.#onAbort();
+    if (this.signal.aborted) {
+      this.#onAbort();
+    }
   }
 
   cleanup(reason?: unknown): void {
-    if (this.#cleaned) return;
+    if (this.#cleaned) {
+      return;
+    }
     this.#cleaned = true;
-    if (this.#timer !== undefined) clearTimeout(this.#timer);
-    if (this.#onAbort) this.signal.removeEventListener("abort", this.#onAbort);
+    if (this.#timer !== undefined) {
+      clearTimeout(this.#timer);
+    }
+    if (this.#onAbort) {
+      this.signal.removeEventListener("abort", this.#onAbort);
+    }
     this.#unregister();
     this.events.dispose();
     this.#controller.abort(reason);
@@ -158,14 +168,18 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
   }
 
   resolve = (value: T) => {
-    if (this.#resulted) return;
+    if (this.#resulted) {
+      return;
+    }
     this.#resulted = true;
     this.#resources.cleanup();
     this.#resolvePromise(value);
   };
 
   reject = (reason?: unknown) => {
-    if (this.#resulted) return;
+    if (this.#resulted) {
+      return;
+    }
     this.#resulted = true;
     this.#resources.cleanup(reason);
     this.#rejectPromise(reason);
@@ -260,7 +274,9 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
   }
 
   handleMessage = (message: T) => {
-    if (!this.#resulted) this.#delivery.push(message);
+    if (!this.#resulted) {
+      this.#delivery.push(message);
+    }
   };
 
   handleTerminator = (message: T) => {
@@ -296,7 +312,9 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
   };
 
   #finish(finalization: StreamFinalization<T>): boolean {
-    if (this.#resulted) return false;
+    if (this.#resulted) {
+      return false;
+    }
     this.#resulted = true;
     this.#resources.cleanup(finalization.ok ? undefined : finalization.error);
     this.#delivery.finish(finalization);
