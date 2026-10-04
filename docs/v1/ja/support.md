@@ -40,12 +40,12 @@ operationのuser signal、resource scope、timeoutを合成するため、native
 
 ## entry point
 
-| import先                | 内容                                    | 利用環境            |
-| ----------------------- | --------------------------------------- | ------------------- |
-| `unipls`                | 高レベルclientとruntime非依存の拡張契約 | すべての対応runtime |
-| `unipls/socket`         | 低レベルWebSocket client                | すべての対応runtime |
+| import先                | 内容                                                                  | 利用環境            |
+| ----------------------- | --------------------------------------------------------------------- | ------------------- |
+| `unipls`                | 高レベルclientとruntime非依存の拡張契約                               | すべての対応runtime |
+| `unipls/socket`         | 低レベルWebSocket client                                              | すべての対応runtime |
 | `unipls/reconnectors`   | 再接続policyと`ImmediateReconnector`、`ExponentialBackoffReconnector` | すべての対応runtime |
-| `unipls/drop-detectors` | heartbeatとofflineのdrop detector       | すべての対応runtime |
+| `unipls/drop-detectors` | heartbeatとofflineのdrop detector                                     | すべての対応runtime |
 
 `NetworkDropDetector`は`setup()`でoffline listenerを登録するときに`window`へアクセスします。`unipls/drop-detectors`のimport時にはbrowser APIへアクセスしません。
 
