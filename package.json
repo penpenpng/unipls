@@ -46,7 +46,7 @@
   },
   "scripts": {
     "build": "vp pack",
-    "release": "pnpm build && pnpm publish --access public --no-git-checks",
+    "release": "pnpm exec changeset publish",
     "check": "vp check",
     "docs:build": "pnpm --filter unipls-docs build",
     "docs:dev": "pnpm --filter unipls-docs dev",
@@ -54,6 +54,7 @@
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "lint": "vp lint",
+    "prepack": "pnpm build",
     "prepare": "lefthook install",
     "typecheck": "tsc --project tsconfig.check.json && vp pack && tsc --project tsconfig.api.json",
     "test": "vp test run",

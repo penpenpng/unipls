@@ -102,7 +102,6 @@ jobs:
           node-version: 24.21.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
       - name: Pack the published file set
         run: |
           mkdir -p "$RUNNER_TEMP/unipls-package"
