@@ -1,0 +1,9 @@
+import { NetworkDropDetector } from "unipls/browser";
+import { runConsumerSmoke } from "./consumer-smoke.mjs";
+
+const result = await runConsumerSmoke({ browser: true });
+if (typeof NetworkDropDetector !== "function") {
+  throw new Error("browser entryからNetworkDropDetectorをimportできませんでした。");
+}
+
+globalThis.__uniplsSmokeResult = { checks: result.checks + 1 };

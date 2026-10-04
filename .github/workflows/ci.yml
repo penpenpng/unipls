@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PNPM_VERSION: 10.34.5
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm fmt:check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Spec tests (*.spec.ts)
+        run: pnpm test:spec
+      - name: Unit tests (*.test.ts)
+        run: pnpm test:unit
+
+  build:
+    name: Build (ES2022)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  consumer-package:
+    name: Package consumer fixture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Pack the published file set
+        run: |
+          mkdir -p "$RUNNER_TEMP/unipls-package"
+          npm pack --pack-destination "$RUNNER_TEMP/unipls-package" .
+      - name: Install and verify the isolated consumer
+        run: |
+          tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
+          node tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
+          node "$RUNNER_TEMP/unipls-consumer/run-smoke.mjs"
+          node "$RUNNER_TEMP/unipls-consumer/verify-node-package.mjs"
+          node node_modules/typescript/bin/tsc --project "$RUNNER_TEMP/unipls-consumer/tsconfig.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unipls-package
+          path: ${{ runner.temp }}/unipls-package/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  native-runtime:
+    name: ${{ matrix.runtime }} ${{ matrix.version }}
+    needs: consumer-package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: Node.js
+            command: node
+            version: 22.4.0
+          - runtime: Node.js
+            command: node
+            version: latest
+          - runtime: Deno
+            command: deno run
+            version: v2.0.0
+          - runtime: Deno
+            command: deno run
+            version: latest
+          - runtime: Bun
+            command: bun
+            version: 1.2.0
+          - runtime: Bun
+            command: bun
+            version: latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.4.0
+      - if: matrix.runtime == 'Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.version }}
+      - if: matrix.runtime == 'Deno'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ matrix.version }}
+      - if: matrix.runtime == 'Bun'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: unipls-package
+          path: ${{ runner.temp }}/unipls-package
+      - name: Install the same tarball in an isolated consumer
+        run: |
+          tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
+          node tests/package/prepare-consumer.mjs "$tarball" "$RUNNER_TEMP/unipls-consumer"
+      - name: Run package and native capability smoke tests
+        working-directory: ${{ runner.temp }}/unipls-consumer
+        run: ${{ matrix.command }} run-smoke.mjs
+
+  browser-versions:
+    name: Resolve browser generations
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - id: versions
+        name: Select the latest two stable Playwright release lines
+        run: npm view playwright versions --json | node tests/runtime/select-playwright-versions.mjs >> "$GITHUB_OUTPUT"
+
+  browser-runtime:
+    name: ${{ matrix.browser }} (Playwright ${{ matrix.playwright }})
+    needs:
+      - browser-versions
+      - consumer-package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+          - webkit
+        playwright: ${{ fromJSON(needs.browser-versions.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: unipls-package
+          path: ${{ runner.temp }}/unipls-package
+      - name: Install browser generation
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+          PLAYWRIGHT_VERSION: ${{ matrix.playwright }}
+        run: |
+          runtime_dir="$RUNNER_TEMP/unipls-browser-runtime"
+          tarball=$(find "$RUNNER_TEMP/unipls-package" -name '*.tgz' -print -quit)
+          node tests/package/prepare-consumer.mjs "$tarball" "$runtime_dir"
+          cp tests/runtime/run-package-browser.mjs "$runtime_dir/"
+          cd "$runtime_dir"
+          npm install --no-package-lock --no-save "playwright@$PLAYWRIGHT_VERSION"
+          npx playwright install --with-deps "$BROWSER_NAME"
+          node run-package-browser.mjs "$BROWSER_NAME"

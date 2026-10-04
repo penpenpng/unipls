@@ -1,0 +1,100 @@
+{
+  "name": "unipls",
+  "version": "0.1.0",
+  "description": "A typed WebSocket client with explicit readiness, recovery, and stream lifecycles.",
+  "keywords": [
+    "async-iterable",
+    "reconnection",
+    "typescript",
+    "websocket"
+  ],
+  "bugs": {
+    "url": "https://github.com/penpenpng/unipls/issues"
+  },
+  "license": "MIT",
+  "author": "penpenpng",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/penpenpng/unipls.git"
+  },
+  "files": [
+    "dist",
+    "docs/v1/ja/support.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./socket": {
+      "types": "./dist/socket.d.mts",
+      "import": "./dist/socket.mjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.mts",
+      "import": "./dist/browser.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "release": "pnpm build && pnpm publish --access public --no-git-checks",
+    "check": "vp check",
+    "docs:build": "pnpm --filter unipls-docs build",
+    "docs:dev": "pnpm --filter unipls-docs dev",
+    "docs:preview": "pnpm --filter unipls-docs preview",
+    "fmt": "vp fmt",
+    "fmt:check": "vp fmt --check",
+    "lint": "vp lint",
+    "prepare": "lefthook install",
+    "typecheck": "tsc --project tsconfig.check.json && vp pack && tsc --project tsconfig.api.json",
+    "test": "vp test run",
+    "test:spec": "vp test run --project spec",
+    "test:package": "vp pack && node tests/package/run-node-consumer.mjs",
+    "test:unit": "vp test run --project unit",
+    "test:ui": "vp test --ui"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@vitest/ui": "catalog:",
+    "lefthook": "^2.1.14",
+    "typescript": "5.9.3",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ],
+  "engines": {
+    "bun": ">=1.2.0",
+    "deno": ">=2.0.0",
+    "node": ">=22.4.0"
+  },
+  "packageManager": "pnpm@10.34.5",
+  "pnpm": {
+    "overrides": {
+      "vite@*": "npm:@voidzero-dev/vite-plus-core@1.0.0",
+      "vitest@*": "5.0.1"
+    },
+    "peerDependencyRules": {
+      "allowAny": [
+        "vite",
+        "vitest"
+      ],
+      "allowedVersions": {
+        "vite": "*",
+        "vitest": "*"
+      }
+    }
+  },
+  "uniplsSupport": {
+    "javascriptTarget": "ES2022"
+  }
+}

@@ -1,0 +1,50 @@
+# unipls v1 ドキュメント
+
+uniplsは、TypeScriptとJavaScript向けの型付きWebSocket clientです。接続のreadiness、再接続の判断、operationごとの回復、streamの終了、診断を明示的に扱います。現在の公開ドキュメントは日本語版です。日本語の内容を確定したあとに英語版を追加します。
+
+このファイルはv1ドキュメントのrootで公開されます。以下のURLはすべてこのファイルからの相対URLで、正式なドキュメントページを指します。
+
+## 最初に読むページ
+
+- 日本語トップ: ./ja/
+- インストールと最初の接続: ./ja/getting-started
+- コアコンセプト: ./ja/concepts
+- 対応環境: ./ja/support
+
+## ガイド
+
+- 5つの通信操作: ./ja/operations
+- 接続のlifecycleとreadiness: ./ja/lifecycle
+- drop、再接続、operationの回復: ./ja/recovery
+- エラーと診断: ./ja/errors
+- 低レベルsocket API: ./ja/socket
+
+## packageの概要
+
+main entry pointの`unipls`は、高レベルclientの`Unipls<TInput, TOutput>`をexportします。一つの論理sessionが複数の物理WebSocket connectionにまたがるmodelです。connectionごとのprovisioningが成功したあとにreadyになります。
+
+`unipls/socket`は、1回の物理接続を扱う低レベルclientの`UniplsSocket<TInput, TOutput>`をexportします。論理session、自動再接続、messageの対応付け、operationごとの回復は提供しません。
+
+`unipls/browser`は、browser専用の`NetworkDropDetector`をexportします。
+
+## 5つのoperation
+
+- `cast`: messageを1件送信し、localの送信完了だけを待ちます。
+- `next`: 送信せず、次に一致するmessageを1件受信します。retryの既定値は`wait`です。
+- `request`: queryを1件送信し、最初に一致するresponseを受信します。retryの既定値は`fail`です。
+- `listen`: 送信せず、一致するmessageを継続的に受信します。retryの既定値は`wait`です。
+- `subscribe`: 購読queryを1件送信し、一致するmessageを継続的に受信します。retryの既定値は`fail`です。
+
+`wait`はreplacement connectionがreadyになったあとも待機を続けますが、送信はやり直しません。`resend`は再送するため、server側の処理が重複する可能性があります。再送を使うapplication protocolは、冪等性または重複排除を提供する必要があります。clientにreconnectorがなければ、operationのretry policyにかかわらずconnection自体を回復できません。
+
+## 重要な契約
+
+- `open()`は論理sessionを開始します。`close()`はそのsessionと、所属するoperationおよびresourceを終了します。
+- WebSocketのopenとapplicationのreadinessは異なります。`setupConnection`は物理connectionごとに実行され、通常operationは成功するまで待機します。
+- `setupSession`は論理sessionごとに一度成功します。setupが登録したresourceは、所有scopeの終了時に登録と逆順で解放されます。
+- dropの検出、再接続のschedule、operationのretryは別々の判断です。
+- selectorはmessageを排他的に消費しません。同じmessageに一致するすべてのoperationが観測できます。
+- `request`と`subscribe`は、送信messageが送られたあとに結果の観測を開始します。
+- stream subscriptionは、rejectしない`closed` Promiseから型付きの終了結果を返します。AsyncIterableは有限bufferを使い、peerへのbackpressureは提供しません。
+- diagnosticはapplication message本体を含みません。隔離可能な失敗を通知し、connectionやoperationを終了しない場合があります。
+- wire protocol、request ID、topic、認証、exactly-once配信、永続queue、server側の履歴replayはlibraryの対象外です。

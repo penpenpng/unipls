@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: false
+  commands:
+    unipls-fmt:
+      run: mise exec -- pnpm fmt
+    unipls-lint-fix:
+      run: mise exec -- pnpm lint --fix
