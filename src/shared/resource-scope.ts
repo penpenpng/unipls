@@ -106,6 +106,7 @@ export class OwnedResourceScope implements ResourceScope {
 
     this.#committed = true;
     this.#accepting = false;
+
     parent.deferLibrary(() => {
       const disposal = this.dispose();
 
@@ -125,10 +126,13 @@ export class OwnedResourceScope implements ResourceScope {
     }
 
     this.#accepting = false;
+
     this.#controller.abort(reason);
+
     this.#disposePromise = new Promise<void>((resolve) => {
       this.#resolveDispose = resolve;
     });
+
     this.#continueDisposal();
 
     return this.#disposePromise;
@@ -183,7 +187,9 @@ export class OwnedResourceScope implements ResourceScope {
         return;
       }
     }
+
     this.#disposed = true;
+
     this.#resolveDispose?.();
   }
 

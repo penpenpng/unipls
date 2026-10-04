@@ -19,6 +19,7 @@ export class ControlledInvocation<TContext, TResult = void> {
       this.#resolve = resolve;
       this.#reject = reject;
     });
+
     void this.promise.catch(() => {});
   }
 
@@ -36,6 +37,7 @@ export class ControlledInvocation<TContext, TResult = void> {
     }
 
     this.#state = state;
+
     settle();
   }
 }

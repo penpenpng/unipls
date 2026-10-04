@@ -80,9 +80,11 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       }
 
       run.active = false;
+
       const disposer = run.disposer;
 
       run.disposer = undefined;
+
       disposeDelegate(disposer);
     };
     let unsubscribe: (() => void) | undefined;
@@ -93,7 +95,9 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     };
     const clearWaiting = () => {
       clearTimeout(timer);
+
       timer = undefined;
+
       stopDelegate();
     };
     const cleanup = () => {
@@ -102,6 +106,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       }
 
       disposed = true;
+
       clearWaiting();
       unsubscribe?.();
       ctx.signal.removeEventListener("abort", cleanup);
@@ -121,6 +126,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       }
 
       clearWaiting();
+
       timer = setTimeout(reconnect, this.#delay);
     };
 
@@ -131,6 +137,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
         onRecovery();
       }
     });
+
     ctx.signal.addEventListener("abort", cleanup, { once: true });
 
     if (eligible()) {
@@ -143,6 +150,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
         const run: { active: boolean; disposer?: () => void } = { active: true };
 
         delegateRun = run;
+
         const select = (action: () => void) => {
           if (!run.active || disposed || ctx.signal.aborted) {
             return;

@@ -56,8 +56,11 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
     const cancel = () => {
       generation++;
       clearTimeout(timer);
+
       timer = undefined;
+
       active?.abort();
+
       active = undefined;
     };
     const schedule = (trigger: BrowserLifecycleTrigger, recovery: boolean) => {
@@ -88,6 +91,7 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
         const controller = new AbortController();
 
         active = controller;
+
         ctx.run(async (signal) => {
           try {
             await ctx.request({

@@ -31,6 +31,7 @@ export class AsyncResult<T> {
       this.#resolve = resolve;
       this.#reject = reject;
     });
+
     void this.#promise.catch(() => {});
 
     const signals = [this.#controller.signal];
@@ -76,6 +77,7 @@ export class AsyncResult<T> {
     }
 
     this.#resulted = true;
+
     this.#resolve(value);
     this.#controller.abort(); // 関連する listener と timer を解放します。
   };
@@ -86,6 +88,7 @@ export class AsyncResult<T> {
     }
 
     this.#resulted = true;
+
     this.#reject(reason);
     this.#controller.abort(); // 関連する listener と timer を解放します。
   };

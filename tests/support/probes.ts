@@ -63,6 +63,7 @@ export class ManualScheduler {
     const id = this.#nextId;
 
     this.#nextId += 1;
+
     this.#tasks.set(id, { id, dueAt: this.#now + delay, callback });
 
     return id;
@@ -89,9 +90,12 @@ export class ManualScheduler {
       }
 
       this.#tasks.delete(next.id);
+
       this.#now = next.dueAt;
+
       next.callback();
     }
+
     this.#now = target;
   }
 }

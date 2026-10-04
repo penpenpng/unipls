@@ -54,6 +54,7 @@ describe("provisioning capability と resource scope", () => {
     const opening = client.open({
       setupConnection: async (ctx) => {
         context = ctx;
+
         await ctx.cast("authenticate");
         const requested = ctx.request({
           query: "current-user",
@@ -65,8 +66,11 @@ describe("provisioning capability と resource scope", () => {
           selector: (message) => message === "restored",
           onMatch: (message) => received.push(message),
         });
+
         setupStarted();
+
         requestedResponse = await requested;
+
         await setupGate;
       },
     });
@@ -144,6 +148,7 @@ describe("provisioning capability と resource scope", () => {
     const opening = scenario.client.open({
       setupSession(ctx) {
         sessionSetups += 1;
+
         ctx.defer(() => {
           order.push("session:defer");
         });
@@ -154,6 +159,7 @@ describe("provisioning capability と resource scope", () => {
       },
       setupConnection(ctx) {
         connectionSetups += 1;
+
         const setupNumber = connectionSetups;
 
         ctx.defer(() => {
@@ -490,9 +496,11 @@ describe("provisioning capability と resource scope", () => {
             setup(ctx: DropDetectorContext<string, string>) {
               detectorSignal = ctx.signal;
               detectorIdentity = ctx.detector;
+
               ctx.defer(() => {
                 cleanupCount += 1;
               });
+
               trigger = boundary === "guard" ? ctx.guard(fail) : () => ctx.run(fail);
             },
           },

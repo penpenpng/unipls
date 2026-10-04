@@ -58,6 +58,7 @@ export class ControlledReconnectorInvocation {
     }
 
     this.action = action;
+
     run();
   }
 }
@@ -88,6 +89,7 @@ export class ControlledReconnector implements UniplsReconnector {
 
       this.#nextSetupFailure = undefined;
       this.#hasSetupFailure = false;
+
       throw cause;
     }
     if (this.#hasSetupRejection) {
@@ -144,6 +146,7 @@ export class ControlledDropDetector<TContext = unknown> {
 
       this.#nextSetupFailure = undefined;
       this.#hasSetupFailure = false;
+
       throw cause;
     }
 

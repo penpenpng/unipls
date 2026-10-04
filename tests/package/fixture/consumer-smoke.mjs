@@ -26,6 +26,7 @@ class TestWebSocket {
 
   constructor(url) {
     this.url = url;
+
     TestWebSocket.instances.push(this);
   }
 
@@ -39,11 +40,13 @@ class TestWebSocket {
 
   close(code, reason) {
     this.readyState = 2;
+
     this.closeRequests.push({ code, reason });
   }
 
   emitOpen() {
     this.readyState = 1;
+
     this.onopen?.({ type: "open" });
   }
 
@@ -53,6 +56,7 @@ class TestWebSocket {
 
   emitClose({ code = 1000, reason = "", wasClean = code === 1000 } = {}) {
     this.readyState = 3;
+
     this.onclose?.({ code, reason, wasClean });
   }
 }
@@ -171,7 +175,9 @@ export async function runConsumerSmoke({ browser = false } = {}) {
 
     // ! 注入constructorは利用可能なglobalより常に優先されます。
     replaceGlobalValue("WebSocket", UnexpectedGlobalWebSocket);
+
     TestWebSocket.instances.length = 0;
+
     const client = new root.Unipls({
       url: "wss://unipls.test/socket",
       WebSocket: TestWebSocket,

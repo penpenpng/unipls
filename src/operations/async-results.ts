@@ -207,6 +207,7 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
         }
 
         this.#iteratorCreated = true;
+
         const iterator: AsyncIterableIterator<T> = {
           next: () => this.#next(),
           return: async () => {
@@ -232,6 +233,7 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
       const pending = this.#pending;
 
       this.#pending = undefined;
+
       pending.resolve({ done: false, value: message });
 
       return;

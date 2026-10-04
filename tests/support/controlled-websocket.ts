@@ -35,6 +35,7 @@ export class ControlledWebSocket extends EventTarget {
 
   constructor(url: string) {
     super();
+
     this.url = url;
   }
 
@@ -87,11 +88,13 @@ export class ControlledWebSocket extends EventTarget {
 
   close(code?: number, reason?: string): void {
     this.closeRequests.push(Object.freeze({ code, reason }));
+
     this.readyState = this.CLOSING;
   }
 
   emitOpen(): void {
     this.readyState = this.OPEN;
+
     this.#emit("open", new Event("open"));
   }
 
@@ -114,6 +117,7 @@ export class ControlledWebSocket extends EventTarget {
     wasClean = code === 1000,
   }: ControlledCloseEventInit = {}): void {
     this.readyState = this.CLOSED;
+
     const event = new Event("close") as CloseEvent;
 
     Object.defineProperties(event, {

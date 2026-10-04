@@ -36,6 +36,7 @@ export class MessageDispatcher<T> {
         }
 
         registered = false;
+
         this.#registrations.delete(operation);
       },
     });

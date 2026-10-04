@@ -125,7 +125,9 @@ describe("browser lifecycle recovery", () => {
       const { client, transport } = createClient(env);
 
       await open(client, transport);
+
       env.document.visibilityState = "hidden";
+
       env.document.emit("visibilitychange");
       await vi.advanceTimersByTimeAsync(10);
 
@@ -137,7 +139,9 @@ describe("browser lifecycle recovery", () => {
 
       await vi.advanceTimersByTimeAsync(100);
       expect(transport.connections).toHaveLength(1);
+
       env.document.visibilityState = "visible";
+
       env.document.emit("resume");
       env.window.emit("pageshow");
       await vi.advanceTimersByTimeAsync(10);
@@ -166,11 +170,15 @@ describe("browser lifecycle recovery", () => {
     const { client, transport } = createClient(env);
 
     await open(client, transport);
+
     env.document.visibilityState = "hidden";
+
     env.document.emit("visibilitychange");
     await vi.advanceTimersByTimeAsync(100);
     expect(client.lifecycle.phase).toBe("open");
+
     env.document.visibilityState = "visible";
+
     env.document.emit("visibilitychange");
     await vi.advanceTimersByTimeAsync(10);
     transport.current.emitMessage("pong:2");

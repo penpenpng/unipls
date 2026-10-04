@@ -122,6 +122,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
         }
 
         epoch.connection.state = "open";
+
         this.#events.emit("open", Object.freeze({ transportEpochId: epoch.id }));
       } catch (error) {
         if (!this.#isCurrent(epoch)) {
@@ -130,6 +131,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
         epoch.intent = "close";
         epoch.connection.state = "closed";
+
         this.#events.emit("failed", Object.freeze({ transportEpochId: epoch.id, error }));
         epoch.connection.socket?.close(UniplsWebSocketCloseCode.NORMAL_CLOSURE);
         epoch.deactivate(error);
@@ -185,6 +187,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
       if (epoch.intent === "close") {
         epoch.connection.state = "closed";
+
         epoch.deactivate(new UniplsSocketClosedError());
         this.#events.emit("closed", Object.freeze({ transportEpochId: epoch.id, close }));
 
@@ -268,6 +271,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
       }
 
       timeoutTimer = undefined;
+
       const cause = new UniplsTimeoutError();
 
       this.reportDrop(
@@ -324,6 +328,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     if (!socket || this.state === "dropped") {
       targetEpoch.connection.state = "closed";
+
       targetEpoch.deactivate(new UniplsSocketClosedError());
       this.#events.emit("closed", Object.freeze({ transportEpochId: targetEpoch.id }));
 
@@ -383,6 +388,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     const socket = epoch.connection.socket;
 
     epoch.connection.state = "dropped";
+
     epoch.deactivate(frozenReport.cause ?? new UniplsSocketDroppedError());
 
     if (socket && socket.readyState < WebSocketReadyState.CLOSING) {
@@ -413,6 +419,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
 
     epoch.intent = "close";
     epoch.connection.state = "closed";
+
     epoch.deactivate(new UniplsSocketClosedError());
 
     if (socket && socket.readyState < WebSocketReadyState.CLOSING) {
@@ -695,6 +702,7 @@ class UniplsTransportEpoch {
 
     epoch.intent = "close";
     epoch.connection.state = "closed";
+
     epoch.deactivate(new UniplsSocketClosedError());
 
     return epoch;

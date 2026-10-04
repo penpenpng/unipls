@@ -100,11 +100,13 @@ export class UniplsOpenError extends UniplsError {
     drop?: UniplsDrop;
   }) {
     super("The logical session could not become ready.", { cause });
+
     this.outcome = outcome;
     this.stage = stage;
     this.attempts = freezeAttempts(attempts);
     this.cause = cause;
     this.drop = drop === undefined ? undefined : freezeDrop(drop);
+
     Object.freeze(this);
   }
 }
@@ -143,10 +145,12 @@ export class UniplsDroppedError extends UniplsError {
     cause?: unknown;
   }) {
     super("The logical session could not remain ready.", { cause });
+
     this.outcome = outcome;
     this.drop = freezeDrop(drop);
     this.attempts = freezeAttempts(attempts);
     this.cause = cause;
+
     Object.freeze(this);
   }
 }

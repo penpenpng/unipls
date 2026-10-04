@@ -149,6 +149,7 @@ export class UniplsLifecycleCoordinator {
     session.nextAttempt = 1;
     session.recoveryDrop = drop;
     session.activeAttempt = undefined;
+
     this.#transition({
       phase: "recovering",
       session: session.id,
@@ -169,6 +170,7 @@ export class UniplsLifecycleCoordinator {
     const attempt = this.#requireAttempt(connection);
 
     attempt.stage = "provisioning";
+
     this.#transition({ phase: "provisioning", ...this.#attemptingFields(session, attempt) });
   }
 
@@ -201,6 +203,7 @@ export class UniplsLifecycleCoordinator {
         ...(recordDrop ? { drop: recordDrop } : {}),
       }),
     );
+
     session.activeAttempt = undefined;
     session.nextAttempt = attempt.attempt + 1;
 
@@ -274,6 +277,7 @@ export class UniplsLifecycleCoordinator {
     session.activeAttempt = undefined;
     session.hasBeenReady = true;
     session.recoveryDrop = undefined;
+
     this.#transition({
       phase: "open",
       session: session.id,
@@ -320,6 +324,7 @@ export class UniplsLifecycleCoordinator {
     const attempts = session.attempts;
 
     this.#session = undefined;
+
     this.#transition({ phase: "closed", reason: "user", session: sessionId, attempts });
   }
 
@@ -336,6 +341,7 @@ export class UniplsLifecycleCoordinator {
     const attempts = session.attempts;
 
     this.#session = undefined;
+
     this.#transition({
       phase: "closed",
       reason: "open-failed",
@@ -360,6 +366,7 @@ export class UniplsLifecycleCoordinator {
     const attempts = session.attempts;
 
     this.#session = undefined;
+
     this.#transition({
       phase: "closed",
       reason: "dropped",
@@ -413,6 +420,7 @@ export class UniplsLifecycleCoordinator {
 
     session.nextSequence += 1;
     session.activeAttempt = attempt;
+
     this.#transition({ phase: "connecting", ...this.#attemptingFields(session, attempt) });
 
     return connection;
@@ -461,6 +469,7 @@ export class UniplsLifecycleCoordinator {
     const current = Object.freeze(snapshot);
 
     this.#snapshot = current;
+
     this.#onTransition(Object.freeze({ previous, current }));
   }
 }

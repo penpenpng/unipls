@@ -97,6 +97,7 @@ export class BrowserLifecycleSource {
       }
 
       active = false;
+
       this.#listeners.delete(listener);
       release();
     };

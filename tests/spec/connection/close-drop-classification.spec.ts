@@ -433,10 +433,12 @@ describe("回復の終端結果", () => {
 
     if (mode === "cancel") {
       recovery = scenario.reconnector.invocations.take();
+
       recovery.cancel();
     }
     if (mode === "exhaust") {
       recovery = scenario.reconnector.invocations.take();
+
       recovery.exhaust(cause);
     }
 

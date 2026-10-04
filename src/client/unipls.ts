@@ -175,6 +175,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
     this.#reconnector = params.reconnector;
     this.#detectorManager = new DropDetectorManager(params.dropDetectors ?? []);
+
     this.#bridgeSocketEvents();
   }
 
@@ -195,11 +196,13 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.#provisioner = provisioner;
+
     const connection = this.#lifecycle.beginSession();
 
     this.#sessionScope = this.#createResourceScope(
       Object.freeze({ type: "session", session: this.#lifecycle.session }),
     );
+
     let resolve!: () => void;
     let reject!: (cause: unknown) => void;
     const promise = new Promise<void>((onResolve, onReject) => {
@@ -208,6 +211,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     this.#pendingOpen = { promise, resolve, reject, settled: false };
+
     void promise.catch(() => {});
     this.#startAttempt(connection);
 
@@ -300,6 +304,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal,
       timeout,
     });
+
     const { events } = scope;
 
     events.on("dropped", (event) => {
@@ -428,6 +433,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal,
       timeout,
     });
+
     const { events } = scope;
 
     events.on("dropped", (event) => {
@@ -529,6 +535,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal,
       timeout,
     });
+
     const { events } = scope;
 
     requestSession = new QuerySession<TInput, TOutput>({
@@ -645,6 +652,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         }
 
         attempted = true;
+
         this.#socket
           .enqueue(payload, { force: mode.type === "transport", signal: scope.signal })
           .then(() => scope.resolve())
@@ -784,6 +792,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
           signal,
         );
         setupTransaction.commitTo(transaction, "connection-provisioner");
+
         setupCommitted = true;
       } else {
         await setupTransaction.dispose();
@@ -947,6 +956,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     let transportSignal: AbortSignal | undefined;
     const socketOpening = this.#socket.open(async (signal) => {
       transportSignal = signal;
+
       this.#assertCurrentTransport(transportEpochId, signal);
       this.#lifecycle.markProvisioning(connection);
       await this.#runProvisioner(transportEpochId, signal);
@@ -954,6 +964,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     transportEpochId = this.#socket.transportEpochId;
+
     this.#bindTransport(transportEpochId, connection);
 
     void socketOpening.then(
@@ -1023,6 +1034,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     };
 
     this.#reconnectionPolicy = run;
+
     const select = (outcome: ReconnectionEngineOutcome, action: () => void) => {
       if (run.settled || this.#reconnectionPolicy !== run || !this.#lifecycle.hasActiveSession) {
         return;
@@ -1031,6 +1043,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       run.settled = true;
       run.outcome = outcome;
       this.#reconnectionPolicy = undefined;
+
       this.#cleanupPolicy(run);
       action();
     };
@@ -1087,6 +1100,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     run.cleanupCalled = true;
+
     try {
       run.cleanup();
     } catch {
@@ -1104,6 +1118,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     run.settled = true;
     run.outcome = outcome;
     this.#reconnectionPolicy = undefined;
+
     this.#cleanupPolicy(run);
   }
 
@@ -1119,6 +1134,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     run.settled = true;
     run.outcome = "reconnector-failed";
     this.#reconnectionPolicy = undefined;
+
     this.#cleanupPolicy(run);
 
     const { context } = run;
@@ -1223,6 +1239,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     if (!drop) {
       drop = this.#lifecycle.createDrop(context.connection, report);
+
       this.#canonicalDrops.set(transportEpochId, drop);
     }
 
@@ -1362,6 +1379,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     }
 
     this.#sessionScope = undefined;
+
     let index = 0;
     const advance = () => {
       while (index < scopes.length) {
@@ -1389,6 +1407,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     pending.settled = true;
     this.#pendingOpen = undefined;
+
     pending.resolve();
   }
 
@@ -1401,6 +1420,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
 
     pending.settled = true;
     this.#pendingOpen = undefined;
+
     pending.reject(cause);
   }
 
@@ -1546,6 +1566,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
         }
 
         settled = true;
+
         signal.removeEventListener("abort", onAbort);
         callback();
       };
@@ -1672,6 +1693,7 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       signal,
       timeout,
     });
+
     const { events } = scope;
 
     requestSession = new QuerySession<TInput, TOutput>({

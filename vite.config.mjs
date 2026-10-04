@@ -21,6 +21,21 @@ export default defineConfig({
         { blankLine: "any", prev: "if", next: "if" },
         { blankLine: "any", prev: "for", next: "for" },
         { blankLine: "any", prev: "switch", next: "switch" },
+        {
+          blankLine: "always",
+          prev: "*",
+          next: { selector: 'ExpressionStatement[expression.type="AssignmentExpression"]' },
+        },
+        {
+          blankLine: "always",
+          prev: { selector: 'ExpressionStatement[expression.type="AssignmentExpression"]' },
+          next: "*",
+        },
+        {
+          blankLine: "any",
+          prev: { selector: 'ExpressionStatement[expression.type="AssignmentExpression"]' },
+          next: { selector: 'ExpressionStatement[expression.type="AssignmentExpression"]' },
+        },
       ],
     },
   },

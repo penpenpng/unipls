@@ -72,6 +72,7 @@ export class QuerySession<TInput, TOutput> {
     this.#paused = false;
     this.#currentQuery = query;
     this.#currentSelector = params.selector;
+
     const sequence = ++this.#sendSequence;
 
     return this.#sendPayload(payload)

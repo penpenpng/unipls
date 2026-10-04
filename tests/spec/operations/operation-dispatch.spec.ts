@@ -265,7 +265,9 @@ describe("operation の message dispatch", () => {
     });
 
     await expect(requested).rejects.toBe(factoryCause);
+
     serializerCause = new Error("serializer failed");
+
     await expect(client.cast({ query: "message" })).rejects.toBe(serializerCause);
     const closing = client.close();
 

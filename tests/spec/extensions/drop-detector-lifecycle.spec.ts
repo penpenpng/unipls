@@ -134,6 +134,7 @@ describe("drop detector の lifecycle", () => {
           setup() {
             return async () => {
               cleanupCount += 1;
+
               await cleanupGate;
               throw cleanupFailure;
             };

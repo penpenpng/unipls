@@ -57,6 +57,7 @@ export class DropDetectorManager<TInput, TOutput> {
         }
 
         failed = true;
+
         params.onRuntimeFailure(identity, boundary, cause);
         void scope.dispose(cause);
       };

@@ -52,6 +52,7 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
     this.events = params.events.spawnEventBusView();
     this.session = params.session;
     this.operationType = params.operationType;
+
     const signals = [this.#controller.signal];
 
     if (params.signal) {
@@ -59,14 +60,18 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
     }
     if (params.timeout !== undefined) {
       this.#timeoutController = new AbortController();
+
       signals.push(this.#timeoutController.signal);
+
       this.#timer = setTimeout(() => {
         this.#timer = undefined;
+
         this.#timeoutController?.abort(new UniplsTimeoutError());
       }, params.timeout);
     }
 
     this.signal = AbortSignal.any(signals);
+
     const registration = params.dispatcher.register({
       session: params.session,
       operationType: params.operationType,
@@ -93,6 +98,7 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
 
       params.onAbort(this.signal.reason);
     };
+
     this.signal.addEventListener("abort", this.#onAbort, { once: true });
 
     if (this.signal.aborted) {
@@ -142,6 +148,7 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
       this.#resolvePromise = resolve;
       this.#rejectPromise = reject;
     });
+
     void this.#promise.catch(() => {});
     this.#resources.arm({
       onAbort: this.reject,
@@ -183,6 +190,7 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
     }
 
     this.#resulted = true;
+
     this.#resources.cleanup();
     this.#resolvePromise(value);
   };
@@ -193,6 +201,7 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
     }
 
     this.#resulted = true;
+
     this.#resources.cleanup(reason);
     this.#rejectPromise(reason);
   };
@@ -250,6 +259,7 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
             onOverflow: () => this.raiseFatalError(new UniplsBufferOverflowError()),
             onDropped: params.delivery.onMessageDropped,
           });
+
     this.#resources.arm({
       onAbort: (reason) =>
         this.#finish(Object.freeze({ ok: false, reason: "aborted", error: reason })),
@@ -333,6 +343,7 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
     }
 
     this.#resulted = true;
+
     this.#resources.cleanup(finalization.ok ? undefined : finalization.error);
     this.#delivery.finish(finalization);
     this.#resolveClosed(finalization);
