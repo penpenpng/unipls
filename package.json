@@ -1,6 +1,6 @@
 {
   "name": "unipls",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A typed WebSocket client with explicit readiness, recovery, and stream lifecycles.",
   "keywords": [
     "async-iterable",
