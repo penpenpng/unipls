@@ -189,7 +189,7 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
     delivery:
       | Readonly<{
           type: "callback";
-          onMessage: (message: T) => unknown;
+          onMatch: (message: T) => unknown;
           policy: StreamCallbackErrorPolicy;
           onCallbackError: (cause: unknown, policy: StreamCallbackErrorPolicy) => void;
         }>
@@ -211,7 +211,7 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
     this.#delivery =
       params.delivery.type === "callback"
         ? new CallbackStreamDelivery({
-            onMessage: params.delivery.onMessage,
+            onMatch: params.delivery.onMatch,
             policy: params.delivery.policy,
             unsubscribe: this.unsubscribe,
             closed: this.#closed,

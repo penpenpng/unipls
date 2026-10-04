@@ -26,8 +26,8 @@ export type StreamBufferOptions =
 /** callback でメッセージを受け取る stream の指定です。 */
 export interface StreamCallbackDelivery<T> {
   /** 一致したメッセージごとに同期的に呼ばれます。戻り値や Promise の完了は待機しません。 */
-  onMessage: (message: T) => unknown;
-  /** `onMessage` が同期的に例外を投げた場合の処理方法です。既定値は `"continue"` です。 */
+  onMatch: (message: T) => unknown;
+  /** `onMatch` が同期的に例外を投げた場合の処理方法です。既定値は `"continue"` です。 */
   callbackError?: StreamCallbackErrorPolicy;
   /** callback delivery では buffer を使用できません。 */
   buffer?: never;
@@ -36,7 +36,7 @@ export interface StreamCallbackDelivery<T> {
 /** AsyncIterable でメッセージを受け取る stream の指定です。 */
 export interface StreamIteratorDelivery {
   /** callback を省略すると single-consumer の AsyncIterable を返します。 */
-  onMessage?: never;
+  onMatch?: never;
   /** callback error policy は callback delivery だけで使用できます。 */
   callbackError?: never;
   /**
@@ -135,18 +135,18 @@ export interface StreamDeliveryAdapter<T> {
 /** @internal callback delivery を stream lifecycle へ接続します。 */
 export class CallbackStreamDelivery<T> implements StreamDeliveryAdapter<T> {
   readonly handle: SubscriptionHandle<StreamFinalization<T>>;
-  readonly #onMessage: (message: T) => unknown;
+  readonly #onMatch: (message: T) => unknown;
   readonly #policy: StreamCallbackErrorPolicy;
   readonly #onCallbackError: (cause: unknown, policy: StreamCallbackErrorPolicy) => void;
 
   constructor(params: {
-    onMessage: (message: T) => unknown;
+    onMatch: (message: T) => unknown;
     policy: StreamCallbackErrorPolicy;
     unsubscribe: () => void;
     closed: Promise<StreamFinalization<T>>;
     onCallbackError: (cause: unknown, policy: StreamCallbackErrorPolicy) => void;
   }) {
-    this.#onMessage = params.onMessage;
+    this.#onMatch = params.onMatch;
     this.#policy = params.policy;
     this.#onCallbackError = params.onCallbackError;
     this.handle = Object.freeze({ unsubscribe: params.unsubscribe, closed: params.closed });
@@ -154,7 +154,7 @@ export class CallbackStreamDelivery<T> implements StreamDeliveryAdapter<T> {
 
   push(message: T): void {
     try {
-      this.#onMessage(message);
+      this.#onMatch(message);
     } catch (cause) {
       this.#onCallbackError(cause, this.#policy);
     }

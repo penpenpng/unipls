@@ -8,7 +8,7 @@ describe("operation の message dispatch", () => {
    * ```ts
    * const opening = client.open({
    *   async setupConnection(ctx) {
-   *     ctx.listen({ selector: isChallenge, onMessage: consumeChallenge });
+   *     ctx.listen({ selector: isChallenge, onMatch: consumeChallenge });
    *     await authenticate();
    *   },
    * });
@@ -36,7 +36,7 @@ describe("operation の message dispatch", () => {
       setupConnection: async (context) => {
         context.listen({
           selector: () => true,
-          onMessage: (message) => provisioningMessages.push(message),
+          onMatch: (message) => provisioningMessages.push(message),
         });
         await provisioningGate;
       },

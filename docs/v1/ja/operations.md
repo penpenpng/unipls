@@ -70,7 +70,7 @@ const response = await client.request({
 ```ts
 const subscription = client.listen({
   selector: (message) => message.type === "notification",
-  onMessage: (message) => {
+  onMatch: (message) => {
     renderNotification(message);
   },
 });
@@ -110,7 +110,7 @@ try {
 const subscription = client.subscribe({
   query: { type: "subscribe-room", roomId },
   selector: (message) => message.type === "room-event" && message.roomId === roomId,
-  onMessage: (message) => updateRoom(message),
+  onMatch: (message) => updateRoom(message),
 });
 ```
 
@@ -193,7 +193,7 @@ callbackの同期例外も既定では診断を通知して購読を継続しま
 
 ```ts
 const subscription = client.listen({
-  onMessage: consume,
+  onMatch: consume,
   predicateError: "fail",
   callbackError: "unsubscribe",
 });

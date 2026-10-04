@@ -24,7 +24,7 @@ describe("provisioning capability と resource scope", () => {
    * await client.open({
    *   async setupConnection(ctx) {
    *     await ctx.cast("authenticate");
-   *     const subscription = ctx.subscribe({ query: "restore", selector, onMessage: consume });
+   *     const subscription = ctx.subscribe({ query: "restore", selector, onMatch: consume });
    *     // ! ready前に応答が届く
    *     await subscription.closed;
    *   },
@@ -62,7 +62,7 @@ describe("provisioning capability と resource scope", () => {
         subscription = ctx.subscribe({
           query: "restore",
           selector: (message) => message === "restored",
-          onMessage: (message) => received.push(message),
+          onMatch: (message) => received.push(message),
         });
         setupStarted();
         requestedResponse = await requested;
@@ -92,7 +92,7 @@ describe("provisioning capability と resource scope", () => {
       UniplsInvalidUsageError,
     );
     expect(() =>
-      context.subscribe({ query: "late", selector: () => true, onMessage() {} }),
+      context.subscribe({ query: "late", selector: () => true, onMatch() {} }),
     ).toThrow(UniplsInvalidUsageError);
 
     // session contextと高レベルclientにはbarrierを迂回するmethodが型として存在しません。

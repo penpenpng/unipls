@@ -7,7 +7,7 @@ describe("callback stream", () => {
   /**
    * ```ts
    * const subscription = client.listen({
-   *   onMessage: consume,
+   *   onMatch: consume,
    * });
    * subscription.unsubscribe();
    * subscription.unsubscribe(); // 冪等
@@ -19,7 +19,7 @@ describe("callback stream", () => {
   it("callback subscription を冪等に解除して frozen な終了結果を一度だけ返す", async () => {
     const { client, socket, close } = await createReadyClient();
     const messages: string[] = [];
-    const subscription = client.listen({ onMessage: (message) => messages.push(message) });
+    const subscription = client.listen({ onMatch: (message) => messages.push(message) });
 
     // ! ready 接続から届くメッセージを callback へ同期配送します。
     socket.emitMessage("first");
@@ -46,9 +46,9 @@ describe("callback stream", () => {
 
   /**
    * ```ts
-   * const continued = client.listen({ onMessage: mayThrow });
-   * const failed = client.listen({ onMessage: mayThrow, callbackError: "unsubscribe" });
-   * const independent = client.listen({ onMessage: consume });
+   * const continued = client.listen({ onMatch: mayThrow });
+   * const failed = client.listen({ onMatch: mayThrow, callbackError: "unsubscribe" });
+   * const independent = client.listen({ onMatch: consume });
    * // ! mayThrow が同期的に例外を投げるメッセージが届く
    * await continued.closed; // 後続メッセージまで継続する
    * await failed.closed; // callback-error と元の例外で終了する
@@ -61,19 +61,19 @@ describe("callback stream", () => {
     const continuedMessages: string[] = [];
     const independentMessages: string[] = [];
     const continued = client.listen({
-      onMessage: (message) => {
+      onMatch: (message) => {
         if (message === "bad") throw cause;
         continuedMessages.push(message);
       },
     });
     const failed = client.listen({
-      onMessage: () => {
+      onMatch: () => {
         throw cause;
       },
       callbackError: "unsubscribe",
     });
     const independent = client.listen({
-      onMessage: (message) => independentMessages.push(message),
+      onMatch: (message) => independentMessages.push(message),
     });
 
     // ! 同じメッセージで2つのcallbackが失敗しても、最後のsubscriberまで配送します。
@@ -107,7 +107,7 @@ describe("callback stream", () => {
    * let subscription;
    * subscription = client.listen({
    *   callbackError: "unsubscribe",
-   *   onMessage() {
+   *   onMatch() {
    *     subscription.unsubscribe();
    *     throw callbackError;
    *   },
@@ -122,7 +122,7 @@ describe("callback stream", () => {
     let subscription!: SubscriptionHandle<StreamFinalization<string>>;
     subscription = client.listen({
       callbackError: "unsubscribe",
-      onMessage: () => {
+      onMatch: () => {
         subscription.unsubscribe();
         throw cause;
       },
@@ -147,7 +147,7 @@ describe("callback stream", () => {
    * const calls = [];
    * const gate = deferred();
    * const subscription = client.listen({
-   *   onMessage: async (message) => {
+   *   onMatch: async (message) => {
    *     calls.push(message);
    *     await gate.promise;
    *   },
@@ -166,7 +166,7 @@ describe("callback stream", () => {
       release = resolve;
     });
     const subscription = client.listen({
-      onMessage: (message) => {
+      onMatch: (message) => {
         calls.push(message);
         const returned = gate.then(() => {
           throw cause;

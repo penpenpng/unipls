@@ -11,7 +11,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
    *   query: "watch",
    *   selector: isItem,
    *   terminator: isEnd,
-   *   onMessage: consumeItem,
+   *   onMatch: consumeItem,
    * });
    * // ! ready前のitemは無視し、watch送信後のitemだけを配送する
    * await subscription.closed; // 終端messageでterminatedになる
@@ -38,7 +38,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
       query: "watch",
       selector: (message) => message.startsWith("item:"),
       terminator: (message) => message === "item:end",
-      onMessage: (message) => messages.push(message),
+      onMatch: (message) => messages.push(message),
     });
 
     // ! query送信前に届いたmessageは購読へ配送しません。
@@ -89,13 +89,13 @@ describe("Unipls.subscribe の主要シナリオ", () => {
       query: "fail-query",
       selector: () => true,
       retry: "fail",
-      onMessage: () => {},
+      onMatch: () => {},
     });
     const waited = scenario.client.subscribe({
       query: "wait-query",
       selector: (message) => message === "wait-response",
       retry: "wait",
-      onMessage: (message) => waitedMessages.push(message),
+      onMatch: (message) => waitedMessages.push(message),
     });
     const recovered = scenario.client.subscribe({
       query: "original-query",
@@ -106,7 +106,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
           selector: (message) => message === "recovered-response",
         }),
       },
-      onMessage: (message) => recoveredMessages.push(message),
+      onMatch: (message) => recoveredMessages.push(message),
     });
     await flushMicrotasks();
     expect(first.sent).toEqual(["fail-query", "wait-query", "original-query"]);

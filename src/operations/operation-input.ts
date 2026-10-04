@@ -79,20 +79,20 @@ export function validateRetryStrategy(value: unknown): void {
 /** @internal callback/iterator deliveryの排他的な入力を検証します。 */
 export function validateStreamDelivery(
   params: {
-    readonly onMessage?: unknown;
+    readonly onMatch?: unknown;
     readonly callbackError?: unknown;
     readonly buffer?: unknown;
   },
   operation: string,
 ): void {
-  const callback = params.onMessage;
+  const callback = params.onMatch;
   if (callback !== undefined && typeof callback !== "function") {
-    throw new TypeError(`${operation}.onMessage にはcallback関数を指定してください。`);
+    throw new TypeError(`${operation}.onMatch にはcallback関数を指定してください。`);
   }
   const callbackError = params.callbackError;
   if (callback === undefined) {
     if (callbackError !== undefined) {
-      throw new TypeError("callbackError は onMessage と一緒に指定してください。");
+      throw new TypeError("callbackError は onMatch と一緒に指定してください。");
     }
     return;
   }
