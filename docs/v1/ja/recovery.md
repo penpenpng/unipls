@@ -93,7 +93,24 @@ const client = new Unipls({
 });
 ```
 
-`ImmediateReconnector`は待機せず、接続失敗ごとに次の試行を始めます。retry上限やbackoffが必要なproduction用途では、独自reconnectorを実装してください。
+`ImmediateReconnector`は待機せず、接続失敗ごとに次の試行を始めます。retry上限やbackoffを使う場合は、次の`ExponentialBackoffReconnector`を利用できます。
+
+### exponential backoffとjitterを使う
+
+```ts
+import { ExponentialBackoffReconnector } from "unipls/reconnectors";
+
+const client = new Unipls({
+  url,
+  reconnector: new ExponentialBackoffReconnector({
+    maxRetries: 5,
+    baseDelay: 1_000,
+    maxDelay: 30_000,
+  }),
+});
+```
+
+`maxRetries`は初回接続を除いた再試行の上限です。待機時間は `baseDelay` から試行ごとに倍増し、`maxDelay` で上限になります。各待機時間には full jitter（0から上限までのランダムな時間）が適用されます。既定値は `baseDelay: 1_000`、`maxDelay: 30_000` です。上限に達すると直前の失敗原因で回復を終了します。
 
 ### backoffと上限を実装する
 

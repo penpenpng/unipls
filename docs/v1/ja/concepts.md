@@ -82,7 +82,7 @@ message関連ログにはapplication message本体を含めません。監視先
 
 - `unipls`の`Unipls`: session、readiness、5つのoperation、回復、resource管理を使う通常のclient
 - `unipls/socket`の`UniplsSocket`: 1回の物理接続とwire dataを直接扱う低レベルclient
-- `unipls/reconnectors`: 再接続policyと`ImmediateReconnector`
+- `unipls/reconnectors`: 再接続policyと`ImmediateReconnector`、`ExponentialBackoffReconnector`
 - `unipls/drop-detectors`: `HeartbeatDropDetector`と`NetworkDropDetector`
 
 接続管理を自分で構築する必要がなければ、package rootの`Unipls`を使用してください。

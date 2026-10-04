@@ -126,7 +126,10 @@ describe("public APIのentry point境界", () => {
       "UniplsTimeoutError",
       "UniplsWebSocketCloseCode",
     ]);
-    expect(Object.keys(reconnectors).sort()).toEqual(["ImmediateReconnector"]);
+    expect(Object.keys(reconnectors).sort()).toEqual([
+      "ExponentialBackoffReconnector",
+      "ImmediateReconnector",
+    ]);
     expect(Object.keys(dropDetectors).sort()).toEqual([
       "HeartbeatDropDetector",
       "NetworkDropDetector",

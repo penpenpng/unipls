@@ -25,7 +25,7 @@ main entry pointの`unipls`は、高レベルclientの`Unipls<TInput, TOutput>`�
 
 `unipls/socket`は、1回の物理接続を扱う低レベルclientの`UniplsSocket<TInput, TOutput>`をexportします。論理session、自動再接続、messageの対応付け、operationごとの回復は提供しません。
 
-`unipls/reconnectors`はreconnection policyと`ImmediateReconnector`を、`unipls/drop-detectors`は`HeartbeatDropDetector`と`NetworkDropDetector`をexportします。
+`unipls/reconnectors`はreconnection policyと`ImmediateReconnector`、`ExponentialBackoffReconnector`を、`unipls/drop-detectors`は`HeartbeatDropDetector`と`NetworkDropDetector`をexportします。
 
 ## 5つのoperation
 
