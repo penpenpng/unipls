@@ -128,12 +128,27 @@ export type ConnectionAttemptSnapshot =
       reason: "session-closed";
     }>;
 
+/** drop の診断情報として保存できる JSON 互換の値です。 */
+export type DropMetadataValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly DropMetadataValue[]
+  | { readonly [key: string]: DropMetadataValue };
+
+/** detector が報告する安定した理由と追加の診断情報です。 */
+export interface DropDetectorReport {
+  readonly reason?: string;
+  readonly metadata?: Readonly<Record<string, DropMetadataValue>>;
+}
+
 /** 接続が失われたことを最初に報告した検出元です。 */
 export type UniplsDropSource =
   | Readonly<{ type: "peer-close" }>
   | Readonly<{ type: "transport-error" }>
   | Readonly<{ type: "timeout" }>
-  | Readonly<{ type: "detector"; detector: DropDetectorIdentity }>
+  | Readonly<{ type: "detector"; detector: DropDetectorIdentity } & DropDetectorReport>
   | Readonly<{ type: "manual-drop" }>;
 
 /** 論理セッション内で接続が失われた事実を表す不変な記録です。 */

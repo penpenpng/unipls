@@ -1,3 +1,4 @@
+import { snapshotDropMetadata } from "./drop-metadata.ts";
 import { AsyncResult } from "./async-result.ts";
 import {
   UniplsInvalidUsageError,
@@ -600,6 +601,10 @@ class UniplsTransportEpoch {
     const source =
       report.source.type === "detector"
         ? Object.freeze({
+            ...report.source,
+            ...(report.source.metadata === undefined
+              ? {}
+              : { metadata: snapshotDropMetadata(report.source.metadata) }),
             type: "detector" as const,
             detector: report.source.detector,
           })

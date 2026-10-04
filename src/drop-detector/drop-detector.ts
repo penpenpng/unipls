@@ -1,6 +1,6 @@
 import type { UniplsMessageFactory } from "../unipls.interface.ts";
 import type { Disposer, MaybePromise, ResourceScope } from "../resource-scope.ts";
-import type { DropDetectorIdentity } from "../types.ts";
+import type { DropDetectorIdentity, DropDetectorReport } from "../types.ts";
 
 /** ready な接続を監視し、利用者定義の条件で drop を報告します。 */
 export interface UniplsDropDetector<TInput = unknown, TOutput = unknown> {
@@ -19,8 +19,11 @@ export interface DropDetectorContext<TInput = unknown, TOutput = unknown> extend
   /** この detector を識別する不変な情報です。 */
   readonly detector: DropDetectorIdentity;
 
+  /** Unipls が提供する論理 session の signal です。接続をまたぐ監視の所有権に使います。 */
+  readonly sessionSignal?: AbortSignal;
+
   /** 接続を強制的に drop とみなします。 */
-  drop(): void;
+  drop(report?: DropDetectorReport): void;
 
   /** メッセージを送信してレスポンスを待ちます。 */
   request(params: DropDetectorRequestParams<TInput, TOutput>): Promise<TOutput>;

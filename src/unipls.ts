@@ -6,6 +6,7 @@ import {
   type SubscriptionHandle,
 } from "./async-results.ts";
 import type { DropDetectorContext, DropDetectorRequestParams } from "./drop-detector";
+import type { DropDetectorReport } from "./types.ts";
 import { DropDetectorManager } from "./drop-detector/drop-detector-manager.ts";
 import {
   UniplsClosedError,
@@ -745,11 +746,12 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     };
     return Object.freeze({
       detector: identity,
+      sessionSignal: this.#lifecycle.signal,
       signal: scope.signal,
       defer: scope.defer,
-      drop: () => {
+      drop: (report?: DropDetectorReport) => {
         this.#socket.reportDrop(transportEpochId, {
-          source: Object.freeze({ type: "detector", detector: identity }),
+          source: Object.freeze({ ...report, type: "detector", detector: identity }),
         });
       },
       request: (params: DropDetectorRequestParams<TInput, TOutput>) => {
