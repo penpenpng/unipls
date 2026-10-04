@@ -30,12 +30,16 @@ export class ExponentialBackoffReconnector implements UniplsReconnector {
     this.#random = options.random ?? Math.random;
 
     if (!(this.#maxRetries >= 0)) throw new RangeError("maxRetries は0以上で指定してください。");
-    if (!(this.#initialDelay >= 0)) throw new RangeError("initialDelay は0以上で指定してください。");
+    if (!(this.#initialDelay >= 0))
+      throw new RangeError("initialDelay は0以上で指定してください。");
     if (!(this.#maxDelay >= 0)) throw new RangeError("maxDelay は0以上で指定してください。");
     if (!(this.#factor >= 1)) throw new RangeError("factor は1以上で指定してください。");
   }
 
-  setup({ reconnect, exhaust }: UniplsReconnectorActions, context: Parameters<UniplsReconnector["setup"]>[1]) {
+  setup(
+    { reconnect, exhaust }: UniplsReconnectorActions,
+    context: Parameters<UniplsReconnector["setup"]>[1],
+  ) {
     // context.attempt は失敗した接続試行の番号で、初回失敗は1です。
     const retriesUsed = context.attempt - 1;
     if (retriesUsed >= this.#maxRetries) {
@@ -44,7 +48,10 @@ export class ExponentialBackoffReconnector implements UniplsReconnector {
     }
 
     const retryNumber = retriesUsed + 1;
-    const ceiling = Math.min(this.#initialDelay * this.#factor ** (retryNumber - 1), this.#maxDelay);
+    const ceiling = Math.min(
+      this.#initialDelay * this.#factor ** (retryNumber - 1),
+      this.#maxDelay,
+    );
     const random = this.#random();
     const delay = ceiling * Math.max(0, Math.min(1, random));
     const timer = setTimeout(reconnect, delay);
