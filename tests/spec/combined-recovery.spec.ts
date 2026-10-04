@@ -160,7 +160,7 @@ describe("複数 operation を伴う回復", () => {
    * ```ts
    * const response = client.request({ query, selector, retry: "resend" });
    * const stream = client.subscribe({ query, selector, retry: "resend" });
-   * const listener = client.listen({ onMessage: consume });
+   * const listener = client.listen({ onMatch: consume });
    * // ! 2回のdropと再接続が発生する
    * await response; // 各readyで一度ずつ再送し、最後の接続で応答を受信する
    * // streamの未処理messageとlistenerは同じ論理sessionで継続する
@@ -183,7 +183,7 @@ describe("複数 operation を伴う回復", () => {
       buffer: 3,
     });
     const observed: string[] = [];
-    const listener = scenario.client.listen({ onMessage: (message) => observed.push(message) });
+    const listener = scenario.client.listen({ onMatch: (message) => observed.push(message) });
     await flushMicrotasks();
     expect(first.sent).toEqual(["request", "watch"]);
     first.emitMessage("item:1");
@@ -310,7 +310,7 @@ describe("複数 operation を伴う回復", () => {
       buffer: 1,
     });
     const observed: string[] = [];
-    const listener = scenario.client.listen({ onMessage: (message) => observed.push(message) });
+    const listener = scenario.client.listen({ onMatch: (message) => observed.push(message) });
     await flushMicrotasks();
     scenario.transport.current.emitMessage("buffered");
     // ! 未処理messageがある状態で接続を回復します。

@@ -10,7 +10,7 @@ describe("Unipls.listen の主要シナリオ", () => {
    * const subscription = client.listen({
    *   selector: isItem,
    *   terminator: isEnd,
-   *   onMessage: consumeItem,
+   *   onMatch: consumeItem,
    * });
    * // ! item、終端message、終端後のitemがWebSocketから届く
    * await subscription.closed; // 終端messageは配送せずterminatedで終了する
@@ -28,7 +28,7 @@ describe("Unipls.listen の主要シナリオ", () => {
     const subscription = client.listen({
       selector: (message) => message.startsWith("item:"),
       terminator: (message) => message === "item:end",
-      onMessage: (message) => messages.push(message),
+      onMatch: (message) => messages.push(message),
     });
 
     // ! serverから不一致、配送対象、終端、終端後の配送対象が順に届きます。
@@ -50,8 +50,8 @@ describe("Unipls.listen の主要シナリオ", () => {
 
   /**
    * ```ts
-   * const failed = client.listen({ onMessage: consume, retry: "fail" });
-   * const waited = client.listen({ onMessage: consume, retry: "wait" });
+   * const failed = client.listen({ onMatch: consume, retry: "fail" });
+   * const waited = client.listen({ onMatch: consume, retry: "wait" });
    * // ! ready接続がdropし、代替接続がreadyになってmessageが届く
    * await failed.closed; // droppedで終了する
    * await waited.closed; // 終了せず、代替接続のmessageを配送する
@@ -68,11 +68,11 @@ describe("Unipls.listen の主要シナリオ", () => {
     const waitedMessages: string[] = [];
     const failed = scenario.client.listen({
       retry: "fail",
-      onMessage: (message) => failedMessages.push(message),
+      onMatch: (message) => failedMessages.push(message),
     });
     const waited = scenario.client.listen({
       retry: "wait",
-      onMessage: (message) => waitedMessages.push(message),
+      onMatch: (message) => waitedMessages.push(message),
     });
 
     // ! ready接続がdropすると、failだけがcanonical dropで終了します。
