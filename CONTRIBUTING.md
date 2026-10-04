@@ -4,6 +4,8 @@
 
 Use the [Conventional Commits](https://www.conventionalcommits.org/) format for pull request titles. Omit the scope because this library is small:
 
+CI validates pull request titles and rejects scopes.
+
 ```text
 <type>[!]: <description>
 ```
