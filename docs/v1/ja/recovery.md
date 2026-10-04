@@ -93,33 +93,22 @@ const client = new Unipls({
 });
 ```
 
-`ImmediateReconnector`は待機せず、接続失敗ごとに次の試行を始めます。retry上限やbackoffが必要なproduction用途では、独自reconnectorを実装してください。
+`ImmediateReconnector`は待機せず、接続失敗ごとに次の試行を始めます。
 
-### backoffと上限を実装する
+### 指数 backoff と jitter を使う
 
 ```ts
-import type { UniplsReconnector } from "unipls/reconnectors";
+import { ExponentialBackoffReconnector } from "unipls/reconnectors";
 
-const reconnector: UniplsReconnector = {
-  setup(actions, context) {
-    if (context.attempt > 5) {
-      actions.exhaust(context.cause);
-      return;
-    }
-
-    const delay = Math.min(1_000 * 2 ** (context.attempt - 1), 30_000);
-    const timer = setTimeout(() => actions.reconnect(), delay);
-
-    const abort = () => clearTimeout(timer);
-    context.signal.addEventListener("abort", abort, { once: true });
-
-    return () => {
-      clearTimeout(timer);
-      context.signal.removeEventListener("abort", abort);
-    };
-  },
-};
+const reconnector = new ExponentialBackoffReconnector({
+  maxRetries: 5, // 初回接続の後に最大5回再試行
+  initialDelay: 500,
+  maxDelay: 30_000,
+  factor: 2,
+});
 ```
+
+待機時間は上限付きの指数 backoff に full jitter (0から上限までのランダムな時間) を加えて決めます。`maxRetries`を省略すると上限なしで再試行し、`0`なら初回失敗後に再試行せず終了します。session が終了すると待機中の timer は取り消されます。
 
 `setup()`は直前の失敗ごとに呼ばれます。`context`には次の情報があります。
 
