@@ -9,6 +9,7 @@ export default defineConfig({
     },
     rules: {
       curly: ["error", "all"],
+      "eslint/no-nested-ternary": "error",
       "unicorn/prefer-add-event-listener": "off",
       "@stylistic/padding-line-between-statements": [
         "error",

@@ -296,18 +296,21 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
   };
 
   raiseFatalError = (error: unknown) => {
-    const finalization: StreamFinalization<T> =
-      error instanceof UniplsTimeoutError
-        ? Object.freeze({ ok: false, reason: "timeout", error })
-        : error instanceof UniplsOpenError
-          ? Object.freeze({ ok: false, reason: "open-error", error })
-          : error instanceof UniplsDroppedError
-            ? Object.freeze({ ok: false, reason: "dropped", error })
-            : error instanceof UniplsBufferOverflowError
-              ? Object.freeze({ ok: false, reason: "buffer-overflow", error })
-              : error instanceof UniplsClosedError
-                ? Object.freeze({ ok: true, reason: "closed" })
-                : Object.freeze({ ok: false, reason: "fatal-error", error });
+    let finalization: StreamFinalization<T>;
+
+    if (error instanceof UniplsTimeoutError) {
+      finalization = Object.freeze({ ok: false, reason: "timeout", error });
+    } else if (error instanceof UniplsOpenError) {
+      finalization = Object.freeze({ ok: false, reason: "open-error", error });
+    } else if (error instanceof UniplsDroppedError) {
+      finalization = Object.freeze({ ok: false, reason: "dropped", error });
+    } else if (error instanceof UniplsBufferOverflowError) {
+      finalization = Object.freeze({ ok: false, reason: "buffer-overflow", error });
+    } else if (error instanceof UniplsClosedError) {
+      finalization = Object.freeze({ ok: true, reason: "closed" });
+    } else {
+      finalization = Object.freeze({ ok: false, reason: "fatal-error", error });
+    }
 
     this.#finish(finalization);
   };

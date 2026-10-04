@@ -1288,15 +1288,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     const lastAttempt = context.attempts.at(-1);
     const connection = lastAttempt?.connection ?? context.drop?.connection;
 
-    this.#settlePolicy(
-      outcome === "attempts-cancelled"
-        ? "cancelled"
-        : outcome === "attempts-exhausted"
-          ? "exhausted"
-          : outcome === "reconnector-failed"
-            ? "reconnector-failed"
-            : "exhausted",
-    );
+    let policyOutcome: ReconnectionEngineOutcome = "exhausted";
+
+    if (outcome === "attempts-cancelled") {
+      policyOutcome = "cancelled";
+    } else if (outcome === "reconnector-failed") {
+      policyOutcome = "reconnector-failed";
+    }
+
+    this.#settlePolicy(policyOutcome);
     this.#socket.terminate(this.#socket.transportEpochId);
     this.#lifecycle.terminateInitial(outcome, error, cause, context.drop);
     this.#transportContexts.clear();
@@ -1326,13 +1326,15 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
       existingError ??
       new UniplsDroppedError({ outcome, drop, attempts: this.#lifecycle.attempts, cause });
 
-    this.#settlePolicy(
-      outcome === "recovery-cancelled"
-        ? "cancelled"
-        : outcome === "recovery-exhausted"
-          ? "exhausted"
-          : "reconnector-failed",
-    );
+    let policyOutcome: ReconnectionEngineOutcome = "reconnector-failed";
+
+    if (outcome === "recovery-cancelled") {
+      policyOutcome = "cancelled";
+    } else if (outcome === "recovery-exhausted") {
+      policyOutcome = "exhausted";
+    }
+
+    this.#settlePolicy(policyOutcome);
     this.#socket.terminate(this.#socket.transportEpochId);
     this.#lifecycle.terminateRecovery(outcome, error, cause);
     this.#canonicalDrops.clear();

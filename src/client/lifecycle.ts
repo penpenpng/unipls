@@ -223,6 +223,8 @@ export class UniplsLifecycleCoordinator {
       });
     }
 
+    const drop = attempt.origin === "recovery" ? this.recoveryDrop : failureDrop;
+
     return Object.freeze({
       session: session.id,
       origin: attempt.origin,
@@ -230,11 +232,7 @@ export class UniplsLifecycleCoordinator {
       attempt: attempt.attempt,
       cause,
       attempts: session.attempts,
-      ...(attempt.origin === "recovery"
-        ? { drop: this.recoveryDrop }
-        : failureDrop
-          ? { drop: failureDrop }
-          : {}),
+      ...(drop ? { drop } : {}),
       signal: session.controller.signal,
     });
   }
