@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import type { UniplsLog } from "../../../src/index.ts";
 import {
   UniplsSocket,
   UniplsSocketClosedError,
   UniplsSocketDroppedError,
 } from "../../../src/socket.ts";
-import type { UniplsLog } from "../../../src/index.ts";
 import { ControlledWebSocketServer } from "../../support/index.ts";
 
 describe("低レベルsocketの公開契約", () => {

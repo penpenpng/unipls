@@ -11,6 +11,9 @@ export default defineConfig({
       "unicorn/prefer-add-event-listener": "off",
     },
   },
+  fmt: {
+    sortImports: true,
+  },
   test: {
     projects: [
       {

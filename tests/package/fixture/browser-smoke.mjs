@@ -1,4 +1,5 @@
 import { NetworkDropDetector } from "unipls/drop-detectors";
+
 import { runConsumerSmoke } from "./consumer-smoke.mjs";
 
 const result = await runConsumerSmoke({ browser: true });

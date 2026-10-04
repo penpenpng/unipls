@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import * as dropDetectors from "../../../src/drop-detectors.ts";
+import type { DropDetectorContext, UniplsDropDetector } from "../../../src/drop-detectors.ts";
 import * as root from "../../../src/index.ts";
-import * as reconnectors from "../../../src/reconnectors.ts";
-import * as socket from "../../../src/socket.ts";
 import type {
   AsyncSubscription,
   ConnectionSetupContext,
@@ -34,8 +33,9 @@ import type {
   UniplsSubscribeParams,
   WebSocketConstructor,
 } from "../../../src/index.ts";
+import * as reconnectors from "../../../src/reconnectors.ts";
 import type { ReconnectionContext, UniplsReconnector } from "../../../src/reconnectors.ts";
-import type { DropDetectorContext, UniplsDropDetector } from "../../../src/drop-detectors.ts";
+import * as socket from "../../../src/socket.ts";
 import type {
   UniplsSocketEventContext,
   UniplsSocketParams,

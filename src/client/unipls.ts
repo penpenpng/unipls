@@ -1,3 +1,8 @@
+import { DropDetectorManager } from "../drop-detectors/drop-detector-manager.ts";
+import type {
+  DropDetectorContext,
+  DropDetectorRequestParams,
+} from "../drop-detectors/drop-detector.ts";
 import {
   normalizeStreamBuffer,
   type AsyncSubscription,
@@ -5,28 +10,7 @@ import {
   type StreamFinalization,
   type SubscriptionHandle,
 } from "../operations/async-results.ts";
-import type {
-  DropDetectorContext,
-  DropDetectorRequestParams,
-} from "../drop-detectors/drop-detector.ts";
-import type { DropDetectorReport } from "../shared/types.ts";
-import { DropDetectorManager } from "../drop-detectors/drop-detector-manager.ts";
-import {
-  UniplsClosedError,
-  UniplsDroppedError,
-  UniplsInvalidUsageError,
-  UniplsOpenError,
-  UniplsSocketClosedError,
-  UniplsSocketDroppedError,
-} from "../shared/errors.ts";
-import { EventBus } from "../shared/event-bus.ts";
-import { UniplsLifecycleCoordinator } from "./lifecycle.ts";
 import { createDropWaitHandler, createRetryingDropHandler } from "../operations/drop-policy.ts";
-import {
-  SingleOperationScope,
-  StreamOperationScope,
-  validateOperationTimeout,
-} from "../operations/operation-scope.ts";
 import { MessageDispatcher, type MessageDeliveryMode } from "../operations/message-dispatcher.ts";
 import {
   validateDropRetryStrategy,
@@ -40,14 +24,29 @@ import {
   validateRetryStrategy,
   validateStreamDelivery,
 } from "../operations/operation-input.ts";
+import {
+  SingleOperationScope,
+  StreamOperationScope,
+  validateOperationTimeout,
+} from "../operations/operation-scope.ts";
 import { QuerySession } from "../operations/query-session.ts";
 import { createOnReconnectedHandler } from "../operations/reconnect-hook.ts";
-import { OwnedResourceScope, type Disposer, type MaybePromise } from "../shared/resource-scope.ts";
 import type {
   ReconnectionContext,
   UniplsReconnectEvent,
   UniplsReconnector,
 } from "../reconnectors/reconnector.ts";
+import {
+  UniplsClosedError,
+  UniplsDroppedError,
+  UniplsInvalidUsageError,
+  UniplsOpenError,
+  UniplsSocketClosedError,
+  UniplsSocketDroppedError,
+} from "../shared/errors.ts";
+import { EventBus } from "../shared/event-bus.ts";
+import { OwnedResourceScope, type Disposer, type MaybePromise } from "../shared/resource-scope.ts";
+import type { DropDetectorReport } from "../shared/types.ts";
 import type {
   ConnectionId,
   DropDetectorIdentity,
@@ -62,6 +61,7 @@ import type {
   WebSocketData,
 } from "../shared/types.ts";
 import { UniplsSocket, type UniplsSocketDropReport } from "../socket/unipls-socket.ts";
+import { UniplsLifecycleCoordinator } from "./lifecycle.ts";
 import type {
   ConnectionSetupContext,
   SessionSetupContext,

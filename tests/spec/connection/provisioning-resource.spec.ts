@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import type { DropDetectorContext } from "../../../src/drop-detectors.ts";
 import {
   Unipls,
   UniplsInvalidUsageError,
@@ -10,7 +11,6 @@ import {
   type SubscriptionHandle,
   type UniplsLog,
 } from "../../../src/index.ts";
-import type { DropDetectorContext } from "../../../src/drop-detectors.ts";
 import {
   ControlledReconnector,
   ControlledWebSocketServer,

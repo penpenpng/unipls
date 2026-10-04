@@ -1,6 +1,6 @@
+import type { UniplsMessageFactory } from "../client/unipls.interface.ts";
 import { DropReasons } from "../shared/drop-reasons.ts";
 import { UniplsTimeoutError } from "../shared/errors.ts";
-import type { UniplsMessageFactory } from "../client/unipls.interface.ts";
 import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector.ts";
 
 /** heartbeat の送信間隔、応答条件、待機時間を指定します。 */

@@ -1,7 +1,7 @@
+import { spawn } from "node:child_process";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
 
 const [, , tarballArgument, destinationArgument] = process.argv;
 if (!tarballArgument || !destinationArgument) {

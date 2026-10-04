@@ -9,6 +9,13 @@ import {
   type UniplsRecoverStrategy,
 } from "unipls";
 import {
+  BrowserLifecycleDropDetector,
+  BrowserLifecycleSource,
+  DropReasons,
+  HeartbeatDropDetector,
+  type UniplsDropDetector,
+} from "unipls/drop-detectors";
+import {
   ExponentialBackoffReconnector,
   BrowserLifecycleReconnector,
   ImmediateReconnector,
@@ -16,13 +23,6 @@ import {
   type ImmediateReconnectorOptions,
   type UniplsReconnector,
 } from "unipls/reconnectors";
-import {
-  BrowserLifecycleDropDetector,
-  BrowserLifecycleSource,
-  DropReasons,
-  HeartbeatDropDetector,
-  type UniplsDropDetector,
-} from "unipls/drop-detectors";
 import {
   UniplsSocket,
   UniplsSocketClosedError,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { Unipls, type UniplsDrop } from "../../../src/index.ts";
+
 import {
   BrowserLifecycleDropDetector,
   BrowserLifecycleSource,
@@ -7,6 +7,7 @@ import {
   type BrowserLifecycleEventTarget,
   type DropDetectorContext,
 } from "../../../src/drop-detectors.ts";
+import { Unipls, type UniplsDrop } from "../../../src/index.ts";
 import {
   BrowserLifecycleReconnector,
   ExponentialBackoffReconnector,

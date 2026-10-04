@@ -6,12 +6,12 @@ import {
   type UniplsProvisioner,
   type UniplsRecoverStrategy,
 } from "unipls";
+import { HeartbeatDropDetector, NetworkDropDetector } from "unipls/drop-detectors";
 import {
   ImmediateReconnector,
   type ImmediateReconnectorOptions,
   type UniplsReconnector,
 } from "unipls/reconnectors";
-import { HeartbeatDropDetector, NetworkDropDetector } from "unipls/drop-detectors";
 import { UniplsSocket, type UniplsSocketParams, type WebSocketConstructor } from "unipls/socket";
 
 declare const WebSocket: WebSocketConstructor;

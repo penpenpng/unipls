@@ -1,6 +1,6 @@
-import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector.ts";
 import { OwnedResourceScope } from "../shared/resource-scope.ts";
 import type { DropDetectorIdentity } from "../shared/types.ts";
+import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector.ts";
 
 interface DetectorRegistration<TInput, TOutput> {
   readonly detector: UniplsDropDetector<TInput, TOutput>;

@@ -1,11 +1,11 @@
-import { UniplsDroppedError } from "../shared/errors.ts";
-import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
 import type {
   UniplsDropRetryStrategy,
   UniplsMessageFactory,
   UniplsRecoveryDecision,
   UniplsRetryStrategy,
 } from "../client/unipls.interface.ts";
+import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
+import { UniplsDroppedError } from "../shared/errors.ts";
 
 type RetryRequest<TInput, TOutput> = (
   data: UniplsMessageFactory<TInput>,

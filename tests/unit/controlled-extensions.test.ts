@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { SessionId } from "../../src/index.ts";
 
+import type { SessionId } from "../../src/index.ts";
 import {
   CallbackProbe,
   ControlledDropDetector,
