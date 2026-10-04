@@ -1,14 +1,13 @@
 import {
-  HeartbeatDropDetector,
   Unipls,
   type AsyncSubscription,
   type StreamFinalization,
   type UniplsParams,
   type UniplsProvisioner,
   type UniplsRecoverStrategy,
-  type UniplsReconnector,
 } from "unipls";
-import { NetworkDropDetector } from "unipls/browser";
+import { ImmediateReconnector, type UniplsReconnector } from "unipls/reconnectors";
+import { HeartbeatDropDetector, NetworkDropDetector } from "unipls/drop-detectors";
 import { UniplsSocket, type UniplsSocketParams, type WebSocketConstructor } from "unipls/socket";
 
 declare const WebSocket: WebSocketConstructor;
@@ -24,7 +23,7 @@ const detector = new HeartbeatDropDetector({
 const browserDetector = new NetworkDropDetector();
 
 declare const provisioner: UniplsProvisioner<string, string>;
-declare const reconnector: UniplsReconnector;
+const reconnector: UniplsReconnector = new ImmediateReconnector();
 declare const recovery: UniplsRecoverStrategy<string, string>;
 
 function observe(messages: AsyncSubscription<string>): Promise<StreamFinalization<string>> {

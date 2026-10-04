@@ -17,13 +17,6 @@ export type {
   StreamIteratorDelivery,
   SubscriptionHandle,
 } from "./async-results.ts";
-export {
-  ImmediateReconnector,
-  type ReconnectionContext,
-  type UniplsReconnectEvent,
-  type UniplsReconnector,
-  type UniplsReconnectorActions,
-} from "./reconnector";
 export type {
   ClosedLifecycleSnapshot,
   ConnectionAttemptOrigin,
@@ -62,15 +55,6 @@ export type {
   ResourceRegistrationSource,
   ResourceScope,
 } from "./resource-scope.ts";
-export type {
-  DropDetectorContext,
-  DropDetectorRequestParams,
-  UniplsDropDetector,
-} from "./drop-detector/drop-detector.ts";
-export {
-  HeartbeatDropDetector,
-  type HeartbeatOptions,
-} from "./drop-detector/heartbeat-drop-detector.ts";
 export { Unipls, type ConnectionEventContext, type UniplsEvents } from "./unipls";
 export type {
   ConnectionSetupContext,
