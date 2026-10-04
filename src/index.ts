@@ -24,6 +24,8 @@ export type {
   ConnectionAttemptStage,
   ConnectionId,
   DropDetectorIdentity,
+  DropDetectorReport,
+  DropMetadataValue,
   OperationId,
   OperationType,
   PredicateErrorPolicy,

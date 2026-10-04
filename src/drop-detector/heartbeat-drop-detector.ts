@@ -1,3 +1,4 @@
+import { DropReasons } from "../drop-reasons.ts";
 import { UniplsTimeoutError } from "../errors.ts";
 import type { UniplsMessageFactory } from "../unipls.interface.ts";
 import type { DropDetectorContext, UniplsDropDetector } from "./drop-detector";
@@ -67,7 +68,7 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
             break;
           }
           if (err instanceof UniplsTimeoutError) {
-            ctx.drop();
+            ctx.drop({ reason: DropReasons.HEARTBEAT_RESPONSE_TIMEOUT });
             break;
           }
           // 接続終了以外の失敗はrun()の監督境界へ渡し、detector failureとして通知します。

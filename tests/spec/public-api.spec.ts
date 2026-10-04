@@ -127,12 +127,20 @@ describe("public APIのentry point境界", () => {
       "UniplsWebSocketCloseCode",
     ]);
     expect(Object.keys(reconnectors).sort()).toEqual([
+      "BrowserLifecycleReconnector",
+      "BrowserLifecycleSource",
+      "DropReasons",
       "ExponentialBackoffReconnector",
       "ImmediateReconnector",
+      "isBrowserLifecycleDrop",
     ]);
     expect(Object.keys(dropDetectors).sort()).toEqual([
+      "BrowserLifecycleDropDetector",
+      "BrowserLifecycleSource",
+      "DropReasons",
       "HeartbeatDropDetector",
       "NetworkDropDetector",
+      "isBrowserLifecycleDrop",
     ]);
   });
 

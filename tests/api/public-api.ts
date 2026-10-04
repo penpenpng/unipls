@@ -10,12 +10,19 @@ import {
 } from "unipls";
 import {
   ExponentialBackoffReconnector,
+  BrowserLifecycleReconnector,
   ImmediateReconnector,
   type ExponentialBackoffReconnectorOptions,
   type ImmediateReconnectorOptions,
   type UniplsReconnector,
 } from "unipls/reconnectors";
-import { HeartbeatDropDetector, type UniplsDropDetector } from "unipls/drop-detectors";
+import {
+  BrowserLifecycleDropDetector,
+  BrowserLifecycleSource,
+  DropReasons,
+  HeartbeatDropDetector,
+  type UniplsDropDetector,
+} from "unipls/drop-detectors";
 import {
   UniplsSocket,
   UniplsSocketClosedError,
@@ -60,6 +67,25 @@ const detector: UniplsDropDetector<string, string> = new HeartbeatDropDetector({
   ping: "ping",
   pong: (message) => message === "pong",
 });
+
+// DOM global の宣言がなくても専用 entry point の公開型を利用できます。
+const source = new BrowserLifecycleSource();
+const lifecycleDetector: UniplsDropDetector<string, string> = new BrowserLifecycleDropDetector({
+  source,
+  createProbe: () => ({ query: "ping", selector: (msg) => msg === "pong" }),
+});
+const lifecycleReconnector: UniplsReconnector = new BrowserLifecycleReconnector({
+  source,
+  defaultReconnector: reconnector,
+});
+const customDetector: UniplsDropDetector<string, string> = {
+  setup(ctx) {
+    ctx.drop({ reason: DropReasons.HEARTBEAT_RESPONSE_TIMEOUT, metadata: { attempt: 1 } });
+  },
+};
+void lifecycleDetector;
+void lifecycleReconnector;
+void customDetector;
 
 function consumeStream(stream: AsyncSubscription<string>): Promise<StreamFinalization<string>> {
   return stream.closed;
