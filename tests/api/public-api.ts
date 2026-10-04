@@ -12,6 +12,7 @@ import {
   ExponentialBackoffReconnector,
   ImmediateReconnector,
   type ExponentialBackoffReconnectorOptions,
+  type ImmediateReconnectorOptions,
   type UniplsReconnector,
 } from "unipls/reconnectors";
 import { HeartbeatDropDetector, type UniplsDropDetector } from "unipls/drop-detectors";
@@ -47,7 +48,8 @@ const provisioner: UniplsProvisioner<string, string> = {
     context.defer(() => {});
   },
 };
-const reconnector: UniplsReconnector = new ImmediateReconnector();
+const immediateOptions: ImmediateReconnectorOptions = { maxRetries: 5 };
+const reconnector: UniplsReconnector = new ImmediateReconnector(immediateOptions);
 const backoffOptions: ExponentialBackoffReconnectorOptions = { maxRetries: 5 };
 const backoffReconnector: UniplsReconnector = new ExponentialBackoffReconnector(backoffOptions);
 const recover: UniplsRecoverStrategy<string, string> = {

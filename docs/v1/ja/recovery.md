@@ -89,11 +89,11 @@ import { ImmediateReconnector } from "unipls/reconnectors";
 
 const client = new Unipls({
   url,
-  reconnector: new ImmediateReconnector(),
+  reconnector: new ImmediateReconnector({ maxRetries: 5 }),
 });
 ```
 
-`ImmediateReconnector`は待機せず、接続失敗ごとに次の試行を始めます。
+`ImmediateReconnector`は待機せず、接続失敗ごとに次の試行を始めます。`maxRetries`は初回接続を除く再試行回数の上限です。省略時は上限なし、`0`なら初回失敗後に再試行せず終了します。
 
 ### 指数 backoff と jitter を使う
 
