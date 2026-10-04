@@ -29,11 +29,13 @@ describe("Unipls.request の主要シナリオ", () => {
 
     // ! WebSocketが接続し、未完了のprovisioningが開始されます。
     const socket = transport.current;
+
     socket.emitOpen();
     const response = client.request({
       query: "ping",
       selector: (message) => {
         selectorCalls += 1;
+
         return message === "pong";
       },
     });

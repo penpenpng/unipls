@@ -30,6 +30,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       });
       const opening = client.open(provisioner);
       const socket = transport.current;
+
       socket.emitOpen();
       const invocation = provisioner.invocations.take();
       const response = client.next({ selector: () => true, timeout: 100 });
@@ -40,6 +41,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       provisioner.succeed(invocation);
       await opening;
       const closing = client.close();
+
       socket.emitClose();
       await closing;
       expect(vi.getTimerCount()).toBe(0);
@@ -69,10 +71,12 @@ describe("operation の timeout、abort、resource 解放", () => {
       const beforeReady = scenario.client.cast({
         query: () => {
           castFactoryCalls += 1;
+
           return "cast";
         },
         timeout: 10,
       });
+
       await vi.advanceTimersByTimeAsync(10);
       await expect(beforeReady).rejects.toBeInstanceOf(UniplsTimeoutError);
       expect(castFactoryCalls).toBe(0);
@@ -84,6 +88,7 @@ describe("operation の timeout、abort、resource 解放", () => {
         selector: () => true,
         timeout: 10,
       });
+
       await flushMicrotasks();
       expect(first.sent).toEqual(["after-send"]);
       await vi.advanceTimersByTimeAsync(10);
@@ -94,13 +99,16 @@ describe("operation の timeout、abort、resource 解放", () => {
         retry: "wait",
         timeout: 10,
       });
+
       await flushMicrotasks();
       scenario.drop();
       const recovery = scenario.reconnector.invocations.take();
+
       await vi.advanceTimersByTimeAsync(10);
       await expect(duringRecovery).rejects.toBeInstanceOf(UniplsTimeoutError);
       recovery.reconnect();
       const replacement = scenario.transport.current;
+
       replacement.emitOpen();
       scenario.provisioner.succeed(scenario.provisioner.invocations.take());
       await scenario.waitForLifecycle(({ phase }) => phase === "open");
@@ -108,6 +116,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       await flushMicrotasks();
       expect(replacement.sent).toEqual([]);
       const closing = scenario.client.close();
+
       replacement.emitClose();
       await closing;
       expect(vi.getTimerCount()).toBe(0);
@@ -134,10 +143,12 @@ describe("operation の timeout、abort、resource 解放", () => {
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const cause = new Error("already aborted");
     const controller = new AbortController();
+
     controller.abort(cause);
     const castResult = client.cast({ query: "cast", signal: controller.signal });
     const nextResult = client.next({ selector: () => true, signal: controller.signal });
@@ -146,11 +157,13 @@ describe("operation の timeout、abort、resource 解放", () => {
       selector: () => true,
       signal: controller.signal,
     });
+
     await expect(castResult).rejects.toBe(cause);
     await expect(nextResult).rejects.toBe(cause);
     await expect(requestResult).rejects.toBe(cause);
     expect(socket.sent).toEqual([]);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -177,6 +190,7 @@ describe("operation の timeout、abort、resource 解放", () => {
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const cause = new Error("request predicate failed");
@@ -184,6 +198,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       if (message === "bad") {
         throw cause;
       }
+
       return message === "good";
     };
     const continued = client.request({ query: "continued", selector: mayThrow });
@@ -193,6 +208,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       predicateError: "fail",
     });
     const independent = client.next({ selector: (message) => message === "bad" });
+
     await flushMicrotasks();
 
     // ! 例外を起こす message も独立した operation には配送されます。
@@ -208,6 +224,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       ["operation/selection", "error"],
     ]);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -231,9 +248,11 @@ describe("operation の timeout、abort、resource 解放", () => {
       });
       const opening = client.open();
       const socket = transport.current;
+
       socket.emitOpen();
       await opening;
       const signalAny = vi.spyOn(AbortSignal, "any");
+
       signalAny.mockClear();
       const completedController = new AbortController();
       const completedAdd = vi.spyOn(completedController.signal, "addEventListener");
@@ -243,6 +262,7 @@ describe("operation の timeout、abort、resource 解放", () => {
         signal: completedController.signal,
         timeout: 100,
       });
+
       socket.emitMessage("done");
       await expect(completed).resolves.toBe("done");
       expect(completedAdd).not.toHaveBeenCalled();
@@ -256,6 +276,7 @@ describe("operation の timeout、abort、resource 解放", () => {
         signal: abortedController.signal,
         timeout: 100,
       });
+
       abortedController.abort(cause);
       await expect(aborted).rejects.toBe(cause);
       expect(abortedAdd).not.toHaveBeenCalled();
@@ -264,10 +285,12 @@ describe("operation の timeout、abort、resource 解放", () => {
       const timedOut = client.next({
         selector: () => {
           selectorCalls += 1;
+
           return true;
         },
         timeout: 10,
       });
+
       await vi.advanceTimersByTimeAsync(10);
       await expect(timedOut).rejects.toBeInstanceOf(UniplsTimeoutError);
       socket.emitMessage("late");
@@ -275,6 +298,7 @@ describe("operation の timeout、abort、resource 解放", () => {
       expect(vi.getTimerCount()).toBe(0);
       expect(signalAny).toHaveBeenCalledTimes(3);
       const closing = client.close();
+
       socket.emitClose();
       await closing;
     } finally {

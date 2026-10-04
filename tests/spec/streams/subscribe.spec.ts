@@ -33,6 +33,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
 
     // ! WebSocketが接続し、未完了のprovisioningが開始されます。
     const socket = transport.current;
+
     socket.emitOpen();
     const subscription = client.subscribe({
       query: "watch",
@@ -79,6 +80,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
     // 3種類のrecovery policyを持つcallback subscriptionを同じ接続から開始します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -108,16 +110,20 @@ describe("Unipls.subscribe の主要シナリオ", () => {
       },
       onMatch: (message) => recoveredMessages.push(message),
     });
+
     await flushMicrotasks();
     expect(first.sent).toEqual(["fail-query", "wait-query", "original-query"]);
 
     // ! 初回送信後に接続がdropし、failだけが直ちに終了します。
     scenario.drop();
     const failedFinalization = await failed.closed;
+
     expect(failedFinalization.ok).toBe(false);
+
     if (failedFinalization.ok) {
       throw new Error("failure結果が必要です");
     }
+
     expect(failedFinalization.reason).toBe("dropped");
     expect(failedFinalization.error).toBeInstanceOf(UniplsDroppedError);
     const recovery = scenario.reconnector.invocations.take();
@@ -125,6 +131,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
     // ! 代替接続がreadyになるとcustom recoveryだけがqueryを送信します。
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
@@ -164,6 +171,7 @@ describe("Unipls.subscribe の主要シナリオ", () => {
       });
       const opening = client.open();
       const socket = transport.current;
+
       socket.emitOpen();
       await opening;
       const controller = new AbortController();
@@ -194,15 +202,19 @@ describe("Unipls.subscribe の主要シナリオ", () => {
       // ! operation受付から100msが経過します。
       await vi.advanceTimersByTimeAsync(100);
       const timeoutFinalization = await timed.closed;
+
       expect(timeoutFinalization.ok).toBe(false);
+
       if (timeoutFinalization.ok) {
         throw new Error("failure結果が必要です");
       }
+
       expect(timeoutFinalization.reason).toBe("timeout");
       expect(timeoutFinalization.error).toBeInstanceOf(UniplsTimeoutError);
 
       // ! 利用者がsessionをcloseし、WebSocketのclose handshakeも完了します。
       const closing = client.close();
+
       await expect(sessionBound.closed).resolves.toEqual({ ok: true, reason: "closed" });
       socket.emitClose();
       await closing;

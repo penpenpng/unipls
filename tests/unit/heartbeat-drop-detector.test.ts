@@ -25,6 +25,7 @@ describe("HeartbeatDropDetector", () => {
       drop() {},
       request: async () => {
         requestCount += 1;
+
         return "pong";
       },
       guard:
@@ -41,14 +42,17 @@ describe("HeartbeatDropDetector", () => {
       ping: "ping",
       pong: (message) => message === "pong",
     });
+
     detector.setup(context);
 
     // timerが完了するたびに直前のlistenerを外し、次の待機用の1件だけを残します。
     for (let index = 0; index < 5; index += 1) {
       await vi.advanceTimersByTimeAsync(10);
     }
+
     const abortAdds = addListener.mock.calls.filter(([type]) => type === "abort").length;
     const abortRemoves = removeListener.mock.calls.filter(([type]) => type === "abort").length;
+
     expect(requestCount).toBe(5);
     expect(abortAdds - abortRemoves).toBe(1);
 
@@ -56,6 +60,7 @@ describe("HeartbeatDropDetector", () => {
     controller.abort(new Error("connection ended"));
     await running;
     const finalAbortRemoves = removeListener.mock.calls.filter(([type]) => type === "abort").length;
+
     expect(finalAbortRemoves).toBe(abortAdds);
   });
 
@@ -88,10 +93,12 @@ describe("HeartbeatDropDetector", () => {
       ping: "ping",
       pong: (message) => message === "pong",
     });
+
     detector.setup(context);
 
     // ! timer完了後のrequestが失敗すると、timeoutとしてdropせずtaskをrejectします。
     const failure = expect(running).rejects.toBe(cause);
+
     await vi.advanceTimersByTimeAsync(10);
     await failure;
     expect(dropCount).toBe(0);

@@ -44,6 +44,7 @@ export class ControlledWebSocket extends EventTarget {
     options?: AddEventListenerOptions | boolean,
   ): void {
     super.addEventListener(type, callback, options);
+
     if (callback) {
       this.#listenerCounts.set(type, (this.#listenerCounts.get(type) ?? 0) + 1);
     }
@@ -55,14 +56,17 @@ export class ControlledWebSocket extends EventTarget {
     options?: EventListenerOptions | boolean,
   ): void {
     super.removeEventListener(type, callback, options);
+
     if (callback) {
       const current = this.#listenerCounts.get(type) ?? 0;
+
       this.#listenerCounts.set(type, Math.max(0, current - 1));
     }
   }
 
   listenerCount(type: SocketEventType): number {
     const propertyHandler = this[`on${type}`] === null ? 0 : 1;
+
     return propertyHandler + (this.#listenerCounts.get(type) ?? 0);
   }
 
@@ -77,6 +81,7 @@ export class ControlledWebSocket extends EventTarget {
     if (this.readyState !== this.OPEN) {
       throw new DOMException("WebSocket is not open", "InvalidStateError");
     }
+
     this.sent.push(data);
   }
 
@@ -92,11 +97,13 @@ export class ControlledWebSocket extends EventTarget {
 
   emitMessage(data: unknown): void {
     const event = new MessageEvent("message", { data });
+
     this.#emit("message", event);
   }
 
   emitError(cause?: unknown): void {
     const event = new Event("error");
+
     Object.defineProperty(event, "cause", { value: cause, enumerable: true });
     this.#emit("error", event);
   }
@@ -108,6 +115,7 @@ export class ControlledWebSocket extends EventTarget {
   }: ControlledCloseEventInit = {}): void {
     this.readyState = this.CLOSED;
     const event = new Event("close") as CloseEvent;
+
     Object.defineProperties(event, {
       code: { value: code, enumerable: true },
       reason: { value: reason, enumerable: true },
@@ -118,6 +126,7 @@ export class ControlledWebSocket extends EventTarget {
 
   #emit(type: SocketEventType, event: Event): void {
     const handler = this[`on${type}`] as ((event: Event) => void) | null;
+
     handler?.call(this, event);
     this.dispatchEvent(event);
   }
@@ -130,19 +139,24 @@ export class ControlledWebSocketServer {
 
   get current(): ControlledWebSocket {
     const socket = this.connections.at(-1);
+
     if (!socket) {
       throw new Error("No WebSocket connection has been created");
     }
+
     return socket;
   }
 
   constructor() {
     const createSocket = (url: string) => {
       const socket = new ControlledWebSocket(url);
+
       this.connections.push(socket);
       this.created.push(socket);
+
       return socket;
     };
+
     this.WebSocket = function WebSocket(url: string) {
       return createSocket(url);
     } as unknown as typeof WebSocket;
@@ -150,9 +164,11 @@ export class ControlledWebSocketServer {
 
   connection(index: number): ControlledWebSocket {
     const socket = this.connections[index];
+
     if (!socket) {
       throw new Error(`Connection ${index} has not been created`);
     }
+
     return socket;
   }
 }

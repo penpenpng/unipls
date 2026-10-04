@@ -19,12 +19,14 @@ describe("制御可能な拡張 hook", () => {
     const hook = new ControlledHook<{ attempt: number }, string>();
     const firstResult = hook.invoke({ attempt: 1 });
     const first = hook.invocations.take();
+
     first.resolve("ready");
 
     // 2つ目を同一性を検証できる値で失敗させます。
     const failure = new Error("provisioning failed");
     const secondResult = hook.invoke({ attempt: 2 });
     const second = hook.invocations.take();
+
     second.reject(failure);
 
     // 各 Promise と呼び出し状態が個別の完了結果を反映することを確認します。
@@ -39,6 +41,7 @@ describe("制御可能な拡張 hook", () => {
     const provisioner = new ControlledProvisioner<{ connection: number }>();
     const provisioning = provisioner.setupConnection({ connection: 1 });
     const provision = provisioner.invocations.take();
+
     provisioner.succeed(provision);
     await expect(provisioning).resolves.toBeUndefined();
 
@@ -63,7 +66,9 @@ describe("制御可能な拡張 hook", () => {
       },
     );
     const reconnection = reconnector.invocations.take();
+
     reconnection.reconnect();
+
     if (typeof cleanup === "function") {
       cleanup();
     }
@@ -86,7 +91,9 @@ describe("制御可能な拡張 hook", () => {
       },
     );
     const cancelledReconnection = reconnector.invocations.take();
+
     cancelledReconnection.cancel();
+
     if (typeof secondCleanup === "function") {
       secondCleanup();
     }
@@ -96,6 +103,7 @@ describe("制御可能な拡張 hook", () => {
     const detector = new ControlledDropDetector<{ drop(): void }>();
     const disposeDetector = detector.setup({ drop: dropCalls.callback });
     const detection = detector.invocations.take();
+
     detection.drop();
     disposeDetector();
 
@@ -112,6 +120,7 @@ describe("制御可能な拡張 hook", () => {
     // 次の policy setup が呼び出し公開前に失敗するよう設定します。
     const reconnector = new ControlledReconnector();
     const failure = new Error("policy setup failed");
+
     reconnector.failNextSetup(failure);
 
     // 指定した原因が同期的かつ同一の値で通知されることを確認します。
@@ -141,6 +150,7 @@ describe("resource 観測 probe", () => {
 
     // 一方の task を取り消し、もう一方を実行して仮想時間を進めます。
     const cancelled = scheduler.setTimeout(() => callback.callback("cancelled"), 5);
+
     scheduler.setTimeout(() => callback.callback("ran"), 10);
     scheduler.clearTimeout(cancelled);
     scheduler.advanceBy(10);
@@ -148,6 +158,7 @@ describe("resource 観測 probe", () => {
     // 名前付き resource を指定順で2件解放します。
     const first = disposals.disposer("first");
     const second = disposals.disposer("second");
+
     second();
     first();
 

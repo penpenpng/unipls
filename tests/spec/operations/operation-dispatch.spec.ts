@@ -44,12 +44,14 @@ describe("operation の message dispatch", () => {
     const applicationMessage = client.next({
       selector: (message) => {
         applicationSelectorCalls += 1;
+
         return message === "application";
       },
     });
 
     // ! WebSocket が開きますが、provisioner はまだ完了していません。
     const socket = transport.current;
+
     socket.emitOpen();
     socket.emitMessage("challenge");
     expect(provisioningMessages).toEqual(["challenge"]);
@@ -61,6 +63,7 @@ describe("operation の message dispatch", () => {
     expect(provisioningMessages).toEqual(["challenge"]);
     expect(applicationSelectorCalls).toBe(1);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -81,6 +84,7 @@ describe("operation の message dispatch", () => {
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const first = client.next({ selector: (message) => message === "pong" });
@@ -90,6 +94,7 @@ describe("operation の message dispatch", () => {
     socket.emitMessage("pong");
     await expect(Promise.all([first, second])).resolves.toEqual(["pong", "pong"]);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -116,6 +121,7 @@ describe("operation の message dispatch", () => {
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const cause = new Error("predicate failed");
@@ -123,6 +129,7 @@ describe("operation の message dispatch", () => {
       if (message === "bad") {
         throw cause;
       }
+
       return message === "good";
     };
     const continued = client.next({ selector: mayThrow });
@@ -154,6 +161,7 @@ describe("operation の message dispatch", () => {
       ),
     ).toBe(true);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -179,11 +187,13 @@ describe("operation の message dispatch", () => {
         if (data === "bad") {
           throw cause;
         }
+
         return String(data);
       },
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const response = client.next({ selector: (message) => message === "good" });
@@ -201,14 +211,17 @@ describe("operation の message dispatch", () => {
       context: { messageSequence: 1, input: { kind: "text", size: 3 } },
     });
     const lifecycle = client.lifecycle;
+
     if (lifecycle.phase !== "open") {
       throw new Error("Expected open lifecycle");
     }
+
     expect(diagnostics[0]?.context?.session).toBe(lifecycle.session);
     expect(diagnostics[0]?.context?.connection).toBe(lifecycle.connection);
     expect(Object.isFrozen(diagnostics[0])).toBe(true);
     expect(Object.isFrozen(diagnostics[0]?.context)).toBe(true);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -234,11 +247,13 @@ describe("operation の message dispatch", () => {
         if (serializerCause !== undefined) {
           throw serializerCause;
         }
+
         return message;
       },
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const factoryCause = new Error("factory failed");
@@ -248,10 +263,12 @@ describe("operation の message dispatch", () => {
       },
       selector: () => true,
     });
+
     await expect(requested).rejects.toBe(factoryCause);
     serializerCause = new Error("serializer failed");
     await expect(client.cast({ query: "message" })).rejects.toBe(serializerCause);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });

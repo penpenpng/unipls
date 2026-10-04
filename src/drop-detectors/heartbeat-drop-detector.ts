@@ -21,8 +21,10 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) {
       reject(signal.reason);
+
       return;
     }
+
     const finish = (callback: () => void) => {
       signal.removeEventListener("abort", onAbort);
       callback();
@@ -33,6 +35,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
         clearTimeout(timer);
         reject(signal.reason);
       });
+
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
@@ -71,6 +74,7 @@ export class HeartbeatDropDetector<TInput, TOutput> implements UniplsDropDetecto
             ctx.drop({ reason: DropReasons.HEARTBEAT_RESPONSE_TIMEOUT });
             break;
           }
+
           // 接続終了以外の失敗はrun()の監督境界へ渡し、detector failureとして通知します。
           throw err;
         }

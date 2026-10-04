@@ -59,6 +59,7 @@ describe("drop detector の lifecycle", () => {
               },
               { name: "second" },
             );
+
             return () => {
               order.push("third");
               throw thirdFailure;
@@ -67,8 +68,10 @@ describe("drop detector の lifecycle", () => {
         },
       ],
     });
+
     client.on("dropped", ({ drop }) => drops.push(drop));
     const opening = client.open({ setupConnection() {} });
+
     transport.current.emitOpen();
     await opening;
 
@@ -84,6 +87,7 @@ describe("drop detector の lifecycle", () => {
     expect(order).toEqual(["third", "second:start", "second:end", "first"]);
     expect(drops).toHaveLength(1);
     const recovery = reconnector.invocations.take();
+
     expect(recovery.context.cause).toBe(drops[0]);
     expect(
       diagnostics.map((log) => ({
@@ -139,12 +143,14 @@ describe("drop detector の lifecycle", () => {
     });
     const opening = client.open({ setupConnection() {} });
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
 
     // ! dropがcleanupを開始した直後にcloseを開始し、socketのclose eventも発生させます。
     client.drop();
     const closing = client.close();
+
     socket.emitClose();
     expect(cleanupCount).toBe(1);
     expect(reconnector.invocations.size).toBe(0);

@@ -53,6 +53,7 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
     this.session = params.session;
     this.operationType = params.operationType;
     const signals = [this.#controller.signal];
+
     if (params.signal) {
       signals.push(params.signal);
     }
@@ -64,6 +65,7 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
         this.#timeoutController?.abort(new UniplsTimeoutError());
       }, params.timeout);
     }
+
     this.signal = AbortSignal.any(signals);
     const registration = params.dispatcher.register({
       session: params.session,
@@ -71,6 +73,7 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
       mode: params.mode,
       receive: params.receive,
     });
+
     this.operation = registration.operation;
     this.#unregister = registration.unregister;
   }
@@ -81,13 +84,17 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
   }): void {
     this.#onAbort = () => {
       const timeoutReason = this.#timeoutController?.signal.reason;
+
       if (this.#timeoutController?.signal.aborted && this.signal.reason === timeoutReason) {
         params.onTimeout(timeoutReason as UniplsTimeoutError);
+
         return;
       }
+
       params.onAbort(this.signal.reason);
     };
     this.signal.addEventListener("abort", this.#onAbort, { once: true });
+
     if (this.signal.aborted) {
       this.#onAbort();
     }
@@ -97,13 +104,16 @@ class OperationResources<TMessage, TEvents extends Record<string, unknown>> {
     if (this.#cleaned) {
       return;
     }
+
     this.#cleaned = true;
+
     if (this.#timer !== undefined) {
       clearTimeout(this.#timer);
     }
     if (this.#onAbort) {
       this.signal.removeEventListener("abort", this.#onAbort);
     }
+
     this.#unregister();
     this.events.dispose();
     this.#controller.abort(reason);
@@ -171,6 +181,7 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
     if (this.#resulted) {
       return;
     }
+
     this.#resulted = true;
     this.#resources.cleanup();
     this.#resolvePromise(value);
@@ -180,6 +191,7 @@ export class SingleOperationScope<T, TMessage, TEvents extends Record<string, un
     if (this.#resulted) {
       return;
     }
+
     this.#resulted = true;
     this.#resources.cleanup(reason);
     this.#rejectPromise(reason);
@@ -296,6 +308,7 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
               : error instanceof UniplsClosedError
                 ? Object.freeze({ ok: true, reason: "closed" })
                 : Object.freeze({ ok: false, reason: "fatal-error", error });
+
     this.#finish(finalization);
   };
 
@@ -315,10 +328,12 @@ export class StreamOperationScope<T, TMessage, TEvents extends Record<string, un
     if (this.#resulted) {
       return false;
     }
+
     this.#resulted = true;
     this.#resources.cleanup(finalization.ok ? undefined : finalization.error);
     this.#delivery.finish(finalization);
     this.#resolveClosed(finalization);
+
     return true;
   }
 }

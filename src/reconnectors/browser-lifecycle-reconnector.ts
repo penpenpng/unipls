@@ -31,6 +31,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     this.#defaultReconnector = options.defaultReconnector;
     this.#maxRetries = options.maxRetries ?? Number.POSITIVE_INFINITY;
     this.#delay = options.coalesceDelay ?? 100;
+
     if (!Number.isFinite(this.#delay) || this.#delay < 0) {
       throw new RangeError("coalesceDelay must be finite and non-negative.");
     }
@@ -49,34 +50,45 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     if (ctx.signal.aborted) {
       return;
     }
+
     const cycle = ctx.origin === "initial" ? ctx.signal : (ctx.drop ?? ctx.signal);
     const retries = this.#retries.get(cycle) ?? 0;
+
     if (retries >= this.#maxRetries) {
       actions.exhaust(ctx.cause);
+
       return;
     }
+
     const source = this.#source;
+
     source.retainSession(ctx.signal);
     const lifecycle = ctx.origin === "recovery" && isBrowserLifecycleDrop(ctx.drop);
     const first = !this.#bootstrapped.has(cycle);
+
     this.#bootstrapped.add(cycle);
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delegateRun: { active: boolean; disposer?: () => void } | undefined;
     const stopDelegate = () => {
       const run = delegateRun;
+
       delegateRun = undefined;
+
       if (!run) {
         return;
       }
+
       run.active = false;
       const disposer = run.disposer;
+
       run.disposer = undefined;
       disposeDelegate(disposer);
     };
     let unsubscribe: (() => void) | undefined;
     const eligible = () => {
       const state = source.snapshot;
+
       return !state.suspended && !state.offline;
     };
     const clearWaiting = () => {
@@ -88,6 +100,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       if (disposed) {
         return;
       }
+
       disposed = true;
       clearWaiting();
       unsubscribe?.();
@@ -97,6 +110,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       if (disposed || ctx.signal.aborted || !eligible()) {
         return;
       }
+
       this.#retries.set(cycle, retries + 1);
       cleanup();
       actions.reconnect();
@@ -105,9 +119,11 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       if (!eligible() || disposed || timer !== undefined) {
         return;
       }
+
       clearWaiting();
       timer = setTimeout(reconnect, this.#delay);
     };
+
     unsubscribe = source.subscribe((event) => {
       if (!eligible()) {
         clearWaiting();
@@ -116,6 +132,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       }
     });
     ctx.signal.addEventListener("abort", cleanup, { once: true });
+
     if (eligible()) {
       if (lifecycle) {
         // 過去に発生した復帰イベントを待ち直さないよう、cycle ごとに一度試します。
@@ -124,11 +141,13 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
         }
       } else {
         const run: { active: boolean; disposer?: () => void } = { active: true };
+
         delegateRun = run;
         const select = (action: () => void) => {
           if (!run.active || disposed || ctx.signal.aborted) {
             return;
           }
+
           cleanup();
           action();
         };
@@ -138,9 +157,11 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
           } else {
             disposeDelegate(disposer);
           }
+
           return cleanup;
         };
         let result: ReturnType<UniplsReconnector["setup"]>;
+
         try {
           result = this.#defaultReconnector.setup(
             {
@@ -158,18 +179,22 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
           cleanup();
           throw cause;
         }
+
         if (result !== undefined && typeof result !== "function") {
           return Promise.resolve(result).then(register, (cause) => {
             if (run.active && !disposed) {
               cleanup();
               throw cause;
             }
+
             return cleanup;
           });
         }
+
         register(result);
       }
     }
+
     return cleanup;
   }
 }

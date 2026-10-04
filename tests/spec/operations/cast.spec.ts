@@ -33,10 +33,12 @@ describe("Unipls.cast の主要シナリオ", () => {
 
     // ! WebSocketが接続し、未完了のprovisioningが開始されます。
     const socket = transport.current;
+
     socket.emitOpen();
     const sending = client.cast({
       query: () => `message-${++queryEvaluations}`,
     });
+
     expect(queryEvaluations).toBe(0);
     expect(socket.sent).toEqual([]);
 

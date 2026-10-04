@@ -34,12 +34,15 @@ export class AsyncResult<T> {
     void this.#promise.catch(() => {});
 
     const signals = [this.#controller.signal];
+
     if (options.signal) {
       signals.push(options.signal);
     }
+
     this.#signal = AbortSignal.any(signals);
 
     let timer: ReturnType<typeof setTimeout> | null = null;
+
     if (typeof options.timeout === "number" && options.timeout > 0) {
       timer = setTimeout(() => {
         this.#controller.abort(new UniplsTimeoutError());
@@ -54,11 +57,14 @@ export class AsyncResult<T> {
       if (!this.#resulted) {
         this.#reject(this.#signal.reason);
       }
+
       this.#resulted = true;
 
       options.finally?.();
     };
+
     this.#signal.addEventListener("abort", onAbort, { once: true });
+
     if (this.#signal.aborted) {
       onAbort();
     }
@@ -68,6 +74,7 @@ export class AsyncResult<T> {
     if (this.#resulted) {
       return;
     }
+
     this.#resulted = true;
     this.#resolve(value);
     this.#controller.abort(); // 関連する listener と timer を解放します。
@@ -77,6 +84,7 @@ export class AsyncResult<T> {
     if (this.#resulted) {
       return;
     }
+
     this.#resulted = true;
     this.#reject(reason);
     this.#controller.abort(); // 関連する listener と timer を解放します。

@@ -80,6 +80,7 @@ type PublicContracts = readonly [
 ];
 
 const publicContractsCompile: PublicContracts | undefined = undefined;
+
 void publicContractsCompile;
 
 function acceptsPlatformWebSocket(WebSocket: typeof globalThis.WebSocket): WebSocketConstructor {
@@ -91,6 +92,7 @@ function narrowFinalization(finalization: StreamFinalization<string>): unknown {
   if (finalization.ok) {
     return finalization.reason === "terminated" ? finalization.message : finalization.reason;
   }
+
   return finalization.error;
 }
 void narrowFinalization;

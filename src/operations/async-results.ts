@@ -100,12 +100,15 @@ export function normalizeStreamBuffer(
   }
   if (typeof buffer === "number") {
     validateCapacity(buffer);
+
     return Object.freeze({ capacity: buffer, overflow: "error" });
   }
   if (typeof buffer !== "object" || buffer === null) {
     throw new TypeError('buffer には数値、"latest"、または設定 object を指定してください。');
   }
+
   validateCapacity(buffer.capacity);
+
   if (
     buffer.overflow !== "error" &&
     buffer.overflow !== "drop-oldest" &&
@@ -113,6 +116,7 @@ export function normalizeStreamBuffer(
   ) {
     throw new TypeError("buffer.overflow に未対応の値が指定されました。");
   }
+
   return Object.freeze({
     capacity: buffer.capacity,
     overflow: buffer.overflow,
@@ -201,17 +205,20 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
             "AsyncSubscription から取得できる iterator は一つだけです。",
           );
         }
+
         this.#iteratorCreated = true;
         const iterator: AsyncIterableIterator<T> = {
           next: () => this.#next(),
           return: async () => {
             params.unsubscribe();
+
             return { done: true, value: undefined };
           },
           [Symbol.asyncIterator]() {
             return this;
           },
         };
+
         return iterator;
       },
     });
@@ -223,19 +230,25 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
     }
     if (this.#pending) {
       const pending = this.#pending;
+
       this.#pending = undefined;
       pending.resolve({ done: false, value: message });
+
       return;
     }
     if (this.#messages.length < this.#buffer.capacity) {
       this.#messages.push(message);
+
       return;
     }
     if (this.#buffer.overflow === "error") {
       this.#onOverflow();
+
       return;
     }
+
     const strategy = this.#buffer.diagnosticStrategy;
+
     if (!strategy) {
       throw new Error("Lossy buffer strategy is missing");
     }
@@ -243,6 +256,7 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
       this.#messages.shift();
       this.#messages.push(message);
     }
+
     this.#onDropped(strategy, this.#buffer.capacity);
   }
 
@@ -250,13 +264,18 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
     if (this.#finalization) {
       return;
     }
+
     this.#finalization = finalization;
     this.#messages.length = 0;
+
     if (!this.#pending) {
       return;
     }
+
     const pending = this.#pending;
+
     this.#pending = undefined;
+
     if (finalization.ok) {
       pending.resolve({ done: true, value: undefined });
     } else {
@@ -278,6 +297,7 @@ export class AsyncStreamDelivery<T> implements StreamDeliveryAdapter<T> {
         new UniplsInvalidUsageError("同じ iterator で複数の next() を同時に待つことはできません。"),
       );
     }
+
     return new Promise<IteratorResult<T>>((resolve, reject) => {
       this.#pending = { resolve, reject };
     });

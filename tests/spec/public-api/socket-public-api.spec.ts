@@ -20,6 +20,7 @@ describe("低レベルsocketの公開契約", () => {
         if (data === "bad") {
           throw cause;
         }
+
         return String(data);
       },
       logSink(log) {
@@ -28,9 +29,11 @@ describe("低レベルsocketの公開契約", () => {
       },
     });
     const messages: string[] = [];
+
     client.on("message", ({ message }) => messages.push(message));
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
 
@@ -47,6 +50,7 @@ describe("低レベルsocketの公開契約", () => {
     socket.emitMessage("good");
     expect(messages).toEqual(["good"]);
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -74,6 +78,7 @@ describe("低レベルsocketの公開契約", () => {
       serializer: (message) => `wire:${message}`,
       deserializer: (data) => String(data).replace(/^wire:/u, ""),
     });
+
     client.on("open", (event) => opened.push(event));
     client.on("message", (event) => messages.push(event));
     client.on("closed", (event) => closed.push(event));
@@ -81,11 +86,13 @@ describe("低レベルsocketの公開契約", () => {
       // @ts-expect-error 低レベルclientも存在しないevent名を受け付けません。
       client.on("unknown", () => {});
     };
+
     void rejectUnknownEventAtCompileTime;
 
     // ! 注入したWebSocketが接続を確立すると、同じ接続試行IDでopenを通知します。
     const opening = client.open();
     const connection = transport.current;
+
     connection.emitOpen();
     await opening;
     expect(opened).toEqual([{ transportEpochId: client.transportEpochId }]);
@@ -98,6 +105,7 @@ describe("低レベルsocketの公開契約", () => {
 
     // ! close handshakeの完了後に内部epochを含まないclosed eventを通知します。
     const closing = client.close();
+
     connection.emitClose();
     await closing;
     expect(closed).toEqual([
@@ -125,10 +133,12 @@ describe("低レベルsocketの公開契約", () => {
       url: "wss://unipls.test/socket",
       WebSocket: transport.WebSocket,
     });
+
     await expect(client.enqueue("message")).rejects.toBeInstanceOf(UniplsSocketClosedError);
 
     // ! 接続試行中にpeer closeが届くと、openはdropとして終了します。
     const opening = client.open();
+
     transport.current.emitClose({ code: 4100, wasClean: false });
     await expect(opening).rejects.toBeInstanceOf(UniplsSocketDroppedError);
 

@@ -23,11 +23,13 @@ describe("stream の終了結果", () => {
     const opening = scenario.beginOpen();
     const messages = scenario.client.listen({});
     const pending = messages[Symbol.asyncIterator]().next();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.fail(scenario.provisioner.invocations.take(), cause);
 
     // ! sessionのterminal outcomeがopen、iterator、closedへ同じerror objectを通知します。
     const openError = await opening.catch((error) => error as UniplsOpenError);
+
     expect(openError).toBeInstanceOf(UniplsOpenError);
     await expect(pending).rejects.toBe(openError);
     await expect(messages.closed).resolves.toEqual({
@@ -57,6 +59,7 @@ describe("stream の終了結果", () => {
     const iterableStream = client.listen({});
     const pending = iterableStream[Symbol.asyncIterator]().next();
     const closing = client.close();
+
     await expect(callbackStream.closed).resolves.toEqual({ ok: true, reason: "closed" });
     await expect(iterableStream.closed).resolves.toEqual({ ok: true, reason: "closed" });
     await expect(pending).resolves.toEqual({ done: true, value: undefined });
@@ -85,8 +88,10 @@ describe("stream の終了結果", () => {
     const reason = { code: "stop" };
     const subscription = client.listen({ signal: controller.signal });
     const pending = subscription[Symbol.asyncIterator]().next();
+
     controller.abort(reason);
     const finalization = await subscription.closed;
+
     expect(finalization).toEqual({ ok: false, reason: "aborted", error: reason });
     await expect(pending).rejects.toBe(reason);
     await closeClient(client, socket);
@@ -108,12 +113,14 @@ describe("stream の終了結果", () => {
   ])("recovery の $mode で stream を $outcome へ一度だけ終了する", async ({ mode, outcome }) => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
     const subscription = scenario.client.listen({ retry: "wait" });
     const pending = subscription[Symbol.asyncIterator]().next();
     const cause = new Error(`recovery ${mode}`);
+
     if (mode === "setup-failure") {
       scenario.reconnector.failNextSetup(cause);
     }
@@ -121,6 +128,7 @@ describe("stream の終了結果", () => {
     // ! 指定したrecovery terminal outcomeがsessionとstreamを一度だけ終了します。
     scenario.drop();
     const snapshot = scenario.client.lifecycle;
+
     if (mode !== "setup-failure" && snapshot.phase !== "recovering") {
       throw new Error("Expected recovery");
     }
@@ -130,20 +138,26 @@ describe("stream の終了結果", () => {
     if (mode === "exhaust") {
       scenario.reconnector.invocations.take().exhaust(cause);
     }
+
     const finalization = await subscription.closed;
+
     expect(finalization.ok).toBe(false);
+
     if (finalization.ok) {
       throw new Error("Expected failure");
     }
+
     expect(finalization.reason).toBe("dropped");
     expect(finalization.error).toBeInstanceOf(UniplsDroppedError);
     expect((finalization.error as UniplsDroppedError).outcome).toBe(outcome);
+
     if (snapshot.phase === "recovering") {
       expect((finalization.error as UniplsDroppedError).drop).toBe(snapshot.drop);
     }
     if (mode !== "cancel") {
       expect((finalization.error as UniplsDroppedError).cause).toBe(cause);
     }
+
     await expect(pending).rejects.toBe(finalization.error);
     subscription.unsubscribe();
     await expect(subscription.closed).resolves.toBe(finalization);

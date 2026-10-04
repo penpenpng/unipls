@@ -59,6 +59,7 @@ describe("provisioning capability と resource scope", () => {
           query: "current-user",
           selector: (message) => message === "user:alice",
         });
+
         subscription = ctx.subscribe({
           query: "restore",
           selector: (message) => message === "restored",
@@ -72,6 +73,7 @@ describe("provisioning capability と resource scope", () => {
 
     // ! WebSocketのraw open後、ready遷移前に3種類すべてのqueryを送信します。
     const socket = transport.current;
+
     socket.emitOpen();
     await started;
     await flushMicrotasks();
@@ -86,6 +88,7 @@ describe("provisioning capability と resource scope", () => {
     finishSetup();
     await opening;
     const finalization = await subscription.closed;
+
     expect(finalization).toMatchObject({ ok: false, reason: "aborted" });
     expect(() => context.cast("late")).toThrow(UniplsInvalidUsageError);
     expect(() => context.request({ query: "late", selector: () => true })).toThrow(
@@ -99,6 +102,7 @@ describe("provisioning capability と resource scope", () => {
     const sessionHasCast: "cast" extends keyof SessionSetupContext ? true : false = false;
     const clientHasCastForce: "castForce" extends keyof Unipls<string, string> ? true : false =
       false;
+
     expect(sessionHasCast).toBe(false);
     expect(clientHasCastForce).toBe(false);
     expect("castForce" in client).toBe(false);
@@ -107,6 +111,7 @@ describe("provisioning capability と resource scope", () => {
 
     // ready接続を明示的に終了します。
     const closing = client.close();
+
     socket.emitClose();
     await closing;
   });
@@ -142,6 +147,7 @@ describe("provisioning capability と resource scope", () => {
         ctx.defer(() => {
           order.push("session:defer");
         });
+
         return () => {
           order.push("session:return");
         };
@@ -149,9 +155,11 @@ describe("provisioning capability と resource scope", () => {
       setupConnection(ctx) {
         connectionSetups += 1;
         const setupNumber = connectionSetups;
+
         ctx.defer(() => {
           order.push(`connection-${setupNumber}:defer`);
         });
+
         if (setupNumber === 1) {
           return async () => {
             order.push("connection-1:return:start");
@@ -159,11 +167,13 @@ describe("provisioning capability と resource scope", () => {
             order.push("connection-1:return:end");
           };
         }
+
         return () => {
           order.push("connection-2:return");
         };
       },
     });
+
     scenario.transport.current.emitOpen();
     await opening;
 
@@ -183,6 +193,7 @@ describe("provisioning capability と resource scope", () => {
     // 同じsessionの代替接続ではconnection setupだけを再実行します。
     scenario.reconnector.invocations.take().reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
     expect(sessionSetups).toBe(1);
@@ -190,6 +201,7 @@ describe("provisioning capability と resource scope", () => {
 
     // 明示closeは現在connectionを先に、session resourceを後にLIFOで解放します。
     const closing = scenario.client.close();
+
     replacement.emitClose();
     await closing;
     expect(order).toEqual([
@@ -262,6 +274,7 @@ describe("provisioning capability と resource scope", () => {
       },
       (cause) => cause as UniplsOpenError,
     );
+
     expect(error).toBeInstanceOf(UniplsOpenError);
     expect(error.cause).toBe(setupError);
     expect(order).toEqual(["third", "second:start", "second:end", "first"]);
@@ -312,12 +325,14 @@ describe("provisioning capability と resource scope", () => {
     const opening = scenario.client.open({
       setupSession(ctx) {
         sessionSetups += 1;
+
         if (sessionSetups === 1) {
           ctx.defer(() => {
             rollbackCount += 1;
           });
           throw cause;
         }
+
         ctx.defer(() => {
           finalCleanupCount += 1;
         });
@@ -332,11 +347,13 @@ describe("provisioning capability と resource scope", () => {
     await flushMicrotasks();
     expect(rollbackCount).toBe(1);
     const retry = scenario.reconnector.invocations.take();
+
     expect(retry.context.cause).toBe(cause);
 
     // 次のattemptではsession setupを改めて成功させ、その後connection setupを実行します。
     retry.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     await opening;
 
@@ -346,6 +363,7 @@ describe("provisioning capability と resource scope", () => {
 
     // session終了時に成功したtransactionのresourceだけを破棄します。
     const closing = scenario.client.close();
+
     replacement.emitClose();
     await closing;
     expect(finalCleanupCount).toBe(1);
@@ -373,6 +391,7 @@ describe("provisioning capability と resource scope", () => {
           name: "first",
           setup() {
             order.push("detector:first:setup");
+
             return () => {
               order.push("detector:first:cleanup");
             };
@@ -401,6 +420,7 @@ describe("provisioning capability と resource scope", () => {
     // ! detector failure後、先に登録されたdetector、connection resourceの順にrollbackします。
     transport.current.emitOpen();
     const retry = await reconnector.invocations.next();
+
     expect(retry.context.cause).toBe(cause);
     retry.cancel();
     const error = await opening.then(
@@ -409,6 +429,7 @@ describe("provisioning capability と resource scope", () => {
       },
       (failure) => failure as UniplsOpenError,
     );
+
     expect(error.cause).toBe(cause);
     expect(order).toEqual([
       "detector:first:setup",
@@ -447,6 +468,7 @@ describe("provisioning capability と resource scope", () => {
         if (failureMode === "sync") {
           throw cause;
         }
+
         return Promise.reject(cause);
       };
       const diagnostics: UniplsLog[] = [];
@@ -479,6 +501,7 @@ describe("provisioning capability と resource scope", () => {
             setup(ctx) {
               survivorSignal = ctx.signal;
               survivorDrop = ctx.drop;
+
               return () => {
                 survivorCleanupCount += 1;
               };
@@ -488,6 +511,7 @@ describe("provisioning capability と resource scope", () => {
       });
       const opening = client.open({ setupConnection() {} });
       const socket = transport.current;
+
       socket.emitOpen();
       await opening;
 
@@ -515,6 +539,7 @@ describe("provisioning capability と resource scope", () => {
       // 生存しているdetectorは引き続き同じconnectionを監視し、dropを報告できます。
       survivorDrop();
       const recovery = reconnector.invocations.take();
+
       expect(cleanupCount).toBe(1);
       expect(survivorCleanupCount).toBe(1);
       expect(diagnostics).toHaveLength(1);

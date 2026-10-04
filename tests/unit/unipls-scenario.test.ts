@@ -11,12 +11,14 @@ describe("UniplsRaceScenario の test harness", () => {
 
     first.emitOpen();
     const provisioning = scenario.provisioner.invocations.take();
+
     scenario.provisioner.succeed(provisioning);
     await opening;
 
     // 2つの detector が同じ接続用の独立した context を受け取ることを確認します。
     const firstDetector = scenario.detectors[0].invocations.take();
     const secondDetector = scenario.detectors[1].invocations.take();
+
     expect(firstDetector.context).not.toBe(secondDetector.context);
 
     // 複数の detector 報告、transport error、close event を競合させます。
@@ -25,6 +27,7 @@ describe("UniplsRaceScenario の test harness", () => {
     first.emitError(new Error("late transport error"));
     scenario.drop(0);
     const reconnect = scenario.reconnector.invocations.take();
+
     reconnect.reconnect();
     expect(scenario.transport.connections).toHaveLength(2);
 
@@ -39,6 +42,7 @@ describe("UniplsRaceScenario の test harness", () => {
 
     // 接続中の代替 socket を終了します。
     const closing = scenario.client.close();
+
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -52,12 +56,14 @@ describe("UniplsRaceScenario の test harness", () => {
 
     // 2回目が拒否された後、元の open を完了します。
     const first = scenario.transport.connection(0);
+
     first.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
 
     // 元の接続を終了します。
     const closing = scenario.client.close();
+
     first.emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -69,6 +75,7 @@ describe("UniplsRaceScenario の test harness", () => {
       const scenario = new UniplsRaceScenario();
       const opening = scenario.beginOpen();
       const first = scenario.transport.connection(0);
+
       first.emitOpen();
       scenario.provisioner.succeed(scenario.provisioner.invocations.take());
       await opening;
@@ -82,6 +89,7 @@ describe("UniplsRaceScenario の test harness", () => {
       if (winner === "reconnect") {
         scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
       }
+
       await closing;
 
       // reconnect が先の場合だけ新しい接続が作られることを確認します。

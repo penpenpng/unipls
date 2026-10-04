@@ -11,6 +11,7 @@ export function verifyAbortSignalAny() {
   if (preAbortedResult.reason !== firstPreAbortedReason) {
     throw new Error("AbortSignal.any did not preserve input priority");
   }
+
   checks += 1;
 
   // active な入力の一方を abort し、reason の同一性を確認します。
@@ -21,16 +22,20 @@ export function verifyAbortSignalAny() {
   const laterReason = { source: "later" };
 
   firstController.abort(firstLiveReason);
+
   if (liveResult.reason !== firstLiveReason) {
     throw new Error("AbortSignal.any did not preserve reason identity");
   }
+
   checks += 1;
 
   // もう一方も abort し、確定済みの結果が変化しないことを確認します。
   secondController.abort(laterReason);
+
   if (liveResult.reason !== firstLiveReason) {
     throw new Error("AbortSignal.any changed after a later abort");
   }
+
   checks += 1;
 
   // unit、host runtime、browser runtime の各テストで共有する不変の結果を返します。

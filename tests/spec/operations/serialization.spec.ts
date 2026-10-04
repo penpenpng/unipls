@@ -29,6 +29,7 @@ describe("高レベルoperationのmessage変換", () => {
     await client.cast({ query: 7 });
     expect(socket.sent).toEqual(["wire:7"]);
     const received = client.next({ selector: (value) => value === 42 });
+
     // ! peerからwire形式のmessageが届きます。
     socket.emitMessage("wire:42");
     await expect(received).resolves.toBe(42);
@@ -61,6 +62,7 @@ describe("高レベルoperationのmessage変換", () => {
     await expect(client.request({ query: "request", selector: () => true })).rejects.toBe(cause);
     const subscription = client.subscribe({ query: "subscribe", selector: () => true });
     const finalization = await subscription.closed;
+
     expect(finalization).toEqual({ ok: false, reason: "fatal-error", error: cause });
     await expect(subscription[Symbol.asyncIterator]().next()).rejects.toBe(cause);
     expect(socket.sent).toEqual([]);

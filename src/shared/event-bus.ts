@@ -27,6 +27,7 @@ export class EventBus<TEvents extends Record<string, any>> {
     options?: { once?: boolean },
   ): () => void {
     const listeners = this.getListeners(event);
+
     listeners.set(listener, { once: options?.once ?? false });
 
     return () => {
@@ -47,6 +48,7 @@ export class EventBus<TEvents extends Record<string, any>> {
       if (options.once) {
         this.off(event, listener);
       }
+
       listener(args);
     }
   }
@@ -54,11 +56,13 @@ export class EventBus<TEvents extends Record<string, any>> {
   /** listener の例外を相互に隔離し、次の microtask で event を通知します。 */
   emitIsolated<K extends keyof TEvents>(event: K, args: TEvents[K]): void {
     const listeners = [...this.getListeners(event)];
+
     queueMicrotask(() => {
       for (const [listener, options] of listeners) {
         if (options.once) {
           this.off(event, listener);
         }
+
         try {
           listener(args);
         } catch {
@@ -99,7 +103,9 @@ class EventBusView<TEvents extends Record<string, any>> {
     if (this.#disposed) {
       return () => {};
     }
+
     const cleanup = this.#events.on(event, listener, options);
+
     this.#cleanups.add(cleanup);
 
     return () => {
@@ -113,10 +119,13 @@ class EventBusView<TEvents extends Record<string, any>> {
     if (this.#disposed) {
       return;
     }
+
     this.#disposed = true;
+
     for (const cleanup of this.#cleanups) {
       cleanup();
     }
+
     this.#cleanups.clear();
   }
 }

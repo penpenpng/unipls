@@ -2,6 +2,7 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   lint: {
+    jsPlugins: ["@stylistic/eslint-plugin"],
     categories: {
       correctness: "error",
       suspicious: "error",
@@ -9,6 +10,17 @@ export default defineConfig({
     rules: {
       curly: ["error", "all"],
       "unicorn/prefer-add-event-listener": "off",
+      "@stylistic/padding-line-between-statements": [
+        "error",
+        { blankLine: "always", prev: ["const", "let", "var"], next: "*" },
+        { blankLine: "any", prev: ["const", "let", "var"], next: ["const", "let", "var"] },
+        { blankLine: "always", prev: "*", next: "return" },
+        { blankLine: "always", prev: "*", next: ["if", "for", "switch"] },
+        { blankLine: "always", prev: ["if", "for", "switch"], next: "*" },
+        { blankLine: "any", prev: "if", next: "if" },
+        { blankLine: "any", prev: "for", next: "for" },
+        { blankLine: "any", prev: "switch", next: "switch" },
+      ],
     },
   },
   fmt: {

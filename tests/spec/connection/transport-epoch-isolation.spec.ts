@@ -23,10 +23,12 @@ describe("接続試行の分離", () => {
     // 公開 event の observer を登録し、最初の接続を ready にします。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
     const messages: string[] = [];
+
     scenario.client.on("message", ({ message }) => messages.push(message));
 
     const opening = scenario.beginOpen();
     const first = scenario.transport.connection(0);
+
     first.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -35,6 +37,7 @@ describe("接続試行の分離", () => {
     // 最初の接続を drop し、代替接続を open 前で保留します。
     scenario.drop(0);
     const recovery = scenario.reconnector.invocations.take();
+
     recovery.reconnect();
     const reconnecting = scenario.client.lifecycle;
 
@@ -60,11 +63,13 @@ describe("接続試行の分離", () => {
 
     // 現在の代替接続を ready にしてから終了します。
     const second = scenario.transport.connection(1);
+
     second.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
 
     const closing = scenario.client.close();
+
     second.emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -84,9 +89,11 @@ describe("接続試行の分離", () => {
     // 初回セッションを ready にし、公開 open event を記録します。
     const scenario = new UniplsRaceScenario({ detectorCount: 1 });
     const opened: unknown[] = [];
+
     scenario.client.on("open", (event) => opened.push(event));
 
     const opening = scenario.beginOpen();
+
     scenario.transport.connection(0).emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -115,6 +122,7 @@ describe("接続試行の分離", () => {
 
     // 3つ目の接続を完了し、ready への遷移を待ちます。
     const current = scenario.transport.connection(2);
+
     current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
@@ -124,6 +132,7 @@ describe("接続試行の分離", () => {
 
     // 有効な接続を終了します。
     const closing = scenario.client.close();
+
     current.emitClose({ code: 1000, wasClean: true });
     await closing;
     expect(currentDetector.cleanupCount).toBe(1);
@@ -156,12 +165,14 @@ describe("接続試行の分離", () => {
       const firstOpening = socket.open();
       const firstSend = socket.enqueue("obsolete", { force: true });
       const first = transport.connection(0);
+
       await vi.advanceTimersByTimeAsync(100);
       await expect(firstOpening).rejects.toThrow();
 
       // 代替接続を開き、古い payload が新しい socket へ移らないことを確認します。
       const secondOpening = socket.open();
       const second = transport.connection(1);
+
       second.emitOpen();
       await secondOpening;
 
@@ -176,6 +187,7 @@ describe("接続試行の分離", () => {
 
       // 2つ目の接続を閉じ、すべての仮想 timer が解放されたことを確認します。
       const closing = socket.close();
+
       second.emitClose({ code: 1000, wasClean: true });
       await closing;
       expect(vi.getTimerCount()).toBe(0);

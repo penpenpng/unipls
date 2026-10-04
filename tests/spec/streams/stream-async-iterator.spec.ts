@@ -48,9 +48,11 @@ describe("AsyncIterable stream", () => {
   it("operation 開始時から buffer する single-consumer AsyncSubscription を返す", async () => {
     const { client, socket, close } = await createReadyClient();
     const messages = client.listen({ buffer: 2 });
+
     socket.emitMessage("first");
     socket.emitMessage("second");
     const iterator = messages[Symbol.asyncIterator]();
+
     expect(messages[Symbol.asyncIterator]).toBeTypeOf("function");
     expect(() => messages[Symbol.asyncIterator]()).toThrow(UniplsInvalidUsageError);
     await expect(iterator.next()).resolves.toEqual({ done: false, value: "first" });
@@ -76,6 +78,7 @@ describe("AsyncIterable stream", () => {
     const messages = client.listen({
       selector: (message) => {
         selectorCalls.push(message);
+
         return true;
       },
       terminator: (message) => message === "stop",
@@ -112,11 +115,13 @@ describe("AsyncIterable stream", () => {
       if (message === "bad") {
         throw cause;
       }
+
       return false;
     };
     const continued = client.listen({
       selector: (message) => {
         selectorCalls.push(message);
+
         return true;
       },
       terminator: mayThrow,
@@ -128,6 +133,7 @@ describe("AsyncIterable stream", () => {
     // ! 失敗したterminatorの入力は両方の通常selectorとiteratorから破棄されます。
     socket.emitMessage("bad");
     const failedFinalization = await failed.closed;
+
     expect(failedFinalization).toEqual({ ok: false, reason: "fatal-error", error: cause });
     await expect(failedIterator.next()).rejects.toBe(cause);
     expect(selectorCalls).toEqual([]);
@@ -154,6 +160,7 @@ describe("AsyncIterable stream", () => {
       if (message === "bad") {
         throw cause;
       }
+
       return true;
     };
     const continued = client.listen({ selector: mayThrow });
@@ -164,6 +171,7 @@ describe("AsyncIterable stream", () => {
     // ! 失敗したselectorの入力をyieldせず、明示failのstreamだけを終了します。
     socket.emitMessage("bad");
     const failedFinalization = await failed.closed;
+
     expect(failedFinalization).toEqual({ ok: false, reason: "fatal-error", error: cause });
     await expect(failedIterator.next()).rejects.toBe(cause);
     socket.emitMessage("good");

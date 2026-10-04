@@ -13,13 +13,16 @@ export class DropDetectorManager<TInput, TOutput> {
 
   constructor(detectors: readonly UniplsDropDetector<TInput, TOutput>[]) {
     const names = new Set<string>();
+
     this.#registrations = detectors.map((detector, registrationIndex) => {
       if (detector.name !== undefined) {
         if (names.has(detector.name)) {
           throw new TypeError(`Drop detector name must be unique: ${detector.name}`);
         }
+
         names.add(detector.name);
       }
+
       return Object.freeze({
         detector,
         identity: Object.freeze({
@@ -52,12 +55,14 @@ export class DropDetectorManager<TInput, TOutput> {
         if (failed || scope.signal.aborted) {
           return;
         }
+
         failed = true;
         params.onRuntimeFailure(identity, boundary, cause);
         void scope.dispose(cause);
       };
       const context = params.createContext(identity, scope, fail);
       let returned: Awaited<ReturnType<UniplsDropDetector<TInput, TOutput>["setup"]>>;
+
       try {
         returned = await detector.setup(context);
       } catch (cause) {
@@ -68,6 +73,7 @@ export class DropDetectorManager<TInput, TOutput> {
         if (returned !== undefined) {
           scope.deferReturned(returned);
         }
+
         scope.commitTo(params.transaction, `drop-detector:${identity.registrationIndex}`);
       } catch (cause) {
         await scope.dispose(cause);

@@ -16,20 +16,24 @@ import {
 async function openScenario() {
   const scenario = new UniplsRaceScenario({ detectorCount: 0 });
   const opening = scenario.beginOpen();
+
   scenario.transport.current.emitOpen();
   scenario.provisioner.succeed(scenario.provisioner.invocations.take());
   await opening;
+
   return scenario;
 }
 
 async function recoverScenario(scenario: UniplsRaceScenario) {
   scenario.reconnector.invocations.take().reconnect();
   const socket = scenario.transport.current;
+
   socket.emitOpen();
   scenario.provisioner.succeed(scenario.provisioner.invocations.take());
   await scenario.waitForLifecycle(({ phase }) => phase === "open");
   // 再送 Promise の継続で応答の観測が有効になるまで進めます。
   await flushMicrotasks();
+
   return socket;
 }
 
@@ -74,20 +78,25 @@ describe("複数 operation を伴う回復", () => {
     };
     const response = scenario.client.request(params);
     const stream = scenario.client.subscribe(params);
+
     await flushMicrotasks();
     // ! 送信後にdropし、同じ2件のoperationを回復します。
     scenario.drop();
     const replacement = await recoverScenario(scenario);
+
     expect(recover).toHaveBeenCalledTimes(2);
     expect(replacement.sent).toEqual(testCase.sent);
+
     if (testCase.response === undefined) {
       await expect(response).rejects.toBeInstanceOf(UniplsDroppedError);
       await expect(stream.closed).resolves.toMatchObject({ ok: false, reason: "dropped" });
     } else {
       replacement.emitMessage("ignored");
+
       if (testCase.response === "updated") {
         replacement.emitMessage("original");
       }
+
       replacement.emitMessage(testCase.response);
       await expect(response).resolves.toBe(testCase.response);
       await expect(stream[Symbol.asyncIterator]().next()).resolves.toEqual({
@@ -95,6 +104,7 @@ describe("複数 operation を伴う回復", () => {
         value: testCase.response,
       });
     }
+
     await closeClient(scenario.client, replacement);
     await stream.closed;
   });
@@ -126,17 +136,20 @@ describe("複数 operation を伴う回復", () => {
       retry: { recover: recovery.invoke },
       signal: controller.signal,
     });
+
     await flushMicrotasks();
     // ! drop後に接続は回復しますが、operationの回復判断は保留します。
     scenario.drop();
     const replacement = await recoverScenario(scenario);
     const invocation = recovery.invocations.take();
+
     replacement.emitMessage("before-decision");
     const pending = stream[Symbol.asyncIterator]().next();
     const pendingAssertion =
       ending === "abort"
         ? expect(pending).rejects.toBe(cause)
         : expect(pending).resolves.toEqual({ done: true, value: undefined });
+
     // ! operationまたはsessionの終了が、回復判断より先に確定します。
     if (ending === "abort") {
       controller.abort(cause);
@@ -145,23 +158,28 @@ describe("複数 operation を伴う回復", () => {
     } else {
       await closeClient(scenario.client, replacement);
     }
+
     const finalization = await stream.closed;
+
     await pendingAssertion;
     expect(finalization).toEqual(
       ending === "abort"
         ? { ok: false, reason: "aborted", error: cause }
         : { ok: true, reason: ending === "close" ? "closed" : "unsubscribed" },
     );
+
     // ! 終了後に非同期の回復判断が返ります。
     if (settlement === "resolve") {
       invocation.resolve({ query: lateQuery });
     } else {
       invocation.reject(new Error("late recovery failure"));
     }
+
     await flushMicrotasks();
     expect(lateQuery).not.toHaveBeenCalled();
     expect(replacement.sent).toEqual([]);
     expect(await stream.closed).toBe(finalization);
+
     if (ending !== "close") {
       await closeClient(scenario.client, replacement);
     }
@@ -195,16 +213,19 @@ describe("複数 operation を伴う回復", () => {
     });
     const observed: string[] = [];
     const listener = scenario.client.listen({ onMatch: (message) => observed.push(message) });
+
     await flushMicrotasks();
     expect(first.sent).toEqual(["request", "watch"]);
     first.emitMessage("item:1");
 
     for (const item of ["item:2", "item:3"]) {
       const obsolete = scenario.transport.current;
+
       // ! 接続が切れ、代替接続のprovisioning中にもmessageが届きます。
       scenario.drop();
       scenario.reconnector.invocations.take().reconnect();
       const replacement = scenario.transport.current;
+
       replacement.emitOpen();
       replacement.emitMessage("item:before-ready");
       expect(replacement.sent).toEqual([]);
@@ -218,15 +239,18 @@ describe("複数 operation を伴う回復", () => {
     }
 
     const iterator = stream[Symbol.asyncIterator]();
+
     for (const value of ["item:1", "item:2", "item:3"]) {
       await expect(iterator.next()).resolves.toEqual({ done: false, value });
     }
+
     expect(observed).toEqual(["item:1", "item:2", "item:3"]);
     expect(requestQuery).toHaveBeenCalledTimes(3);
     expect(subscribeQuery).toHaveBeenCalledTimes(3);
     scenario.transport.current.emitMessage("response");
     await expect(response).resolves.toBe("response");
     const pending = iterator.next();
+
     await closeClient(scenario.client, scenario.transport.current);
     await expect(pending).resolves.toEqual({ done: true, value: undefined });
     await expect(stream.closed).resolves.toEqual({ ok: true, reason: "closed" });
@@ -268,6 +292,7 @@ describe("複数 operation を伴う回復", () => {
       });
       const timedNext = timed[Symbol.asyncIterator]().next();
       const timeoutAssertion = expect(timedNext).rejects.toBeInstanceOf(UniplsTimeoutError);
+
       await flushMicrotasks();
       await vi.advanceTimersByTimeAsync(20);
       // ! 接続が切れ、回復を待つrequestが中断されます。
@@ -276,6 +301,7 @@ describe("複数 operation を伴う回復", () => {
       await expect(response).rejects.toBe(cause);
       scenario.reconnector.invocations.take().reconnect();
       const replacement = scenario.transport.current;
+
       replacement.emitOpen();
       // ! 受付から50msが経過します。再接続でdeadlineは延長されません。
       await vi.advanceTimersByTimeAsync(30);
@@ -322,29 +348,36 @@ describe("複数 operation を伴う回復", () => {
     });
     const observed: string[] = [];
     const listener = scenario.client.listen({ onMatch: (message) => observed.push(message) });
+
     await flushMicrotasks();
     scenario.transport.current.emitMessage("buffered");
     // ! 未処理messageがある状態で接続を回復します。
     scenario.drop();
     const second = await recoverScenario(scenario);
+
     expect(second.sent).toEqual(["watch"]);
     const response = scenario.client.request({ query: "request", selector: () => true });
+
     await flushMicrotasks();
     second.emitMessage("overflow");
     const finalization = await stream.closed;
+
     expect(finalization).toMatchObject({
       ok: false,
       reason: "buffer-overflow",
       error: expect.any(UniplsBufferOverflowError),
     });
+
     if (finalization.ok) {
       throw new Error("failure結果が必要です");
     }
+
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toBe(finalization.error);
     await expect(response).resolves.toBe("overflow");
     // ! 再び接続を回復しても、終了したstreamのqueryは送信しません。
     scenario.drop();
     const third = await recoverScenario(scenario);
+
     expect(third.sent).toEqual([]);
     third.emitMessage("after");
     expect(observed).toEqual(["buffered", "overflow", "after"]);

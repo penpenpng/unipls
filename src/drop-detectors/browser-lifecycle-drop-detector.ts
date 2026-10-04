@@ -35,6 +35,7 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
   constructor(options: BrowserLifecycleDropDetectorOptions<TInput, TOutput>) {
     this.#options = { ...options };
     this.name = options.name;
+
     for (const value of [options.timeout ?? 5_000, options.coalesceDelay ?? 100]) {
       if (!Number.isFinite(value) || value < 0) {
         throw new RangeError("Probe timing must be finite and non-negative.");
@@ -44,9 +45,11 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
 
   setup(ctx: DropDetectorContext<TInput, TOutput>): void {
     const options = this.#options;
+
     if (ctx.sessionSignal) {
       options.source.retainSession(ctx.sessionSignal);
     }
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     let active: AbortController | undefined;
     let generation = 0;
@@ -69,15 +72,21 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
         if (timer !== undefined) {
           return;
         }
+
         cancel();
       }
+
       const epoch = generation;
+
       timer = setTimeout(() => {
         timer = undefined;
+
         if (ctx.signal.aborted || options.source.snapshot.suspended) {
           return;
         }
+
         const controller = new AbortController();
+
         active = controller;
         ctx.run(async (signal) => {
           try {
@@ -93,10 +102,13 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
             if (!(cause instanceof UniplsTimeoutError)) {
               throw cause;
             }
+
             const state = options.source.snapshot;
+
             if (state.suspended || ((options.deferWhileHidden ?? true) && state.hidden)) {
               return;
             }
+
             ctx.drop({
               reason: DropReasons.BROWSER_LIFECYCLE_PROBE_TIMEOUT,
               metadata: { trigger },
@@ -113,11 +125,14 @@ export class BrowserLifecycleDropDetector<TInput, TOutput> implements UniplsDrop
       ctx.guard((event) => {
         if (event.trigger === "freeze" || event.trigger === "pagehide") {
           cancel();
+
           return;
         }
+
         schedule(event.trigger, event.recovery);
       }),
     );
+
     ctx.signal.addEventListener("abort", cancel, { once: true });
     ctx.defer(
       () => {

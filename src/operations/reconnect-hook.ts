@@ -32,6 +32,7 @@ export function createOnReconnectedHandler<
       async (reconnection) => {
         if (params.isDone()) {
           params.onSettled?.();
+
           return;
         }
 

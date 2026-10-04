@@ -83,6 +83,7 @@ const customDetector: UniplsDropDetector<string, string> = {
     ctx.drop({ reason: DropReasons.HEARTBEAT_RESPONSE_TIMEOUT, metadata: { attempt: 1 } });
   },
 };
+
 void lifecycleDetector;
 void lifecycleReconnector;
 void customDetector;

@@ -19,6 +19,7 @@ export async function createReadyClient(): Promise<ReadyClientScenario> {
     logSink: (log) => logs.push(log),
   });
   const socket = await openClient(client, transport);
+
   return {
     client,
     transport,
@@ -34,8 +35,10 @@ export async function openClient<TInput, TOutput>(
   transport: ControlledWebSocketServer,
 ): Promise<ControlledWebSocket> {
   const opening = client.open();
+
   transport.current.emitOpen();
   await opening;
+
   return transport.current;
 }
 
@@ -45,6 +48,7 @@ export async function closeClient<TInput, TOutput>(
   socket: { emitClose(): void },
 ): Promise<void> {
   const closing = client.close();
+
   socket.emitClose();
   await closing;
 }

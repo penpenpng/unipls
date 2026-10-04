@@ -49,8 +49,10 @@ export class ExponentialBackoffReconnector implements UniplsReconnector {
   ) {
     // context.attempt は失敗した接続試行の番号で、初回失敗は1です。
     const retriesUsed = context.attempt - 1;
+
     if (retriesUsed >= this.#maxRetries) {
       exhaust(context.cause);
+
       return;
     }
 
@@ -63,6 +65,7 @@ export class ExponentialBackoffReconnector implements UniplsReconnector {
     const delay = ceiling * Math.max(0, Math.min(1, random));
     const timer = setTimeout(reconnect, delay);
     const abort = () => clearTimeout(timer);
+
     context.signal.addEventListener("abort", abort, { once: true });
 
     return () => {

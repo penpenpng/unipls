@@ -44,13 +44,17 @@ class IdGenerator {
 
   session(): SessionId {
     const id = `session-${this.#nextSession}` as SessionId;
+
     this.#nextSession += 1;
+
     return id;
   }
 
   connection(): ConnectionId {
     const id = `connection-${this.#nextConnection}` as ConnectionId;
+
     this.#nextConnection += 1;
+
     return id;
   }
 }
@@ -92,9 +96,11 @@ export class UniplsLifecycleCoordinator {
 
   get recoveryDrop(): UniplsDrop {
     const drop = this.#requireSession().recoveryDrop;
+
     if (!drop) {
       throw new Error("Recovery drop is missing");
     }
+
     return drop;
   }
 
@@ -105,6 +111,7 @@ export class UniplsLifecycleCoordinator {
         "通信操作は open intent が有効な論理セッション内でのみ開始できます。",
       );
     }
+
     return this.#session.id;
   }
 
@@ -120,6 +127,7 @@ export class UniplsLifecycleCoordinator {
     if (this.#session) {
       throw new Error("A logical session is already active");
     }
+
     this.#session = {
       id: this.#ids.session(),
       controller: new AbortController(),
@@ -130,11 +138,13 @@ export class UniplsLifecycleCoordinator {
       hasBeenReady: false,
       sessionSetupCompleted: false,
     };
+
     return this.#beginAttempt("initial");
   }
 
   beginRecovery(drop: UniplsDrop): void {
     const session = this.#requireSession();
+
     session.cycle += 1;
     session.nextAttempt = 1;
     session.recoveryDrop = drop;
@@ -150,12 +160,14 @@ export class UniplsLifecycleCoordinator {
 
   beginNextAttempt(): ConnectionId {
     const session = this.#requireSession();
+
     return this.#beginAttempt(session.hasBeenReady ? "recovery" : "initial");
   }
 
   markProvisioning(connection: ConnectionId): void {
     const session = this.#requireSession();
     const attempt = this.#requireAttempt(connection);
+
     attempt.stage = "provisioning";
     this.#transition({ phase: "provisioning", ...this.#attemptingFields(session, attempt) });
   }
@@ -173,6 +185,7 @@ export class UniplsLifecycleCoordinator {
     const session = this.#requireSession();
     const attempt = this.#requireAttempt(connection);
     const recordDrop = attempt.origin === "recovery" ? attempt.drop : failureDrop;
+
     this.#appendAttempt(
       Object.freeze({
         sequence: attempt.sequence,
@@ -229,6 +242,7 @@ export class UniplsLifecycleCoordinator {
   /** ready 接続を失った直後の最初の policy 判断用 snapshot を返します。 */
   buildRecoveryContext(cause: unknown): ReconnectionContext {
     const session = this.#requireSession();
+
     return Object.freeze({
       session: session.id,
       origin: "recovery",
@@ -244,6 +258,7 @@ export class UniplsLifecycleCoordinator {
   markReady(connection: ConnectionId): ConnectionAttemptOrigin {
     const session = this.#requireSession();
     const attempt = this.#requireAttempt(connection);
+
     this.#appendAttempt(
       Object.freeze({
         sequence: attempt.sequence,
@@ -257,6 +272,7 @@ export class UniplsLifecycleCoordinator {
       }),
     );
     const origin = attempt.origin;
+
     session.activeAttempt = undefined;
     session.hasBeenReady = true;
     session.recoveryDrop = undefined;
@@ -266,21 +282,25 @@ export class UniplsLifecycleCoordinator {
       connection,
       attempts: session.attempts,
     });
+
     return origin;
   }
 
   reconnectSucceeded(): UniplsReconnectEvent {
     const session = this.#requireSession();
+
     return Object.freeze({ session: session.id, outcome: "succeeded", attempts: session.attempts });
   }
 
   closeByUser(reason: unknown): void {
     const session = this.#session;
+
     if (!session) {
       return;
     }
     if (session.activeAttempt) {
       const attempt = session.activeAttempt;
+
       this.#appendAttempt(
         Object.freeze({
           sequence: attempt.sequence,
@@ -296,9 +316,11 @@ export class UniplsLifecycleCoordinator {
         }),
       );
     }
+
     session.controller.abort(reason);
     const sessionId = session.id;
     const attempts = session.attempts;
+
     this.#session = undefined;
     this.#transition({ phase: "closed", reason: "user", session: sessionId, attempts });
   }
@@ -310,9 +332,11 @@ export class UniplsLifecycleCoordinator {
     drop?: UniplsDrop,
   ): void {
     const session = this.#requireSession();
+
     session.controller.abort(error);
     const sessionId = session.id;
     const attempts = session.attempts;
+
     this.#session = undefined;
     this.#transition({
       phase: "closed",
@@ -332,9 +356,11 @@ export class UniplsLifecycleCoordinator {
   ): void {
     const session = this.#requireSession();
     const drop = this.recoveryDrop;
+
     session.controller.abort(error);
     const sessionId = session.id;
     const attempts = session.attempts;
+
     this.#session = undefined;
     this.#transition({
       phase: "closed",
@@ -356,6 +382,7 @@ export class UniplsLifecycleCoordinator {
     },
   ): UniplsDrop {
     const session = this.#requireSession();
+
     return Object.freeze({
       source: report.source,
       session: session.id,
@@ -369,9 +396,11 @@ export class UniplsLifecycleCoordinator {
   #beginAttempt(origin: ConnectionAttemptOrigin): ConnectionId {
     const session = this.#requireSession();
     const drop = origin === "recovery" ? session.recoveryDrop : undefined;
+
     if (origin === "recovery" && !drop) {
       throw new Error("Recovery drop is missing");
     }
+
     const connection = this.#ids.connection();
     const attempt: ActiveAttempt = {
       sequence: session.nextSequence,
@@ -383,9 +412,11 @@ export class UniplsLifecycleCoordinator {
       stage: "connecting",
       ...(drop ? { drop } : {}),
     };
+
     session.nextSequence += 1;
     session.activeAttempt = attempt;
     this.#transition({ phase: "connecting", ...this.#attemptingFields(session, attempt) });
+
     return connection;
   }
 
@@ -405,6 +436,7 @@ export class UniplsLifecycleCoordinator {
 
   #appendAttempt(attempt: ConnectionAttemptSnapshot): void {
     const session = this.#requireSession();
+
     session.attempts = Object.freeze([...session.attempts, attempt]);
   }
 
@@ -412,20 +444,24 @@ export class UniplsLifecycleCoordinator {
     if (!this.#session) {
       throw new Error("There is no active logical session");
     }
+
     return this.#session;
   }
 
   #requireAttempt(connection: ConnectionId): ActiveAttempt {
     const attempt = this.#requireSession().activeAttempt;
+
     if (!attempt || attempt.connection !== connection) {
       throw new Error("The connection attempt is no longer current");
     }
+
     return attempt;
   }
 
   #transition(snapshot: UniplsLifecycleSnapshot): void {
     const previous = this.#snapshot;
     const current = Object.freeze(snapshot);
+
     this.#snapshot = current;
     this.#onTransition(Object.freeze({ previous, current }));
   }

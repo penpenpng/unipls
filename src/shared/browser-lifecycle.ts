@@ -57,6 +57,7 @@ export class BrowserLifecycleSource {
 
   get snapshot(): BrowserLifecycleSnapshot {
     const env = this.#getEnvironment();
+
     return Object.freeze({
       revision: this.#revision,
       suspended: this.#frozen || this.#pageHidden,
@@ -70,8 +71,10 @@ export class BrowserLifecycleSource {
     if (signal.aborted || this.#sessions.has(signal)) {
       return;
     }
+
     this.#sessions.add(signal);
     const release = this.#retain();
+
     signal.addEventListener(
       "abort",
       () => {
@@ -84,12 +87,15 @@ export class BrowserLifecycleSource {
 
   subscribe(listener: (event: BrowserLifecycleEvent) => void): () => void {
     const release = this.#retain();
+
     this.#listeners.add(listener);
     let active = true;
+
     return () => {
       if (!active) {
         return;
       }
+
       active = false;
       this.#listeners.delete(listener);
       release();
@@ -98,6 +104,7 @@ export class BrowserLifecycleSource {
 
   #retain(): () => void {
     const env = this.#getEnvironment();
+
     if (this.#owners++ === 0) {
       for (const type of ["pagehide", "pageshow", "offline", "online"]) {
         env.window.addEventListener(type, this.#handle);
@@ -106,12 +113,15 @@ export class BrowserLifecycleSource {
         env.document.addEventListener(type, this.#handle);
       }
     }
+
     return () => {
       if (--this.#owners !== 0) {
         return;
       }
+
       this.#frozen = false;
       this.#pageHidden = false;
+
       for (const type of ["pagehide", "pageshow", "offline", "online"]) {
         env.window.removeEventListener(type, this.#handle);
       }
@@ -123,6 +133,7 @@ export class BrowserLifecycleSource {
 
   #handle = (event: { readonly type: string }): void => {
     let trigger: BrowserLifecycleTrigger;
+
     if (event.type === "visibilitychange") {
       trigger = this.snapshot.hidden ? "visibility-hidden" : "visibility-visible";
     } else {
@@ -138,6 +149,7 @@ export class BrowserLifecycleSource {
       this.#frozen = false;
       this.#pageHidden = false;
     }
+
     this.#revision++;
     const recovery =
       trigger === "visibility-visible" ||
@@ -147,6 +159,7 @@ export class BrowserLifecycleSource {
     const notification = Object.freeze({ ...this.snapshot, trigger, recovery });
     // 通知中に購読が切り替わっても、新しい購読者に同じイベントを再配信しません。
     const listeners = [...this.#listeners];
+
     for (const listener of listeners) {
       listener(notification);
     }

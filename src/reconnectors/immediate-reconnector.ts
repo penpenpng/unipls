@@ -12,6 +12,7 @@ export class ImmediateReconnector implements UniplsReconnector {
 
   constructor(options: ImmediateReconnectorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? Number.POSITIVE_INFINITY;
+
     if (
       options.maxRetries !== undefined &&
       (!Number.isInteger(this.#maxRetries) || this.#maxRetries < 0)
@@ -28,6 +29,7 @@ export class ImmediateReconnector implements UniplsReconnector {
     // context.attempt は失敗した接続試行の番号で、初回失敗は1です。
     if (context.attempt - 1 >= this.#maxRetries) {
       exhaust(context.cause);
+
       return;
     }
 

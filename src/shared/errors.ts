@@ -19,6 +19,7 @@ function freezeDrop(drop: UniplsDrop): UniplsDrop {
   if (isFrozenDrop(drop)) {
     return drop;
   }
+
   const source =
     drop.source.type === "detector"
       ? Object.freeze({
@@ -26,6 +27,7 @@ function freezeDrop(drop: UniplsDrop): UniplsDrop {
           detector: Object.freeze({ ...drop.source.detector }),
         })
       : Object.freeze({ ...drop.source });
+
   return Object.freeze({
     ...drop,
     source,
@@ -46,6 +48,7 @@ function freezeAttempts(
   ) {
     return attempts;
   }
+
   return Object.freeze(
     attempts.map((attempt) =>
       Object.freeze({
