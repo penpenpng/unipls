@@ -5,6 +5,7 @@ import { flushMicrotasks, UniplsRaceScenario } from "../../support/index.ts";
 
 async function openReady(scenario: UniplsRaceScenario): Promise<void> {
   const opening = scenario.beginOpen();
+
   scenario.transport.current.emitOpen();
   scenario.provisioner.succeed(scenario.provisioner.invocations.take());
   await opening;
@@ -31,6 +32,7 @@ describe("再接続エンジン", () => {
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const opening = scenario.beginOpen();
     let settled = false;
+
     void opening.finally(() => {
       settled = true;
     });
@@ -58,7 +60,11 @@ describe("再接続エンジン", () => {
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
     expect(scenario.client.lifecycle).toMatchObject({ phase: "open" });
-    if (scenario.client.lifecycle.phase !== "open") throw new Error("Expected open lifecycle");
+
+    if (scenario.client.lifecycle.phase !== "open") {
+      throw new Error("Expected open lifecycle");
+    }
+
     expect(scenario.client.lifecycle.attempts).toMatchObject([
       { outcome: "failed", origin: "initial", attempt: 1 },
       { outcome: "ready", origin: "initial", attempt: 2 },
@@ -66,6 +72,7 @@ describe("再接続エンジン", () => {
     expect(policy.cleanupCount).toBe(1);
 
     const closing = scenario.client.close();
+
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -92,10 +99,12 @@ describe("再接続エンジン", () => {
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const cause = new Error("temporary authentication service failure");
     const opening = scenario.beginOpen();
+
     scenario.transport.connection(0).emitOpen();
     scenario.provisioner.fail(scenario.provisioner.invocations.take(), cause);
     await flushMicrotasks();
     const policy = scenario.reconnector.invocations.take();
+
     expect(policy.context).toMatchObject({
       origin: "initial",
       stage: "provisioning",
@@ -111,6 +120,7 @@ describe("再接続エンジン", () => {
     expect(scenario.client.lifecycle).toMatchObject({ phase: "open" });
 
     const closing = scenario.client.close();
+
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -137,15 +147,21 @@ describe("再接続エンジン", () => {
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const cause = new Error("attempt failed");
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.fail(scenario.provisioner.invocations.take(), cause);
     await flushMicrotasks();
     const policy = scenario.reconnector.invocations.take();
 
     // cancel と exhaustion が対応する open error を一度だけ返すことを確認します。
-    if (action === "cancel") policy.cancel();
-    else policy.exhaust();
+    if (action === "cancel") {
+      policy.cancel();
+    } else {
+      policy.exhaust();
+    }
+
     const error = await opening.catch((failure) => failure as UniplsOpenError);
+
     expect(error).toMatchObject({ name: "UniplsOpenError", outcome, cause });
     expect(scenario.client.lifecycle).toMatchObject({ phase: "closed", reason: "open-failed" });
     expect(policy.cleanupCount).toBe(1);
@@ -176,18 +192,28 @@ describe("再接続エンジン", () => {
       // reconnector が同期 throw または非同期 reject する初回失敗を作ります。
       const scenario = new UniplsRaceScenario({ detectorCount: 0 });
       const cause = new Error(`${failurePoint} failed`);
-      if (reject) scenario.reconnector.rejectNextSetup(cause);
-      else scenario.reconnector.failNextSetup(cause);
+
+      if (reject) {
+        scenario.reconnector.rejectNextSetup(cause);
+      } else {
+        scenario.reconnector.failNextSetup(cause);
+      }
+
       const opening = scenario.beginOpen();
+
       scenario.transport.current.emitClose({ code: 4100 });
       const error = await opening.then(
         () => undefined,
         (failure) => failure as UniplsOpenError,
       );
+
       await flushMicrotasks();
 
       // open、lifecycle、log が同じ原因と terminal error を共有します。
-      if (!error) throw new Error("Expected open failure");
+      if (!error) {
+        throw new Error("Expected open failure");
+      }
+
       expect(error).toMatchObject({ outcome: "reconnector-failed", cause });
       expect(error.stage).toBeUndefined();
       expect(scenario.logs).toHaveLength(1);
@@ -222,6 +248,7 @@ describe("再接続エンジン", () => {
     // 初回失敗後、再試行 action を保留します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitClose({ code: 4100 });
     await flushMicrotasks();
     const policy = scenario.reconnector.invocations.take();
@@ -253,13 +280,16 @@ describe("再接続エンジン", () => {
   it("失敗した回復試行の後に同じ drop で policy を再実行する", async () => {
     // ready 接続を drop し、最初の回復試行を provisioning まで進めます。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
+
     await openReady(scenario);
     scenario.drop(0);
     const firstPolicy = scenario.reconnector.invocations.take();
     const canonicalDrop = firstPolicy.context.drop;
+
     firstPolicy.reconnect();
     scenario.transport.connection(1).emitOpen();
     const retryCause = new Error("retry provisioning failed");
+
     scenario.provisioner.fail(scenario.provisioner.invocations.take(), retryCause);
     await flushMicrotasks();
     const secondPolicy = scenario.reconnector.invocations.take();
@@ -281,6 +311,7 @@ describe("再接続エンジン", () => {
 
     // 次の試行を ready にして succeeded outcome を通知します。
     const reconnectEvents: unknown[] = [];
+
     scenario.client.on("reconnect", (event) => reconnectEvents.push(event));
     secondPolicy.reconnect();
     secondPolicy.replayReconnect();
@@ -292,6 +323,7 @@ describe("再接続エンジン", () => {
     expect(secondPolicy.cleanupCount).toBe(1);
 
     const closing = scenario.client.close();
+
     scenario.transport.connection(2).emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -307,13 +339,20 @@ describe("再接続エンジン", () => {
   it("回復成功後の次のdropへ同じsessionと累積attempt履歴を渡す", async () => {
     // 初回接続をreadyにして、最初のrecovery cycleを開始します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
+
     await openReady(scenario);
     const initial = scenario.client.lifecycle;
-    if (initial.phase !== "open") throw new Error("open状態が必要です");
+
+    if (initial.phase !== "open") {
+      throw new Error("open状態が必要です");
+    }
+
     scenario.drop(0);
     const firstPolicy = scenario.reconnector.invocations.take();
+
     firstPolicy.reconnect();
     const firstReplacement = scenario.transport.connection(1);
+
     firstReplacement.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
@@ -321,6 +360,7 @@ describe("再接続エンジン", () => {
     // ! 回復済みの接続が再びdropし、次のpolicy contextが作られます。
     scenario.drop(1);
     const secondPolicy = scenario.reconnector.invocations.take();
+
     expect(secondPolicy.context.origin).toBe("recovery");
     expect(secondPolicy.context.session).toBe(initial.session);
     expect(secondPolicy.context.attempts).toMatchObject([
@@ -355,11 +395,15 @@ describe("再接続エンジン", () => {
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const cause = new Error("policy rejected");
     const closed: UniplsDroppedError[] = [];
+
     scenario.client.on("closed", ({ error }) => {
-      if (error instanceof UniplsDroppedError) closed.push(error);
+      if (error instanceof UniplsDroppedError) {
+        closed.push(error);
+      }
     });
     await openReady(scenario);
     const waiting = scenario.client.next({ selector: () => false, retry: "wait" });
+
     scenario.reconnector.rejectNextSetup(cause);
     scenario.drop(0);
     await flushMicrotasks();

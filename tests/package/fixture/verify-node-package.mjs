@@ -3,10 +3,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 function assert(condition, message) {
-  if (!condition) throw new Error(message);
+  if (!condition) {
+    throw new Error(message);
+  }
 }
 
 let rejected = false;
+
 try {
   await import("unipls/src/index.ts");
 } catch (error) {
@@ -17,6 +20,7 @@ assert(rejected, "exportされていないdeep pathをimportできました。")
 const manifest = fileURLToPath(import.meta.resolve("unipls/package.json"));
 const packageDirectory = dirname(manifest);
 let sourceIncluded = true;
+
 try {
   await access(resolve(packageDirectory, "src"));
 } catch {

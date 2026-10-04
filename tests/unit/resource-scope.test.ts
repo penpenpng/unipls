@@ -14,6 +14,7 @@ describe("ResourceScope", () => {
       scope: Object.freeze({ type: "session", session: "session-test" as SessionId }),
       onCleanupFailure: ({ cause, name, source }) => failures.push({ cause, name, source }),
     });
+
     scope.defer(
       () => {
         order.push("first");
@@ -37,6 +38,7 @@ describe("ResourceScope", () => {
     // 最初の呼び出しがsignalを中断し、競合する呼び出しへ同じPromiseを返します。
     const firstDisposal = scope.dispose("done");
     const secondDisposal = scope.dispose("ignored");
+
     expect(secondDisposal).toBe(firstDisposal);
     expect(scope.signal.aborted).toBe(true);
     expect(order).toEqual(["third", "second:start"]);
@@ -57,6 +59,7 @@ describe("ResourceScope", () => {
       scope: Object.freeze({ type: "session", session: "session-test" as SessionId }),
       onCleanupFailure: () => {},
     });
+
     scope.defer(() => {}, { name: "listener" });
 
     // 同じnameの2件目はcleanup開始前でも利用者の誤用として拒否します。

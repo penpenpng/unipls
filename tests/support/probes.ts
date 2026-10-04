@@ -12,6 +12,7 @@ export class CallbackProbe<TArgs extends unknown[] = unknown[], TResult = void> 
 
   callback = (...args: TArgs): TResult => {
     this.calls.push(args);
+
     return this.#implementation(...args);
   };
 }
@@ -32,6 +33,7 @@ export class DisposalProbe {
   disposer(name: string): () => void {
     return () => {
       const count = this.count(name) + 1;
+
       this.#counts.set(name, count);
       this.records.push(Object.freeze({ name, sequence: this.records.length + 1 }));
     };
@@ -59,8 +61,11 @@ export class ManualScheduler {
 
   setTimeout = (callback: () => void, delay: number): number => {
     const id = this.#nextId;
+
     this.#nextId += 1;
+
     this.#tasks.set(id, { id, dueAt: this.#now + delay, callback });
+
     return id;
   };
 
@@ -74,18 +79,23 @@ export class ManualScheduler {
     }
 
     const target = this.#now + duration;
+
     while (true) {
       const next = [...this.#tasks.values()]
         .filter((task) => task.dueAt <= target)
-        .sort((left, right) => left.dueAt - right.dueAt || left.id - right.id)[0];
+        .toSorted((left, right) => left.dueAt - right.dueAt || left.id - right.id)[0];
+
       if (!next) {
         break;
       }
 
       this.#tasks.delete(next.id);
+
       this.#now = next.dueAt;
+
       next.callback();
     }
+
     this.#now = target;
   }
 }

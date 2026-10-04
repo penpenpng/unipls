@@ -8,18 +8,23 @@ export class ObservationQueue<T> {
 
   push(value: T): void {
     const waiter = this.#waiters.shift();
+
     if (waiter) {
       waiter(value);
+
       return;
     }
+
     this.#values.push(value);
   }
 
   take(): T {
     const value = this.#values.shift();
+
     if (value === undefined) {
       throw new Error("No observation is available");
     }
+
     return value;
   }
 
@@ -27,6 +32,7 @@ export class ObservationQueue<T> {
     if (this.#values.length > 0) {
       return Promise.resolve(this.take());
     }
+
     return new Promise<T>((resolve) => {
       this.#waiters.push(resolve);
     });

@@ -54,12 +54,15 @@ export class QuerySession<TInput, TOutput> {
     }
 
     let payload: TInput;
+
     try {
       payload = this.#evaluate(query);
     } catch (error) {
       this.#onError(error);
+
       return Promise.resolve();
     }
+
     if (params.isDone() || !params.canSend()) {
       return Promise.resolve();
     }
@@ -69,6 +72,7 @@ export class QuerySession<TInput, TOutput> {
     this.#paused = false;
     this.#currentQuery = query;
     this.#currentSelector = params.selector;
+
     const sequence = ++this.#sendSequence;
 
     return this.#sendPayload(payload)

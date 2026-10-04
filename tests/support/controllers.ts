@@ -56,7 +56,9 @@ export class ControlledReconnectorInvocation {
     if (this.action !== "pending") {
       throw new Error(`Reconnector action is already ${this.action}`);
     }
+
     this.action = action;
+
     run();
   }
 }
@@ -84,19 +86,25 @@ export class ControlledReconnector implements UniplsReconnector {
   ): (() => void) | PromiseLike<void | (() => void)> {
     if (this.#hasSetupFailure) {
       const cause = this.#nextSetupFailure;
+
       this.#nextSetupFailure = undefined;
       this.#hasSetupFailure = false;
+
       throw cause;
     }
     if (this.#hasSetupRejection) {
       const cause = this.#nextSetupRejection;
+
       this.#nextSetupRejection = undefined;
       this.#hasSetupRejection = false;
+
       return Promise.reject(cause);
     }
 
     const invocation = new ControlledReconnectorInvocation(actions, context);
+
     this.invocations.push(invocation);
+
     return invocation.cleanup;
   }
 }
@@ -111,6 +119,7 @@ export class ControlledDropDetectorInvocation<TContext> {
 
   drop(): void {
     const context = this.context as { drop(): void };
+
     context.drop();
   }
 
@@ -134,13 +143,17 @@ export class ControlledDropDetector<TContext = unknown> {
   setup = (context: TContext): (() => void) => {
     if (this.#hasSetupFailure) {
       const cause = this.#nextSetupFailure;
+
       this.#nextSetupFailure = undefined;
       this.#hasSetupFailure = false;
+
       throw cause;
     }
 
     const invocation = new ControlledDropDetectorInvocation(context);
+
     this.invocations.push(invocation);
+
     return invocation.cleanup;
   };
 }

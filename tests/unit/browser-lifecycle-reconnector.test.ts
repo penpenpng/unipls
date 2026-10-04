@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+
 import {
   BrowserLifecycleReconnector,
   BrowserLifecycleSource,
@@ -9,11 +10,13 @@ import {
 } from "../../src/reconnectors.ts";
 
 const sessions: AbortController[] = [];
+
 function fixture(defaultReconnector: UniplsReconnector) {
   const window = new EventTarget();
   const document = Object.assign(new EventTarget(), { visibilityState: "visible" });
   const source = new BrowserLifecycleSource({ window, document, navigator: { onLine: true } });
   const session = new AbortController();
+
   sessions.push(session);
   const ctx = {
     origin: "initial",
@@ -27,18 +30,23 @@ function fixture(defaultReconnector: UniplsReconnector) {
     defaultReconnector,
     coalesceDelay: 10,
   });
+
   return { window, document, source, session, ctx, actions, reconnector };
 }
 
 describe("BrowserLifecycleReconnector defaultReconnector", () => {
   afterEach(() => {
-    for (const session of sessions.splice(0)) session.abort();
+    for (const session of sessions.splice(0)) {
+      session.abort();
+    }
+
     vi.useRealTimers();
   });
 
   it("ImmediateReconnector を使える", async () => {
     const f = fixture(new ImmediateReconnector());
     const cleanup = await f.reconnector.setup(f.actions, f.ctx);
+
     expect(f.actions.reconnect).toHaveBeenCalledOnce();
     cleanup?.();
   });
@@ -49,16 +57,27 @@ describe("BrowserLifecycleReconnector defaultReconnector", () => {
       const dispose = vi.fn();
       const cause = new Error("policy");
       const setup = vi.fn((actions: UniplsReconnectorActions) => {
-        if (decision === "cancel") actions.cancel();
-        else actions.exhaust(cause);
+        if (decision === "cancel") {
+          actions.cancel();
+        } else {
+          actions.exhaust(cause);
+        }
+
         actions.reconnect();
+
         return dispose;
       });
       const f = fixture({ setup });
       const cleanup = await f.reconnector.setup(f.actions, f.ctx);
+
       expect(setup.mock.calls[0]).toEqual([expect.any(Object), f.ctx]);
-      if (decision === "cancel") expect(f.actions.cancel).toHaveBeenCalledOnce();
-      else expect(f.actions.exhaust).toHaveBeenCalledWith(cause);
+
+      if (decision === "cancel") {
+        expect(f.actions.cancel).toHaveBeenCalledOnce();
+      } else {
+        expect(f.actions.exhaust).toHaveBeenCalledWith(cause);
+      }
+
       expect(f.actions.reconnect).not.toHaveBeenCalled();
       expect(dispose).toHaveBeenCalledOnce();
       cleanup?.();
@@ -77,10 +96,12 @@ describe("BrowserLifecycleReconnector defaultReconnector", () => {
     const f = fixture({
       setup(actions) {
         delegated = actions;
+
         return pending;
       },
     });
     const setup = f.reconnector.setup(f.actions, f.ctx);
+
     f.window.dispatchEvent(new Event("online"));
     delegated.reconnect();
     delegated.cancel();
@@ -92,6 +113,7 @@ describe("BrowserLifecycleReconnector defaultReconnector", () => {
     expect(f.actions.reconnect).toHaveBeenCalledOnce();
     resolve(dispose);
     const cleanup = await setup;
+
     expect(dispose).toHaveBeenCalledOnce();
     cleanup?.();
     expect(dispose).toHaveBeenCalledOnce();
@@ -103,6 +125,7 @@ describe("BrowserLifecycleReconnector defaultReconnector", () => {
   it("有効な非同期戦略のrejectをengineへ渡す", async () => {
     const cause = new Error("setup rejected");
     const f = fixture({ setup: () => Promise.reject(cause) });
+
     await expect(f.reconnector.setup(f.actions, f.ctx)).rejects.toBe(cause);
     f.window.dispatchEvent(new Event("online"));
     expect(f.actions.reconnect).not.toHaveBeenCalled();
@@ -116,9 +139,11 @@ describe("BrowserLifecycleReconnector defaultReconnector", () => {
     });
     const f = fixture({ setup: () => pending });
     const setup = f.reconnector.setup(f.actions, f.ctx);
+
     f.document.dispatchEvent(new Event("freeze"));
     reject(new Error("old failure"));
     const cleanup = await setup;
+
     f.document.dispatchEvent(new Event("resume"));
     await vi.advanceTimersByTimeAsync(10);
     expect(f.actions.reconnect).toHaveBeenCalledOnce();

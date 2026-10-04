@@ -1,11 +1,11 @@
-import { UniplsDroppedError } from "../shared/errors.ts";
-import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
 import type {
   UniplsDropRetryStrategy,
   UniplsMessageFactory,
   UniplsRecoveryDecision,
   UniplsRetryStrategy,
 } from "../client/unipls.interface.ts";
+import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
+import { UniplsDroppedError } from "../shared/errors.ts";
 
 type RetryRequest<TInput, TOutput> = (
   data: UniplsMessageFactory<TInput>,
@@ -31,6 +31,7 @@ export function createDropWaitHandler(params: {
     }
 
     const retry = params.retry ?? "wait";
+
     if (!params.reconnectable || retry === "fail") {
       params.onFatal(error);
     }
@@ -56,13 +57,19 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
     }
 
     const retry = params.retry ?? "fail";
+
     if (!params.reconnectable || retry === "fail") {
       params.onFatal(error);
+
       return;
     }
 
     waitingForReconnect = true;
-    if (retry !== "wait") params.pauseForReconnect();
+
+    if (retry !== "wait") {
+      params.pauseForReconnect();
+    }
+
     const query = params.getQuery();
     const selector = params.getSelector();
 
@@ -75,6 +82,7 @@ export function createRetryingDropHandler<TInput, TOutput>(params: {
 
       if (retry === "resend") {
         await request(query, { selector });
+
         return;
       }
 
@@ -110,6 +118,7 @@ async function runRecoveryDecision<TInput, TOutput>(
 ): Promise<void> {
   if (decision === undefined || decision === "wait") {
     params.resumeWithoutResend();
+
     return;
   }
 
@@ -121,6 +130,7 @@ async function runRecoveryDecision<TInput, TOutput>(
     await params.request(params.query, {
       selector: params.selector,
     });
+
     return;
   }
 

@@ -65,9 +65,11 @@ describe("operation の入力と受付", () => {
 
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const closing = client.close();
+
     socket.emitClose();
     await closing;
 
@@ -91,10 +93,12 @@ describe("operation の入力と受付", () => {
     });
     const opening = client.open();
     const socket = transport.current;
+
     socket.emitOpen();
     await opening;
     const waiting = client.next({ selector: () => false });
     const closing = client.close();
+
     await expect(waiting).rejects.toBeInstanceOf(UniplsClosedError);
     socket.emitClose();
     await closing;
@@ -146,10 +150,12 @@ describe("operation の入力と受付", () => {
       () => unsafe.listen({ selector: "topic" }),
       () => unsafe.subscribe({ selector: () => true }),
     ];
+
     for (const operation of invalidOperations) {
       expect(operation).toThrow(TypeError);
       expect(operation).not.toThrow(UniplsInvalidUsageError);
     }
+
     const invalidOptions = [
       () => unsafe.next({ selector: () => true, predicateError: "ignore" }),
       () => unsafe.next({ selector: () => true, retry: "resend" }),
@@ -158,7 +164,11 @@ describe("operation の入力と受付", () => {
       () => unsafe.listen({ onMatch: () => {}, buffer: 1 }),
       () => unsafe.subscribe({ query: "subscribe", selector: () => true, signal: {} }),
     ];
-    for (const operation of invalidOptions) expect(operation).toThrow(TypeError);
+
+    for (const operation of invalidOptions) {
+      expect(operation).toThrow(TypeError);
+    }
+
     expect(client.lifecycle).toBe(idle);
     expect(transport.connections).toHaveLength(0);
   });

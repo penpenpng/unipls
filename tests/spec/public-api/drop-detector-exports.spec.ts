@@ -18,6 +18,7 @@ describe("drop detector の公開境界", () => {
       false;
     const rootHasReconnector: "ImmediateReconnector" extends keyof typeof unipls ? true : false =
       false;
+
     expect(rootHasDetector).toBe(false);
     expect(rootHasReconnector).toBe(false);
     expect("HeartbeatDropDetector" in unipls).toBe(false);

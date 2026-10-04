@@ -19,6 +19,7 @@ export class ControlledInvocation<TContext, TResult = void> {
       this.#resolve = resolve;
       this.#reject = reject;
     });
+
     void this.promise.catch(() => {});
   }
 
@@ -34,7 +35,9 @@ export class ControlledInvocation<TContext, TResult = void> {
     if (this.#state !== "pending") {
       throw new Error(`Invocation is already ${this.#state}`);
     }
+
     this.#state = state;
+
     settle();
   }
 }
@@ -44,7 +47,9 @@ export class ControlledHook<TContext, TResult = void> {
 
   invoke = (context: TContext): Promise<TResult> => {
     const invocation = new ControlledInvocation<TContext, TResult>(context);
+
     this.invocations.push(invocation);
+
     return invocation.promise;
   };
 }

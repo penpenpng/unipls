@@ -66,8 +66,10 @@ export class OwnedResourceScope implements ResourceScope {
   }) {
     this.#scope = params.scope;
     this.#onCleanupFailure = params.onCleanupFailure;
+
     if (params.parentSignal) {
       const parentSignal = params.parentSignal;
+
       if (parentSignal.aborted) {
         void this.dispose(parentSignal.reason);
       } else {
@@ -101,10 +103,13 @@ export class OwnedResourceScope implements ResourceScope {
     if (this.#committed || !this.#accepting || this.#disposePromise) {
       throw new UniplsInvalidUsageError("resource transaction は既に終了しています。");
     }
+
     this.#committed = true;
     this.#accepting = false;
+
     parent.deferLibrary(() => {
       const disposal = this.dispose();
+
       return this.#disposed ? undefined : disposal;
     }, name);
   }
@@ -116,13 +121,20 @@ export class OwnedResourceScope implements ResourceScope {
 
   /** cleanup を一度だけ開始し、競合する呼び出しへ同じ Promise を返します。 */
   dispose(reason?: unknown): Promise<void> {
-    if (this.#disposePromise) return this.#disposePromise;
+    if (this.#disposePromise) {
+      return this.#disposePromise;
+    }
+
     this.#accepting = false;
+
     this.#controller.abort(reason);
+
     this.#disposePromise = new Promise<void>((resolve) => {
       this.#resolveDispose = resolve;
     });
+
     this.#continueDisposal();
+
     return this.#disposePromise;
   }
 
@@ -137,13 +149,17 @@ export class OwnedResourceScope implements ResourceScope {
     if (typeof disposer !== "function") {
       throw new TypeError("defer には disposer 関数を指定してください。");
     }
+
     const name = options?.name;
+
     if (name !== undefined) {
       if (this.#names.has(name)) {
         throw new UniplsInvalidUsageError(`resource name は scope 内で一意にしてください: ${name}`);
       }
+
       this.#names.add(name);
     }
+
     this.#entries.push({ disposer, ...(name === undefined ? {} : { name }), source });
   }
 
@@ -151,12 +167,14 @@ export class OwnedResourceScope implements ResourceScope {
     while (this.#entries.length > 0) {
       const entry = this.#entries.pop() as ResourceEntry;
       let result: MaybePromise<void>;
+
       try {
         result = entry.disposer();
       } catch (cause) {
         this.#reportFailure(entry, cause);
         continue;
       }
+
       if (isPromiseLike(result)) {
         void Promise.resolve(result).then(
           () => this.#continueDisposal(),
@@ -165,10 +183,13 @@ export class OwnedResourceScope implements ResourceScope {
             this.#continueDisposal();
           },
         );
+
         return;
       }
     }
+
     this.#disposed = true;
+
     this.#resolveDispose?.();
   }
 

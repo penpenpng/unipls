@@ -17,6 +17,7 @@ import {
 
 async function openScenario(scenario: UniplsRaceScenario): Promise<void> {
   const opening = scenario.beginOpen();
+
   scenario.transport.current.emitOpen();
   scenario.provisioner.succeed(scenario.provisioner.invocations.take());
   await opening;
@@ -41,12 +42,14 @@ describe("close と drop の分類", () => {
     // open intent を保った ready 接続を作ります。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const dropped: Array<{ drop: UniplsDrop; error: UniplsDroppedError }> = [];
+
     scenario.client.on("dropped", (event) => dropped.push(event));
     await openScenario(scenario);
 
     // peer close の情報を与え、回復へ渡される canonical drop を確認します。
     scenario.transport.current.emitClose(close);
     const recovery = scenario.reconnector.invocations.take();
+
     expect(dropped).toHaveLength(1);
     expect(dropped[0]?.drop).toMatchObject({
       source: { type: "peer-close" },
@@ -81,11 +84,13 @@ describe("close と drop の分類", () => {
     // ready 接続を作り、drop 通知の有無を観測します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const dropped: unknown[] = [];
+
     scenario.client.on("dropped", (event) => dropped.push(event));
     await openScenario(scenario);
 
     // 非正常 code の close event より先に利用者の close intent を確定します。
     const closing = scenario.client.close();
+
     scenario.transport.current.emitClose({
       code: 4100,
       reason: "late peer close",
@@ -115,6 +120,7 @@ describe("close と drop の分類", () => {
       reconnectable: false,
     });
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitClose({
       code: 1000,
       reason: "refused",
@@ -153,10 +159,8 @@ describe("close と drop の分類", () => {
   it("socket 生成時の同期例外を transport drop として記録する", async () => {
     // socket を返す前に失敗する WebSocket constructor を用意します。
     const cause = new Error("socket construction failed");
-    const WebSocket = class {
-      constructor() {
-        throw cause;
-      }
+    const WebSocket = function WebSocket() {
+      throw cause;
     } as unknown as typeof globalThis.WebSocket;
     const client = new Unipls({ url: "wss://unipls.test/socket", WebSocket });
 
@@ -197,6 +201,7 @@ describe("close と drop の分類", () => {
         timeout: 100,
       });
       const opening = client.open();
+
       await vi.advanceTimersByTimeAsync(100);
       const error = await opening.then(
         () => undefined,
@@ -222,6 +227,7 @@ describe("close と drop の分類", () => {
   it("明示的な detector 名の重複を拒否する", () => {
     // 同じ detector 名を2回登録し、WebSocket 生成前に拒否されることを確認します。
     const transport = new ControlledWebSocketServer();
+
     expect(
       () =>
         new Unipls({
@@ -252,6 +258,7 @@ describe("close と drop の分類", () => {
     // 1つの ready 接続に対して名前付き detector を2つ開始します。
     const scenario = new UniplsRaceScenario({ detectorCount: 2 });
     const dropped: Array<{ drop: UniplsDrop }> = [];
+
     scenario.client.on("dropped", (event) => dropped.push(event));
     await openScenario(scenario);
     const firstDetector = scenario.detectors[0].invocations.take();
@@ -269,9 +276,11 @@ describe("close と drop の分類", () => {
       type: "detector",
       detector: { registrationIndex: 1, name: "detector-1" },
     });
+
     if (dropped[0]?.drop.source.type !== "detector") {
       throw new Error("Expected a detector drop");
     }
+
     expect(dropped[0].drop.source.detector).toBe(
       (
         secondDetector.context as {
@@ -306,10 +315,12 @@ describe("close と drop の分類", () => {
       // ready 接続を作り、公開される drop を記録します。
       const scenario = new UniplsRaceScenario({ detectorCount: 0 });
       const dropped: Array<{ drop: UniplsDrop }> = [];
+
       scenario.client.on("dropped", (event) => dropped.push(event));
       await openScenario(scenario);
 
       const cause = new Error("transport failed");
+
       if (source === "manual") {
         scenario.client.drop();
       } else {
@@ -320,9 +331,11 @@ describe("close と drop の分類", () => {
       expect(dropped[0]?.drop.source.type).toBe(
         source === "manual" ? "manual-drop" : "transport-error",
       );
+
       if (source === "transport-error") {
         expect(dropped[0]?.drop.cause).toBe(cause);
       }
+
       scenario.reconnector.invocations.take().cancel();
     },
   );
@@ -342,12 +355,14 @@ describe("回復の終端結果", () => {
     // ready 接続を回復中にし、操作を待機状態に保ちます。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const closed: unknown[] = [];
+
     scenario.client.on("closed", (event) => closed.push(event));
     await openScenario(scenario);
     const waiting = scenario.client.next({
       selector: () => false,
       retry: "wait",
     });
+
     scenario.drop(0);
     const recovery = scenario.reconnector.invocations.take();
 
@@ -389,28 +404,41 @@ describe("回復の終端結果", () => {
       reconnectable: mode !== "no-reconnector",
     });
     const closedErrors: UniplsDroppedError[] = [];
+
     scenario.client.on("closed", ({ error }) => {
-      if (error instanceof UniplsDroppedError) closedErrors.push(error);
+      if (error instanceof UniplsDroppedError) {
+        closedErrors.push(error);
+      }
     });
     await openScenario(scenario);
     const firstOpen = scenario.client.lifecycle;
-    if (firstOpen.phase !== "open") throw new Error("Expected an open session");
+
+    if (firstOpen.phase !== "open") {
+      throw new Error("Expected an open session");
+    }
+
     const waiting = scenario.client.next({
       selector: () => false,
       retry: "wait",
     });
     const cause = new Error(`${mode} cause`);
-    if (mode === "setup-failure") scenario.reconnector.failNextSetup(cause);
+
+    if (mode === "setup-failure") {
+      scenario.reconnector.failNextSetup(cause);
+    }
 
     // 接続を drop した後、指定された回復終了操作を選びます。
     scenario.drop(0);
     let recovery: ControlledReconnectorInvocation | undefined;
+
     if (mode === "cancel") {
       recovery = scenario.reconnector.invocations.take();
+
       recovery.cancel();
     }
     if (mode === "exhaust") {
       recovery = scenario.reconnector.invocations.take();
+
       recovery.exhaust(cause);
     }
 
@@ -418,10 +446,15 @@ describe("回復の終端結果", () => {
       () => undefined,
       (error) => error as UniplsDroppedError,
     );
+
     expect(closedErrors).toHaveLength(1);
     expect(rejection).toBe(closedErrors[0]);
     expect(rejection).toMatchObject({ name: "UniplsDroppedError", outcome });
-    if (recovery) expect(recovery.cleanupCount).toBe(1);
+
+    if (recovery) {
+      expect(recovery.cleanupCount).toBe(1);
+    }
+
     expect(scenario.client.lifecycle).toMatchObject({
       phase: "closed",
       reason: "dropped",
@@ -429,20 +462,24 @@ describe("回復の終端結果", () => {
       drop: rejection?.drop,
     });
     const terminal = scenario.client.lifecycle;
+
     await scenario.client.close();
     expect(scenario.client.lifecycle).toBe(terminal);
 
     // 後続の open が別の論理セッションと WebSocket 接続を作ることを確認します。
     const reopening = scenario.beginOpen();
     const nextConnecting = scenario.client.lifecycle;
+
     if (nextConnecting.phase !== "connecting" || nextConnecting.status !== "attempting") {
       throw new Error("Expected a new connecting session");
     }
+
     expect(nextConnecting.session).not.toBe(firstOpen.session);
     scenario.transport.connection(1).emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await reopening;
     const closing = scenario.client.close();
+
     scenario.transport.connection(1).emitClose({ code: 1000, wasClean: true });
     await closing;
   });

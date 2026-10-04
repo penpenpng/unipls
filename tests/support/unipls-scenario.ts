@@ -45,6 +45,7 @@ export class UniplsRaceScenario {
     predicate: (snapshot: UniplsLifecycleSnapshot) => boolean,
   ): Promise<UniplsLifecycleSnapshot> {
     const current = this.client.lifecycle;
+
     if (predicate(current)) {
       return Promise.resolve(current);
     }
@@ -54,6 +55,7 @@ export class UniplsRaceScenario {
         if (!predicate(next)) {
           return;
         }
+
         stop();
         resolve(next);
       });
@@ -86,11 +88,14 @@ export class UniplsRaceScenario {
   ): Promise<void> {
     if (winner === "close") {
       const closing = this.client.close();
+
       invocation.reconnect();
+
       return closing;
     }
 
     invocation.reconnect();
+
     return this.client.close();
   }
 }

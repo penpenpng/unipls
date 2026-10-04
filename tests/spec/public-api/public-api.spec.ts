@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import * as dropDetectors from "../../../src/drop-detectors.ts";
+import type { DropDetectorContext, UniplsDropDetector } from "../../../src/drop-detectors.ts";
 import * as root from "../../../src/index.ts";
-import * as reconnectors from "../../../src/reconnectors.ts";
-import * as socket from "../../../src/socket.ts";
 import type {
   AsyncSubscription,
   ConnectionSetupContext,
@@ -34,8 +33,9 @@ import type {
   UniplsSubscribeParams,
   WebSocketConstructor,
 } from "../../../src/index.ts";
+import * as reconnectors from "../../../src/reconnectors.ts";
 import type { ReconnectionContext, UniplsReconnector } from "../../../src/reconnectors.ts";
-import type { DropDetectorContext, UniplsDropDetector } from "../../../src/drop-detectors.ts";
+import * as socket from "../../../src/socket.ts";
 import type {
   UniplsSocketEventContext,
   UniplsSocketParams,
@@ -80,6 +80,7 @@ type PublicContracts = readonly [
 ];
 
 const publicContractsCompile: PublicContracts | undefined = undefined;
+
 void publicContractsCompile;
 
 function acceptsPlatformWebSocket(WebSocket: typeof globalThis.WebSocket): WebSocketConstructor {
@@ -91,6 +92,7 @@ function narrowFinalization(finalization: StreamFinalization<string>): unknown {
   if (finalization.ok) {
     return finalization.reason === "terminated" ? finalization.message : finalization.reason;
   }
+
   return finalization.error;
 }
 void narrowFinalization;
@@ -107,7 +109,7 @@ describe("public APIのentry point境界", () => {
    */
   it("core、extensions、低レベルruntime exportを分離する", () => {
     // package利用者が名前付きimportできるruntime valueをentry pointごとに固定します。
-    expect(Object.keys(root).sort()).toEqual([
+    expect(Object.keys(root).toSorted()).toEqual([
       "Unipls",
       "UniplsBufferOverflowError",
       "UniplsClosedError",
@@ -117,7 +119,7 @@ describe("public APIのentry point境界", () => {
       "UniplsOpenError",
       "UniplsTimeoutError",
     ]);
-    expect(Object.keys(socket).sort()).toEqual([
+    expect(Object.keys(socket).toSorted()).toEqual([
       "UniplsInvalidUsageError",
       "UniplsSocket",
       "UniplsSocketClosedError",
@@ -126,7 +128,7 @@ describe("public APIのentry point境界", () => {
       "UniplsTimeoutError",
       "UniplsWebSocketCloseCode",
     ]);
-    expect(Object.keys(reconnectors).sort()).toEqual([
+    expect(Object.keys(reconnectors).toSorted()).toEqual([
       "BrowserLifecycleReconnector",
       "BrowserLifecycleSource",
       "DropReasons",
@@ -134,7 +136,7 @@ describe("public APIのentry point境界", () => {
       "ImmediateReconnector",
       "isBrowserLifecycleDrop",
     ]);
-    expect(Object.keys(dropDetectors).sort()).toEqual([
+    expect(Object.keys(dropDetectors).toSorted()).toEqual([
       "BrowserLifecycleDropDetector",
       "BrowserLifecycleSource",
       "DropReasons",

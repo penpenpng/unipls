@@ -1,9 +1,10 @@
+import { spawn } from "node:child_process";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
 
 const [, , tarballArgument, destinationArgument] = process.argv;
+
 if (!tarballArgument || !destinationArgument) {
   throw new Error("Usage: node prepare-consumer.mjs <tarball> <destination>");
 }
@@ -32,10 +33,14 @@ await run("npm", [
 function run(command, args) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, { cwd: destination, stdio: "inherit" });
+
     child.on("error", reject);
     child.on("exit", (code, signal) => {
-      if (code === 0) resolvePromise();
-      else reject(new Error(`${command} failed: code=${code}, signal=${signal}`));
+      if (code === 0) {
+        resolvePromise();
+      } else {
+        reject(new Error(`${command} failed: code=${code}, signal=${signal}`));
+      }
     });
   });
 }

@@ -21,6 +21,7 @@ describe("Unipls.open の ready 契約", () => {
     const opening = scenario.beginOpen();
     const transport = scenario.transport.connection(0);
     let settled = false;
+
     void opening.finally(() => {
       settled = true;
     });
@@ -28,6 +29,7 @@ describe("Unipls.open の ready 契約", () => {
     // WebSocket を開き、制御 hook で provisioning を保留します。
     transport.emitOpen();
     const provisioning = scenario.provisioner.invocations.take();
+
     // microtask を進め、WebSocket の open だけでは完了しないことを確認します。
     await flushMicrotasks();
     expect(settled).toBe(false);
@@ -39,6 +41,7 @@ describe("Unipls.open の ready 契約", () => {
 
     // ready になった接続を終了します。
     const closing = scenario.client.close();
+
     transport.emitClose({ code: 1000, wasClean: true });
     await closing;
   });
@@ -63,6 +66,7 @@ describe("Unipls.open の ready 契約", () => {
       () => unsafe.open({ setupConnection: true }),
       () => unsafe.open({ setupConnection() {}, setupSession: true }),
     ];
+
     for (const open of invalidProvisioners) {
       expect(open).toThrow(TypeError);
       expect(open).not.toThrow(UniplsInvalidUsageError);
@@ -87,13 +91,16 @@ describe("Unipls.open の ready 契約", () => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
     const first = scenario.transport.current;
+
     first.emitOpen();
     const obsoleteProvisioning = scenario.provisioner.invocations.take();
     const sending = scenario.client.cast({ query: "pending" });
+
     expect(first.sent).toEqual([]);
 
     // ! 利用者がprovisioning完了前にcloseし、WebSocketのclose handshakeも完了します。
     const closing = scenario.client.close();
+
     first.emitClose();
     await closing;
     await expect(opening).rejects.toBeInstanceOf(UniplsClosedError);
@@ -108,11 +115,13 @@ describe("Unipls.open の ready 契約", () => {
     // 次のopenは新しいsessionとして成立し、旧castを引き継ぎません。
     const reopening = scenario.beginOpen();
     const second = scenario.transport.current;
+
     second.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await reopening;
     expect(second.sent).toEqual([]);
     const finalClosing = scenario.client.close();
+
     second.emitClose();
     await finalClosing;
   });

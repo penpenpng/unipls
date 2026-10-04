@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { Unipls, type UniplsDrop } from "../../../src/index.ts";
+
 import {
   BrowserLifecycleDropDetector,
   BrowserLifecycleSource,
@@ -7,6 +7,7 @@ import {
   type BrowserLifecycleEventTarget,
   type DropDetectorContext,
 } from "../../../src/drop-detectors.ts";
+import { Unipls, type UniplsDrop } from "../../../src/index.ts";
 import {
   BrowserLifecycleReconnector,
   ExponentialBackoffReconnector,
@@ -23,6 +24,7 @@ class BrowserTarget implements BrowserLifecycleEventTarget {
   readonly listeners = new Map<string, Set<(event: { type: string }) => void>>();
   addEventListener(type: string, callback: (event: { type: string }) => void): void {
     const listeners = this.listeners.get(type) ?? new Set();
+
     listeners.add(callback);
     this.listeners.set(type, listeners);
   }
@@ -31,7 +33,10 @@ class BrowserTarget implements BrowserLifecycleEventTarget {
   }
   emit(type: string): void {
     const listeners = [...(this.listeners.get(type) ?? [])];
-    for (const callback of listeners) callback({ type });
+
+    for (const callback of listeners) {
+      callback({ type });
+    }
   }
   get listenerCount(): number {
     return [...this.listeners.values()].reduce((sum, listeners) => sum + listeners.size, 0);
@@ -43,17 +48,20 @@ function browser() {
   const document = new BrowserTarget();
   const navigator = { onLine: true };
   const source = new BrowserLifecycleSource({ window, document, navigator });
+
   return { window, document, navigator, source };
 }
 
 async function open(client: Unipls<string, string>, transport: ControlledWebSocketServer) {
   const opening = client.open();
+
   transport.current.emitOpen();
   await opening;
 }
 
 async function close(client: Unipls<string, string>, transport: ControlledWebSocketServer) {
   const closing = client.close();
+
   transport.current.emitClose();
   await closing;
 }
@@ -71,6 +79,7 @@ function createClient(env: ReturnType<typeof browser>, maxRetries?: number) {
         coalesceDelay: 10,
         createProbe: () => {
           const id = ++sequence;
+
           return { query: `ping:${id}`, selector: (msg) => msg === `pong:${id}` };
         },
       }),
@@ -82,6 +91,7 @@ function createClient(env: ReturnType<typeof browser>, maxRetries?: number) {
       maxRetries,
     }),
   });
+
   return { client, transport };
 }
 
@@ -92,6 +102,7 @@ describe("browser lifecycle recovery", () => {
     vi.useFakeTimers();
     const env = browser();
     const { client, transport } = createClient(env);
+
     await open(client, transport);
     env.document.emit("resume");
     env.window.emit("pageshow");
@@ -112,15 +123,25 @@ describe("browser lifecycle recovery", () => {
       vi.useFakeTimers();
       const env = browser();
       const { client, transport } = createClient(env);
+
       await open(client, transport);
+
       env.document.visibilityState = "hidden";
+
       env.document.emit("visibilitychange");
       await vi.advanceTimersByTimeAsync(10);
-      if (suspend === "freeze") env.document.emit("freeze");
-      else env.window.emit("pagehide");
+
+      if (suspend === "freeze") {
+        env.document.emit("freeze");
+      } else {
+        env.window.emit("pagehide");
+      }
+
       await vi.advanceTimersByTimeAsync(100);
       expect(transport.connections).toHaveLength(1);
+
       env.document.visibilityState = "visible";
+
       env.document.emit("resume");
       env.window.emit("pageshow");
       await vi.advanceTimersByTimeAsync(10);
@@ -147,12 +168,17 @@ describe("browser lifecycle recovery", () => {
     vi.useFakeTimers();
     const env = browser();
     const { client, transport } = createClient(env);
+
     await open(client, transport);
+
     env.document.visibilityState = "hidden";
+
     env.document.emit("visibilitychange");
     await vi.advanceTimersByTimeAsync(100);
     expect(client.lifecycle.phase).toBe("open");
+
     env.document.visibilityState = "visible";
+
     env.document.emit("visibilitychange");
     await vi.advanceTimersByTimeAsync(10);
     transport.current.emitMessage("pong:2");
@@ -165,6 +191,7 @@ describe("browser lifecycle recovery", () => {
     vi.useFakeTimers();
     const env = browser();
     const { client, transport } = createClient(env);
+
     await open(client, transport);
     env.document.emit("visibilitychange");
     await vi.advanceTimersByTimeAsync(70);
@@ -190,6 +217,7 @@ describe("browser lifecycle recovery", () => {
     vi.useFakeTimers();
     const env = browser();
     const { client, transport } = createClient(env);
+
     await open(client, transport);
     client.drop();
     await flushMicrotasks();
@@ -231,6 +259,7 @@ describe("browser lifecycle recovery", () => {
         }),
       }),
     });
+
     await open(client, transport);
     context.drop({ reason: DropReasons.HEARTBEAT_RESPONSE_TIMEOUT });
     await flushMicrotasks();
@@ -283,6 +312,7 @@ describe("browser lifecycle recovery", () => {
         ctx.defer(() => gate);
       },
     });
+
     transport.current.emitOpen();
     await opening;
     env.document.emit("visibilitychange");
@@ -317,23 +347,31 @@ describe("browser lifecycle recovery", () => {
         },
       ],
     });
+
     client.on("dropped", ({ drop }) => drops.push(drop));
     await open(client, transport);
     expect(() => context.drop({ metadata: { invalid: Number.NaN } })).toThrow(TypeError);
     expect(client.lifecycle.phase).toBe("open");
     const metadata = { detail: { triggers: ["resume"] } };
+
     context.drop({ reason: DropReasons.BROWSER_LIFECYCLE_PROBE_TIMEOUT, metadata });
     metadata.detail.triggers.push("changed");
     context.drop({ reason: "later" });
     await flushMicrotasks();
     const recovery = reconnector.invocations.take();
+
     expect(recovery.context.drop).toBe(drops[0]);
     expect(drops[0].source).toMatchObject({
       reason: DropReasons.BROWSER_LIFECYCLE_PROBE_TIMEOUT,
       metadata: { detail: { triggers: ["resume"] } },
     });
-    if (drops[0].source.type !== "detector") throw new Error("Expected detector source");
+
+    if (drops[0].source.type !== "detector") {
+      throw new Error("Expected detector source");
+    }
+
     const detail = drops[0].source.metadata?.detail as { triggers: readonly string[] };
+
     expect(Object.isFrozen(detail)).toBe(true);
     expect(Object.isFrozen(detail.triggers)).toBe(true);
     await close(client, transport);
@@ -343,6 +381,7 @@ describe("browser lifecycle recovery", () => {
     vi.useFakeTimers();
     const env = browser();
     const { client, transport } = createClient(env, 1);
+
     await open(client, transport);
     env.document.emit("visibilitychange");
     await vi.advanceTimersByTimeAsync(70);

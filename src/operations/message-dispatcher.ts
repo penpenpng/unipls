@@ -24,14 +24,19 @@ export class MessageDispatcher<T> {
     receive?: (message: T) => void;
   }): Readonly<{ operation: OperationId; unregister: () => void }> {
     const operation = `operation-${this.#nextOperation++}` as OperationId;
+
     this.#registrations.set(operation, { operation, ...params });
     let registered = true;
 
     return Object.freeze({
       operation,
       unregister: () => {
-        if (!registered) return;
+        if (!registered) {
+          return;
+        }
+
         registered = false;
+
         this.#registrations.delete(operation);
       },
     });
@@ -58,6 +63,7 @@ export class MessageDispatcher<T> {
       if (!this.#registrations.has(registration.operation) || !isCandidate(registration)) {
         continue;
       }
+
       registration.receive?.(message);
     }
   }

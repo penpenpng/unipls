@@ -16,7 +16,10 @@ function isFrozenDrop(drop: UniplsDrop): boolean {
 }
 
 function freezeDrop(drop: UniplsDrop): UniplsDrop {
-  if (isFrozenDrop(drop)) return drop;
+  if (isFrozenDrop(drop)) {
+    return drop;
+  }
+
   const source =
     drop.source.type === "detector"
       ? Object.freeze({
@@ -24,6 +27,7 @@ function freezeDrop(drop: UniplsDrop): UniplsDrop {
           detector: Object.freeze({ ...drop.source.detector }),
         })
       : Object.freeze({ ...drop.source });
+
   return Object.freeze({
     ...drop,
     source,
@@ -44,6 +48,7 @@ function freezeAttempts(
   ) {
     return attempts;
   }
+
   return Object.freeze(
     attempts.map((attempt) =>
       Object.freeze({
@@ -95,11 +100,13 @@ export class UniplsOpenError extends UniplsError {
     drop?: UniplsDrop;
   }) {
     super("The logical session could not become ready.", { cause });
+
     this.outcome = outcome;
     this.stage = stage;
     this.attempts = freezeAttempts(attempts);
     this.cause = cause;
     this.drop = drop === undefined ? undefined : freezeDrop(drop);
+
     Object.freeze(this);
   }
 }
@@ -138,10 +145,12 @@ export class UniplsDroppedError extends UniplsError {
     cause?: unknown;
   }) {
     super("The logical session could not remain ready.", { cause });
+
     this.outcome = outcome;
     this.drop = freezeDrop(drop);
     this.attempts = freezeAttempts(attempts);
     this.cause = cause;
+
     Object.freeze(this);
   }
 }

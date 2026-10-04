@@ -24,6 +24,7 @@ describe("stream の recovery", () => {
     try {
       const scenario = new UniplsRaceScenario();
       const opening = scenario.beginOpen();
+
       scenario.transport.current.emitOpen();
       scenario.provisioner.succeed(scenario.provisioner.invocations.take());
       await opening;
@@ -34,9 +35,11 @@ describe("stream の recovery", () => {
         onMatch: (message) => received.push(message),
         timeout: 100,
       });
+
       await vi.advanceTimersByTimeAsync(90);
       recovery.reconnect();
       const replacement = scenario.transport.current;
+
       replacement.emitOpen();
       replacement.emitMessage("provisioning");
       scenario.provisioner.succeed(scenario.provisioner.invocations.take());
@@ -45,12 +48,18 @@ describe("stream の recovery", () => {
       expect(received).toEqual(["application"]);
       await vi.advanceTimersByTimeAsync(10);
       const finalization = await subscription.closed;
+
       expect(finalization.ok).toBe(false);
-      if (finalization.ok) throw new Error("Expected failure");
+
+      if (finalization.ok) {
+        throw new Error("Expected failure");
+      }
+
       expect(finalization.reason).toBe("timeout");
       expect(finalization.error).toBeInstanceOf(UniplsTimeoutError);
 
       const closing = scenario.client.close();
+
       replacement.emitClose();
       await closing;
       expect(vi.getTimerCount()).toBe(0);
@@ -86,6 +95,7 @@ describe("stream の recovery", () => {
     });
     const iterator = subscription[Symbol.asyncIterator]();
     const finalization = await subscription.closed;
+
     expect(finalization).toEqual({ ok: false, reason: "fatal-error", error: cause });
     await expect(iterator.next()).rejects.toBe(cause);
     expect(socket.sent).toEqual([]);
@@ -107,6 +117,7 @@ describe("stream の recovery", () => {
   it("subscribe を明示的な resend 後も同じ AsyncSubscription として継続する", async () => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -116,20 +127,24 @@ describe("stream の recovery", () => {
       selector: (message) => message.startsWith("message"),
       retry: "resend",
     });
+
     await flushMicrotasks();
     expect(scenario.transport.current.sent).toEqual(["subscribe-1"]);
 
     // ! drop後の代替readyでfactoryを再評価して一度だけ再送します。
     scenario.drop();
     const recovery = scenario.reconnector.invocations.take();
+
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
     await flushMicrotasks();
     expect(replacement.sent).toEqual(["subscribe-2"]);
     const iterator = subscription[Symbol.asyncIterator]();
+
     replacement.emitMessage("message-after-recovery");
     await expect(iterator.next()).resolves.toEqual({
       done: false,

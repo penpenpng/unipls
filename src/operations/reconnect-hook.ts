@@ -1,6 +1,6 @@
-import type { EventBus } from "../shared/event-bus.ts";
-import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
 import type { UniplsMessageFactory } from "../client/unipls.interface.ts";
+import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
+import type { EventBus } from "../shared/event-bus.ts";
 
 export function createOnReconnectedHandler<
   TInput,
@@ -32,6 +32,7 @@ export function createOnReconnectedHandler<
       async (reconnection) => {
         if (params.isDone()) {
           params.onSettled?.();
+
           return;
         }
 

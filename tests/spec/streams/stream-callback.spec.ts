@@ -28,6 +28,7 @@ describe("callback stream", () => {
     subscription.unsubscribe();
     const firstFinalization = await subscription.closed;
     const secondFinalization = await subscription.closed;
+
     expect(firstFinalization).toBe(secondFinalization);
     expect(firstFinalization).toEqual({ ok: true, reason: "unsubscribed" });
     expect(Object.isFrozen(firstFinalization)).toBe(true);
@@ -37,10 +38,14 @@ describe("callback stream", () => {
       readonly dispose?: symbol;
       readonly asyncDispose?: symbol;
     };
-    if (disposalSymbols.dispose) expect(disposalSymbols.dispose in subscription).toBe(false);
+
+    if (disposalSymbols.dispose) {
+      expect(disposalSymbols.dispose in subscription).toBe(false);
+    }
     if (disposalSymbols.asyncDispose) {
       expect(disposalSymbols.asyncDispose in subscription).toBe(false);
     }
+
     await close();
   });
 
@@ -62,7 +67,10 @@ describe("callback stream", () => {
     const independentMessages: string[] = [];
     const continued = client.listen({
       onMatch: (message) => {
-        if (message === "bad") throw cause;
+        if (message === "bad") {
+          throw cause;
+        }
+
         continuedMessages.push(message);
       },
     });
@@ -79,6 +87,7 @@ describe("callback stream", () => {
     // ! 同じメッセージで2つのcallbackが失敗しても、最後のsubscriberまで配送します。
     socket.emitMessage("bad");
     const failedFinalization = await failed.closed;
+
     expect(failedFinalization).toEqual({ ok: false, reason: "callback-error", error: cause });
     expect(independentMessages).toEqual(["bad"]);
     socket.emitMessage("good");
@@ -120,6 +129,7 @@ describe("callback stream", () => {
     const { client, socket, close, logs } = await createReadyClient();
     const cause = new Error("callback failed after unsubscribe");
     let subscription!: SubscriptionHandle<StreamFinalization<string>>;
+
     subscription = client.listen({
       callbackError: "unsubscribe",
       onMatch: () => {
@@ -171,7 +181,9 @@ describe("callback stream", () => {
         const returned = gate.then(() => {
           throw cause;
         });
+
         returnedPromises.push(returned);
+
         return returned;
       },
     });
@@ -182,6 +194,7 @@ describe("callback stream", () => {
     expect(calls).toEqual(["first", "second"]);
     expect(logs).toEqual([]);
     const observedRejections = returnedPromises.map((returned) => returned.catch((error) => error));
+
     release();
     await expect(Promise.all(observedRejections)).resolves.toEqual([cause, cause]);
     expect(logs).toEqual([]);

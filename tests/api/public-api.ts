@@ -9,6 +9,13 @@ import {
   type UniplsRecoverStrategy,
 } from "unipls";
 import {
+  BrowserLifecycleDropDetector,
+  BrowserLifecycleSource,
+  DropReasons,
+  HeartbeatDropDetector,
+  type UniplsDropDetector,
+} from "unipls/drop-detectors";
+import {
   ExponentialBackoffReconnector,
   BrowserLifecycleReconnector,
   ImmediateReconnector,
@@ -16,13 +23,6 @@ import {
   type ImmediateReconnectorOptions,
   type UniplsReconnector,
 } from "unipls/reconnectors";
-import {
-  BrowserLifecycleDropDetector,
-  BrowserLifecycleSource,
-  DropReasons,
-  HeartbeatDropDetector,
-  type UniplsDropDetector,
-} from "unipls/drop-detectors";
 import {
   UniplsSocket,
   UniplsSocketClosedError,
@@ -83,6 +83,7 @@ const customDetector: UniplsDropDetector<string, string> = {
     ctx.drop({ reason: DropReasons.HEARTBEAT_RESPONSE_TIMEOUT, metadata: { attempt: 1 } });
   },
 };
+
 void lifecycleDetector;
 void lifecycleReconnector;
 void customDetector;

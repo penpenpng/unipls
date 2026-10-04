@@ -61,6 +61,7 @@ describe("Unipls.listen の主要シナリオ", () => {
     // 同じsessionへfailとwaitのcallback subscriptionを登録します。
     const scenario = new UniplsRaceScenario({ detectorCount: 0 });
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -78,8 +79,13 @@ describe("Unipls.listen の主要シナリオ", () => {
     // ! ready接続がdropすると、failだけがcanonical dropで終了します。
     scenario.drop();
     const failedFinalization = await failed.closed;
+
     expect(failedFinalization.ok).toBe(false);
-    if (failedFinalization.ok) throw new Error("failure結果が必要です");
+
+    if (failedFinalization.ok) {
+      throw new Error("failure結果が必要です");
+    }
+
     expect(failedFinalization.reason).toBe("dropped");
     expect(failedFinalization.error).toBeInstanceOf(UniplsDroppedError);
     const recovery = scenario.reconnector.invocations.take();
@@ -87,6 +93,7 @@ describe("Unipls.listen の主要シナリオ", () => {
     // ! 代替接続がreadyになった後にapplication messageが届きます。
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");

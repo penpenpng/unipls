@@ -18,6 +18,7 @@ describe("operation の recovery", () => {
   it("recovery 中に受け付けた operation を次の ready まで待機させる", async () => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -28,19 +29,23 @@ describe("operation の recovery", () => {
     const sending = scenario.client.cast({
       query: () => {
         factoryCalls += 1;
+
         return "fresh";
       },
     });
     const receiving = scenario.client.next({
       selector: (message) => {
         selectorCalls += 1;
+
         return message === "application";
       },
     });
+
     expect(factoryCalls).toBe(0);
     expect(selectorCalls).toBe(0);
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     replacement.emitMessage("provisioning");
     expect(factoryCalls).toBe(0);
@@ -54,6 +59,7 @@ describe("operation の recovery", () => {
     await expect(receiving).resolves.toBe("application");
     expect(selectorCalls).toBe(1);
     const closing = scenario.client.close();
+
     replacement.emitClose();
     await closing;
   });
@@ -74,6 +80,7 @@ describe("operation の recovery", () => {
   it("recovery 中に作った未送信 request を retry ではなく初回送信として扱う", async () => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -85,9 +92,11 @@ describe("operation の recovery", () => {
       selector: (message) => message === "response",
       retry: "fail",
     });
+
     expect(factoryCalls).toBe(0);
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     replacement.emitMessage("response");
     expect(factoryCalls).toBe(0);
@@ -99,6 +108,7 @@ describe("operation の recovery", () => {
     replacement.emitMessage("response");
     await expect(response).resolves.toBe("response");
     const closing = scenario.client.close();
+
     replacement.emitClose();
     await closing;
   });
@@ -117,6 +127,7 @@ describe("operation の recovery", () => {
   it("request の fail・wait・resend を送信試行済み payload にだけ適用する", async () => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -136,23 +147,34 @@ describe("operation の recovery", () => {
       selector: (message) => message === "resend-response",
       retry: "resend",
     });
+
     await flushMicrotasks();
     expect(first.sent).toEqual(["fail-request", "wait-request", "resend-request-1"]);
 
     // ! drop の時点で既定 fail だけが終了し、wait と resend は次の ready を待ちます。
     scenario.drop();
     const dropSnapshot = scenario.client.lifecycle;
-    if (dropSnapshot.phase !== "recovering") throw new Error("Expected recovery");
+
+    if (dropSnapshot.phase !== "recovering") {
+      throw new Error("Expected recovery");
+    }
+
     const failedError = await failed.then(
       () => undefined,
       (error) => error,
     );
-    if (!(failedError instanceof UniplsDroppedError)) throw new Error("Expected drop error");
+
+    if (!(failedError instanceof UniplsDroppedError)) {
+      throw new Error("Expected drop error");
+    }
+
     expect(failedError).toMatchObject({ outcome: "operation-failed" });
     expect(failedError.drop).toBe(dropSnapshot.drop);
     const recovery = scenario.reconnector.invocations.take();
+
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     scenario.client.on(
       "open",
@@ -171,6 +193,7 @@ describe("operation の recovery", () => {
     await expect(waited).resolves.toBe("wait-response");
     await expect(resent).resolves.toBe("resend-response");
     const closing = scenario.client.close();
+
     replacement.emitClose();
     await closing;
   });
@@ -194,6 +217,7 @@ describe("operation の recovery", () => {
   it("custom recovery が選んだ query と selector で request を回復する", async () => {
     const scenario = new UniplsRaceScenario();
     const opening = scenario.beginOpen();
+
     scenario.transport.current.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await opening;
@@ -207,6 +231,7 @@ describe("operation の recovery", () => {
       retry: {
         recover: (context) => {
           recoveryInputs.push(context);
+
           return {
             query: () => `recovered-${++recoveredFactoryCalls}`,
             selector: (message) => message === "recovered-response",
@@ -214,14 +239,17 @@ describe("operation の recovery", () => {
         },
       },
     });
+
     await flushMicrotasks();
     expect(scenario.transport.current.sent).toEqual(["original-1"]);
 
     // ! drop 後の ready 通知で custom recovery を一度だけ評価します。
     scenario.drop();
     const recovery = scenario.reconnector.invocations.take();
+
     recovery.reconnect();
     const replacement = scenario.transport.current;
+
     replacement.emitOpen();
     scenario.provisioner.succeed(scenario.provisioner.invocations.take());
     await scenario.waitForLifecycle(({ phase }) => phase === "open");
@@ -235,6 +263,7 @@ describe("operation の recovery", () => {
     replacement.emitMessage("recovered-response");
     await expect(response).resolves.toBe("recovered-response");
     const closing = scenario.client.close();
+
     replacement.emitClose();
     await closing;
   });

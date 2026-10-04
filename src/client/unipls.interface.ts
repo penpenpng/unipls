@@ -1,3 +1,4 @@
+import type { UniplsDropDetector } from "../drop-detectors/drop-detector.ts";
 import type {
   AsyncSubscription,
   StreamCallbackDelivery,
@@ -5,7 +6,6 @@ import type {
   StreamIteratorDelivery,
   SubscriptionHandle,
 } from "../operations/async-results.ts";
-import type { UniplsDropDetector } from "../drop-detectors/drop-detector.ts";
 import type { UniplsReconnectEvent, UniplsReconnector } from "../reconnectors/reconnector.ts";
 import type { Disposer, MaybePromise, ResourceScope } from "../shared/resource-scope.ts";
 import type {
