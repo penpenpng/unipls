@@ -15,7 +15,8 @@ WebSocketのpeer close、transport error、接続timeoutは、clientが自動的
 ### heartbeat
 
 ```ts
-import { HeartbeatDropDetector, Unipls } from "unipls";
+import { Unipls } from "unipls";
+import { HeartbeatDropDetector } from "unipls/drop-detectors";
 
 const client = new Unipls<ClientMessage, ServerMessage>({
   url,
@@ -37,7 +38,7 @@ heartbeatはreadyなconnectionごとに開始されます。指定時間内にpo
 ### browserのoffline event
 
 ```ts
-import { NetworkDropDetector } from "unipls/browser";
+import { NetworkDropDetector } from "unipls/drop-detectors";
 
 const client = new Unipls({
   url,
@@ -83,7 +84,8 @@ client.on("dropped", ({ drop }) => {
 ### ただちに再接続する
 
 ```ts
-import { ImmediateReconnector, Unipls } from "unipls";
+import { Unipls } from "unipls";
+import { ImmediateReconnector } from "unipls/reconnectors";
 
 const client = new Unipls({
   url,
@@ -96,7 +98,7 @@ const client = new Unipls({
 ### backoffと上限を実装する
 
 ```ts
-import type { UniplsReconnector } from "unipls";
+import type { UniplsReconnector } from "unipls/reconnectors";
 
 const reconnector: UniplsReconnector = {
   setup(actions, context) {

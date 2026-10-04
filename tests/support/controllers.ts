@@ -2,7 +2,7 @@ import type {
   ReconnectionContext,
   UniplsReconnector,
   UniplsReconnectorActions,
-} from "../../src/index.ts";
+} from "../../src/reconnectors.ts";
 import { ControlledHook, type ControlledInvocation } from "./controlled-hook.ts";
 import { ObservationQueue } from "./observation-queue.ts";
 

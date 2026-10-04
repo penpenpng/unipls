@@ -5,12 +5,12 @@ import {
   UniplsInvalidUsageError,
   UniplsOpenError,
   type ConnectionSetupContext,
-  type DropDetectorContext,
   type SessionSetupContext,
   type StreamFinalization,
   type SubscriptionHandle,
   type UniplsLog,
 } from "../../src/index.ts";
+import type { DropDetectorContext } from "../../src/drop-detectors.ts";
 import {
   ControlledReconnector,
   ControlledWebSocketServer,

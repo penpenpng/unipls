@@ -30,13 +30,17 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
+    "./reconnectors": {
+      "types": "./dist/reconnectors.d.mts",
+      "import": "./dist/reconnectors.mjs"
+    },
+    "./drop-detectors": {
+      "types": "./dist/drop-detectors.d.mts",
+      "import": "./dist/drop-detectors.mjs"
+    },
     "./socket": {
       "types": "./dist/socket.d.mts",
       "import": "./dist/socket.mjs"
-    },
-    "./browser": {
-      "types": "./dist/browser.d.mts",
-      "import": "./dist/browser.mjs"
     },
     "./package.json": "./package.json"
   },

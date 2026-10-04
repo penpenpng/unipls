@@ -19,7 +19,7 @@ const server = createServer(async (request, response) => {
           {"imports":{
             "unipls":"/node_modules/unipls/dist/index.mjs",
             "unipls/socket":"/node_modules/unipls/dist/socket.mjs",
-            "unipls/browser":"/node_modules/unipls/dist/browser.mjs"
+            "unipls/drop-detectors":"/node_modules/unipls/dist/drop-detectors.mjs"
           }}
         </script>
         <script type="module" src="/browser-smoke.mjs"></script>`);
@@ -61,8 +61,8 @@ try {
     pageError,
   ]);
   const result = await page.evaluate(() => globalThis.__uniplsSmokeResult);
-  if (result.checks !== 16) {
-    throw new Error(`Expected 16 package checks, received ${result.checks}`);
+  if (result.checks !== 17) {
+    throw new Error(`Expected 17 package checks, received ${result.checks}`);
   }
   console.log(`${browserName} unipls consumer: ${result.checks} checks passed`);
 } finally {

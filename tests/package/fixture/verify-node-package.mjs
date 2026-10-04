@@ -24,5 +24,6 @@ try {
 }
 assert(!sourceIncluded, "tarballへsource directoryが含まれています。");
 await access(resolve(packageDirectory, "dist/index.mjs"));
+await access(resolve(packageDirectory, "dist/reconnectors.mjs"));
+await access(resolve(packageDirectory, "dist/drop-detectors.mjs"));
 await access(resolve(packageDirectory, "dist/socket.mjs"));
-await access(resolve(packageDirectory, "dist/browser.mjs"));

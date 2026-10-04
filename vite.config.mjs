@@ -24,7 +24,7 @@ export default defineConfig({
       // https://tsdown.dev/options/dependencies#deps-resolvedepsubpath
       resolveDepSubpath: true,
     },
-    entry: ["src/index.ts", "src/socket.ts", "src/browser.ts"],
+    entry: ["src/index.ts", "src/reconnectors.ts", "src/drop-detectors.ts", "src/socket.ts"],
     target: "es2022",
     dts: true,
     sourcemap: true,
