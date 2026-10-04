@@ -99,7 +99,7 @@ describe("public APIのentry point境界", () => {
   /**
    * ```ts
    * import { Unipls } from "unipls";
-   * import { ImmediateReconnector } from "unipls/reconnectors";
+   * import { ExponentialBackoffReconnector, ImmediateReconnector } from "unipls/reconnectors";
    * import { HeartbeatDropDetector, NetworkDropDetector } from "unipls/drop-detectors";
    * import { UniplsSocket } from "unipls/socket";
    * // core、optional extensions、low-level transportを別entry pointで提供する
@@ -126,7 +126,10 @@ describe("public APIのentry point境界", () => {
       "UniplsTimeoutError",
       "UniplsWebSocketCloseCode",
     ]);
-    expect(Object.keys(reconnectors).sort()).toEqual(["ImmediateReconnector"]);
+    expect(Object.keys(reconnectors).sort()).toEqual([
+      "ExponentialBackoffReconnector",
+      "ImmediateReconnector",
+    ]);
     expect(Object.keys(dropDetectors).sort()).toEqual([
       "HeartbeatDropDetector",
       "NetworkDropDetector",

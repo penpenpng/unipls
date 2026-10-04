@@ -8,7 +8,12 @@ import {
   type UniplsProvisioner,
   type UniplsRecoverStrategy,
 } from "unipls";
-import { ImmediateReconnector, type UniplsReconnector } from "unipls/reconnectors";
+import {
+  ExponentialBackoffReconnector,
+  ImmediateReconnector,
+  type ExponentialBackoffReconnectorOptions,
+  type UniplsReconnector,
+} from "unipls/reconnectors";
 import { HeartbeatDropDetector, type UniplsDropDetector } from "unipls/drop-detectors";
 import {
   UniplsSocket,
@@ -43,6 +48,8 @@ const provisioner: UniplsProvisioner<string, string> = {
   },
 };
 const reconnector: UniplsReconnector = new ImmediateReconnector();
+const backoffOptions: ExponentialBackoffReconnectorOptions = { maxRetries: 5 };
+const backoffReconnector: UniplsReconnector = new ExponentialBackoffReconnector(backoffOptions);
 const recover: UniplsRecoverStrategy<string, string> = {
   recover: () => "resend",
 };
@@ -68,6 +75,7 @@ void client;
 void lowLevelClient;
 void provisioner;
 void reconnector;
+void backoffReconnector;
 void recover;
 void detector;
 void consumeStream;
