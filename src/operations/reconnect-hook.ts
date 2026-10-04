@@ -1,6 +1,6 @@
-import type { EventBus } from "../event-bus.ts";
-import type { UniplsReconnectEvent } from "../reconnector/reconnector.ts";
-import type { UniplsMessageFactory } from "../unipls.interface.ts";
+import type { EventBus } from "../shared/event-bus.ts";
+import type { UniplsReconnectEvent } from "../reconnectors/reconnector.ts";
+import type { UniplsMessageFactory } from "../client/unipls.interface.ts";
 
 export function createOnReconnectedHandler<
   TInput,

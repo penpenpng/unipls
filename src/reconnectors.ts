@@ -1,23 +1,23 @@
-export { ImmediateReconnector } from "./reconnector/immediate-reconnector.ts";
-export type { ImmediateReconnectorOptions } from "./reconnector/immediate-reconnector.ts";
-export { ExponentialBackoffReconnector } from "./reconnector/exponential-backoff-reconnector.ts";
-export type { ExponentialBackoffReconnectorOptions } from "./reconnector/exponential-backoff-reconnector.ts";
+export { ImmediateReconnector } from "./reconnectors/immediate-reconnector.ts";
+export type { ImmediateReconnectorOptions } from "./reconnectors/immediate-reconnector.ts";
+export { ExponentialBackoffReconnector } from "./reconnectors/exponential-backoff-reconnector.ts";
+export type { ExponentialBackoffReconnectorOptions } from "./reconnectors/exponential-backoff-reconnector.ts";
 export {
   BrowserLifecycleReconnector,
   type BrowserLifecycleReconnectorOptions,
-} from "./reconnector/browser-lifecycle-reconnector.ts";
-export { BrowserLifecycleSource } from "./browser-lifecycle.ts";
+} from "./reconnectors/browser-lifecycle-reconnector.ts";
+export { BrowserLifecycleSource } from "./shared/browser-lifecycle.ts";
 export type {
   BrowserLifecycleEnvironment,
   BrowserLifecycleEventTarget,
   BrowserLifecycleEvent,
   BrowserLifecycleSnapshot,
   BrowserLifecycleTrigger,
-} from "./browser-lifecycle.ts";
-export { DropReasons, isBrowserLifecycleDrop } from "./drop-reasons.ts";
+} from "./shared/browser-lifecycle.ts";
+export { DropReasons, isBrowserLifecycleDrop } from "./shared/drop-reasons.ts";
 export type {
   ReconnectionContext,
   UniplsReconnectEvent,
   UniplsReconnector,
   UniplsReconnectorActions,
-} from "./reconnector/reconnector.ts";
+} from "./reconnectors/reconnector.ts";

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { HeartbeatDropDetector, type DropDetectorContext } from "../../src/drop-detectors.ts";
-import type { DropDetectorIdentity } from "../../src/types.ts";
+import type { DropDetectorIdentity } from "../../src/shared/types.ts";
 
 describe("HeartbeatDropDetector", () => {
   afterEach(() => {

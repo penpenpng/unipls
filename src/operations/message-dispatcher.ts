@@ -1,4 +1,4 @@
-import type { ConnectionId, OperationId, OperationType, SessionId } from "../types.ts";
+import type { ConnectionId, OperationId, OperationType, SessionId } from "../shared/types.ts";
 
 export type MessageDeliveryMode =
   | Readonly<{ type: "ready" }>

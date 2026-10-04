@@ -1,6 +1,6 @@
 # uniplsのテスト構成
 
-このdirectoryには、source tree上の挙動だけでなく、利用者が受け取る型宣言と配布packageを検証するtestも置きます。公開契約の期待値は`docs/v1/ja/concepts.md`と`docs/dev/tasks.md`から導き、既存実装だけを根拠に新しい契約を固定しません。
+このdirectoryには、source tree上の挙動だけでなく、利用者が受け取る型宣言と配布packageを検証するtestも置きます。公開契約の期待値は`docs/v1/ja/`の仕様・ガイドから導き、既存実装だけを根拠に新しい契約を固定しません。
 
 ## directoryの役割
 
@@ -14,6 +14,16 @@
 | `support/`          | WebSocket、extension、時系列を決定的に制御するharnessと共通helperを置きます。production APIではなく、必要な挙動は`unit/`で検証します。                                                                                    |
 
 `spec`と`unit`はVite+の別projectとして収集されるため、公開仕様の失敗と内部実装の失敗を分けて確認できます。`api`、`package`、`runtime`は目的が異なるため、通常のtest runnerとは別の検査として実行します。
+
+`spec/` は実装ファイルの配置ではなく、検証する公開仕様に応じて分類します。
+
+| path               | 役割                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `spec/connection/` | 接続、readiness、provisioning、resource の所有、再接続と接続世代の分離を検証します。                    |
+| `spec/operations/` | cast、next、request、message 変換と operation 共通の dispatch・validation・recovery・終了を検証します。 |
+| `spec/streams/`    | listen、subscribe、配送、buffer、recovery と終了を検証します。                                          |
+| `spec/extensions/` | drop detector と browser lifecycle による接続の監視・回復を検証します。                                 |
+| `spec/public-api/` | 公開 export、低レベル socket API、event・error・診断と実行環境の契約を検証します。                      |
 
 ## 実行方法
 

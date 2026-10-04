@@ -7,16 +7,16 @@ import {
   type StreamDeliveryAdapter,
   type StreamFinalization,
   type SubscriptionHandle,
-} from "../async-results.ts";
+} from "./async-results.ts";
 import {
   UniplsBufferOverflowError,
   UniplsClosedError,
   UniplsDroppedError,
   UniplsOpenError,
   UniplsTimeoutError,
-} from "../errors.ts";
-import type { EventBus } from "../event-bus.ts";
-import type { OperationId, OperationType, SessionId } from "../types.ts";
+} from "../shared/errors.ts";
+import type { EventBus } from "../shared/event-bus.ts";
+import type { OperationId, OperationType, SessionId } from "../shared/types.ts";
 import { MessageDispatcher, type MessageDeliveryMode } from "./message-dispatcher.ts";
 
 /** operation timeout の公開入力を検証します。 */

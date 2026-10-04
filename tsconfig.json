@@ -20,6 +20,6 @@
     "sourceMap": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/**/*.ts", "next/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["tests/**/*.ts", "*.spec.ts", "*.test.ts"]
 }
