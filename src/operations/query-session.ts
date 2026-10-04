@@ -1,4 +1,4 @@
-import type { UniplsMessageFactory } from "../unipls.interface.ts";
+import type { UniplsMessageFactory } from "../client/unipls.interface.ts";
 
 export class QuerySession<TInput, TOutput> {
   #currentQuery: UniplsMessageFactory<TInput>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { UniplsInvalidUsageError, type SessionId } from "../../src/index.ts";
-import { OwnedResourceScope } from "../../src/resource-scope.ts";
+import { OwnedResourceScope } from "../../src/shared/resource-scope.ts";
 
 describe("ResourceScope", () => {
   it("disposeをmemoizeして非同期disposerをLIFO順にすべて一度ずつ試行する", async () => {

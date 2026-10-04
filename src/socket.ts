@@ -5,7 +5,7 @@ export {
   UniplsSocketDroppedError,
   UniplsSocketError,
   UniplsTimeoutError,
-} from "./errors.ts";
+} from "./shared/errors.ts";
 export {
   UniplsSocket,
   UniplsWebSocketCloseCode,
@@ -15,7 +15,7 @@ export {
   type UniplsSocketInputMetadata,
   type UniplsSocketParams,
   type UniplsSocketPublicEvents,
-} from "./unipls-socket.ts";
+} from "./socket/unipls-socket.ts";
 export type {
   DropDetectorIdentity,
   UniplsConnectionIntent,
@@ -30,4 +30,4 @@ export type {
   WebSocketLike,
   WebSocketMessageEvent,
   WebSocketOpenEvent,
-} from "./types.ts";
+} from "./shared/types.ts";

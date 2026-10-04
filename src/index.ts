@@ -6,7 +6,7 @@ export {
   UniplsInvalidUsageError,
   UniplsOpenError,
   UniplsTimeoutError,
-} from "./errors";
+} from "./shared/errors.ts";
 export type {
   AsyncSubscription,
   StreamBufferOptions,
@@ -16,7 +16,7 @@ export type {
   StreamFinalization,
   StreamIteratorDelivery,
   SubscriptionHandle,
-} from "./async-results.ts";
+} from "./operations/async-results.ts";
 export type {
   ClosedLifecycleSnapshot,
   ConnectionAttemptOrigin,
@@ -49,15 +49,15 @@ export type {
   WebSocketLike,
   WebSocketMessageEvent,
   WebSocketOpenEvent,
-} from "./types";
+} from "./shared/types.ts";
 export type {
   Disposer,
   MaybePromise,
   ResourceOptions,
   ResourceRegistrationSource,
   ResourceScope,
-} from "./resource-scope.ts";
-export { Unipls, type ConnectionEventContext, type UniplsEvents } from "./unipls";
+} from "./shared/resource-scope.ts";
+export { Unipls, type ConnectionEventContext, type UniplsEvents } from "./client/unipls.ts";
 export type {
   ConnectionSetupContext,
   SessionSetupContext,
@@ -80,4 +80,4 @@ export type {
   UniplsSubscribeCallbackParams,
   UniplsSubscribeIteratorParams,
   UniplsSubscribeParams,
-} from "./unipls.interface";
+} from "./client/unipls.interface.ts";
