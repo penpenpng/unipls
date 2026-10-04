@@ -103,6 +103,10 @@ function handlersAreDetached(socket) {
   );
 }
 
+function UnexpectedGlobalWebSocket() {
+  throw new Error("注入constructorよりglobalが優先されました。");
+}
+
 export async function runConsumerSmoke({ browser = false } = {}) {
   const previousWebSocket = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -135,10 +139,13 @@ export async function runConsumerSmoke({ browser = false } = {}) {
     }
     let configurationError;
     try {
-      new root.Unipls({
-        url: "wss://unipls.test/socket",
-        ...(guardedWebSocket ? {} : { WebSocket: null }),
-      });
+      assert(
+        new root.Unipls({
+          url: "wss://unipls.test/socket",
+          ...(guardedWebSocket ? {} : { WebSocket: null }),
+        }) instanceof root.Unipls,
+        "Unipls constructorがinstanceを返しませんでした。",
+      );
     } catch (error) {
       configurationError = error;
     }
@@ -148,11 +155,6 @@ export async function runConsumerSmoke({ browser = false } = {}) {
     );
 
     // ! 注入constructorは利用可能なglobalより常に優先されます。
-    class UnexpectedGlobalWebSocket {
-      constructor() {
-        throw new Error("注入constructorよりglobalが優先されました。");
-      }
-    }
     replaceGlobalValue("WebSocket", UnexpectedGlobalWebSocket);
     TestWebSocket.instances.length = 0;
     const client = new root.Unipls({

@@ -4,9 +4,11 @@ export default defineConfig({
   lint: {
     categories: {
       correctness: "error",
+      suspicious: "error",
     },
     rules: {
       curly: ["error", "all"],
+      "unicorn/prefer-add-event-listener": "off",
     },
   },
   test: {

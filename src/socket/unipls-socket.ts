@@ -262,6 +262,7 @@ export class UniplsSocket<TInput = WebSocketData, TOutput = WebSocketData> {
     const WebSocket = this.#WebSocket;
     const socket = new WebSocket(this.url);
 
+    // WebSocketLike は event property のみを要求し、EventTarget を要求しません。
     socket.onopen = () => {
       this.#events.emit("raw-open", { epoch });
     };

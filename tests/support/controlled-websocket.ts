@@ -143,10 +143,8 @@ export class ControlledWebSocketServer {
       this.created.push(socket);
       return socket;
     };
-    this.WebSocket = class {
-      constructor(url: string) {
-        return createSocket(url);
-      }
+    this.WebSocket = function WebSocket(url: string) {
+      return createSocket(url);
     } as unknown as typeof WebSocket;
   }
 

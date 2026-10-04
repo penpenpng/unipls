@@ -27,7 +27,8 @@ describe("ControlledWebSocketServer の test harness", () => {
     // 制御可能な socket と観測可能な event listener を用意します。
     const server = new ControlledWebSocketServer();
     const socket = new server.WebSocket("wss://unipls.test") as unknown as ControlledWebSocket;
-    const listener = () => {};
+    const events: string[] = [];
+    const listener = () => events.push("message");
 
     // listener を登録・解除し、harness の件数を確認します。
     socket.addEventListener("message", listener);
@@ -37,6 +38,8 @@ describe("ControlledWebSocketServer の test harness", () => {
 
     // socket を開き、payload を1件送信して正常 close を要求します。
     socket.emitOpen();
+    socket.emitMessage("response");
+    expect(events).toEqual([]);
     socket.send("query");
     socket.close(1000, "done");
 

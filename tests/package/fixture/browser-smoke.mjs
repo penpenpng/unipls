@@ -6,4 +6,4 @@ if (typeof NetworkDropDetector !== "function") {
   throw new Error("browser entryからNetworkDropDetectorをimportできませんでした。");
 }
 
-globalThis.__uniplsSmokeResult = { checks: result.checks + 1 };
+globalThis.uniplsSmokeResult = { checks: result.checks + 1 };

@@ -517,11 +517,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     const request = (
-      query: UniplsMessageFactory<TInput>,
-      { selector }: { selector: (data: TOutput) => boolean },
+      nextQuery: UniplsMessageFactory<TInput>,
+      { selector: nextSelector }: { selector: (data: TOutput) => boolean },
     ) => {
-      return requestSession.send(query, {
-        selector,
+      return requestSession.send(nextQuery, {
+        selector: nextSelector,
         isDone: () => scope.resulted,
         canSend: () => this.#canSend(scope.session, mode),
       });
@@ -1543,11 +1543,11 @@ export class Unipls<TInput = WebSocketData, TOutput = WebSocketData> {
     });
 
     const request = (
-      query: UniplsMessageFactory<TInput>,
-      { selector }: { selector: (data: TOutput) => boolean },
+      nextQuery: UniplsMessageFactory<TInput>,
+      { selector: nextSelector }: { selector: (data: TOutput) => boolean },
     ) => {
-      return requestSession.send(query, {
-        selector,
+      return requestSession.send(nextQuery, {
+        selector: nextSelector,
         isDone: () => scope.resulted,
         canSend: () => this.#canSend(scope.session, mode),
       });

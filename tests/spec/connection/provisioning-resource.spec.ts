@@ -443,6 +443,12 @@ describe("provisioning capability と resource scope", () => {
       const transport = new ControlledWebSocketServer();
       const reconnector = new ControlledReconnector();
       const cause = new Error(`${boundary} failed`);
+      const fail = () => {
+        if (failureMode === "sync") {
+          throw cause;
+        }
+        return Promise.reject(cause);
+      };
       const diagnostics: UniplsLog[] = [];
       let trigger!: () => void;
       let survivorDrop!: () => void;
@@ -465,12 +471,6 @@ describe("provisioning capability と resource scope", () => {
               ctx.defer(() => {
                 cleanupCount += 1;
               });
-              const fail = () => {
-                if (failureMode === "sync") {
-                  throw cause;
-                }
-                return Promise.reject(cause);
-              };
               trigger = boundary === "guard" ? ctx.guard(fail) : () => ctx.run(fail);
             },
           },

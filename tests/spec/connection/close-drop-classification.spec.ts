@@ -153,10 +153,8 @@ describe("close と drop の分類", () => {
   it("socket 生成時の同期例外を transport drop として記録する", async () => {
     // socket を返す前に失敗する WebSocket constructor を用意します。
     const cause = new Error("socket construction failed");
-    const WebSocket = class {
-      constructor() {
-        throw cause;
-      }
+    const WebSocket = function WebSocket() {
+      throw cause;
     } as unknown as typeof globalThis.WebSocket;
     const client = new Unipls({ url: "wss://unipls.test/socket", WebSocket });
 

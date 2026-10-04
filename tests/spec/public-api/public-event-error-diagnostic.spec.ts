@@ -231,8 +231,8 @@ describe("public event、error、log", () => {
         }
         return String(data);
       },
-      logSink(log) {
-        diagnostics.push(log);
+      logSink(entry) {
+        diagnostics.push(entry);
         throw observerCause;
       },
     });

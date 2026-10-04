@@ -63,13 +63,6 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delegateRun: { active: boolean; disposer?: () => void } | undefined;
-    const disposeDelegate = (disposer: void | (() => void)) => {
-      try {
-        disposer?.();
-      } catch {
-        // engine の policy cleanup と同じく、cleanup の失敗で回復判断を妨げません。
-      }
-    };
     const stopDelegate = () => {
       const run = delegateRun;
       delegateRun = undefined;
@@ -81,7 +74,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       run.disposer = undefined;
       disposeDelegate(disposer);
     };
-    let unsubscribe = () => {};
+    let unsubscribe: (() => void) | undefined;
     const eligible = () => {
       const state = source.snapshot;
       return !state.suspended && !state.offline;
@@ -97,7 +90,7 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       }
       disposed = true;
       clearWaiting();
-      unsubscribe();
+      unsubscribe?.();
       ctx.signal.removeEventListener("abort", cleanup);
     };
     const reconnect = () => {
@@ -178,5 +171,13 @@ export class BrowserLifecycleReconnector implements UniplsReconnector {
       }
     }
     return cleanup;
+  }
+}
+
+function disposeDelegate(disposer: void | (() => void)): void {
+  try {
+    disposer?.();
+  } catch {
+    // engine の policy cleanup と同じく、cleanup の失敗で回復判断を妨げません。
   }
 }

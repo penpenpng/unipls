@@ -77,7 +77,7 @@ export class ManualScheduler {
     while (true) {
       const next = [...this.#tasks.values()]
         .filter((task) => task.dueAt <= target)
-        .sort((left, right) => left.dueAt - right.dueAt || left.id - right.id)[0];
+        .toSorted((left, right) => left.dueAt - right.dueAt || left.id - right.id)[0];
       if (!next) {
         break;
       }

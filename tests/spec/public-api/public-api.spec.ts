@@ -107,7 +107,7 @@ describe("public APIのentry point境界", () => {
    */
   it("core、extensions、低レベルruntime exportを分離する", () => {
     // package利用者が名前付きimportできるruntime valueをentry pointごとに固定します。
-    expect(Object.keys(root).sort()).toEqual([
+    expect(Object.keys(root).toSorted()).toEqual([
       "Unipls",
       "UniplsBufferOverflowError",
       "UniplsClosedError",
@@ -117,7 +117,7 @@ describe("public APIのentry point境界", () => {
       "UniplsOpenError",
       "UniplsTimeoutError",
     ]);
-    expect(Object.keys(socket).sort()).toEqual([
+    expect(Object.keys(socket).toSorted()).toEqual([
       "UniplsInvalidUsageError",
       "UniplsSocket",
       "UniplsSocketClosedError",
@@ -126,7 +126,7 @@ describe("public APIのentry point境界", () => {
       "UniplsTimeoutError",
       "UniplsWebSocketCloseCode",
     ]);
-    expect(Object.keys(reconnectors).sort()).toEqual([
+    expect(Object.keys(reconnectors).toSorted()).toEqual([
       "BrowserLifecycleReconnector",
       "BrowserLifecycleSource",
       "DropReasons",
@@ -134,7 +134,7 @@ describe("public APIのentry point境界", () => {
       "ImmediateReconnector",
       "isBrowserLifecycleDrop",
     ]);
-    expect(Object.keys(dropDetectors).sort()).toEqual([
+    expect(Object.keys(dropDetectors).toSorted()).toEqual([
       "BrowserLifecycleDropDetector",
       "BrowserLifecycleSource",
       "DropReasons",

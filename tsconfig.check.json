@@ -4,7 +4,8 @@
     "declaration": false,
     "declarationMap": false,
     "emitDeclarationOnly": false,
-    "noEmit": true
+    "noEmit": true,
+    "lib": ["ES2022", "ES2023.Array", "DOM"]
   },
   "include": [
     "src/**/*.ts",

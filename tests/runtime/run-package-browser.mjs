@@ -60,11 +60,11 @@ try {
   await Promise.race([
     (async () => {
       await page.goto(`http://127.0.0.1:${address.port}/`);
-      await page.waitForFunction(() => globalThis.__uniplsSmokeResult !== undefined);
+      await page.waitForFunction(() => globalThis.uniplsSmokeResult !== undefined);
     })(),
     pageError,
   ]);
-  const result = await page.evaluate(() => globalThis.__uniplsSmokeResult);
+  const result = await page.evaluate(() => globalThis.uniplsSmokeResult);
   if (result.checks !== 17) {
     throw new Error(`Expected 17 package checks, received ${result.checks}`);
   }
